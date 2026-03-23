@@ -32,6 +32,7 @@
 - **Release Build Pin Preserved:** Official packaged builds still resolve through `constraints-release.txt`, keeping the release pipeline pinned to the validated `PyQt6 6.10.1` stack.
 - **New Linux Compatibility Matrix:** Added a dedicated GitHub Actions workflow that validates source installs against multiple PyQt6 minor lines with a real Qt/QML startup smoke test under Xvfb.
 - **Local Matrix Helper:** Added `tox.ini` so PyQt6 compatibility checks can also be reproduced locally without manually editing dependency pins.
+- **Matrix Verified:** The Linux source compatibility matrix now passes across the tested PyQt6 `6.6.1` through `6.10.1` range, confirming that source installs no longer require forcing only the newest tested minor line.
 
 ### [2.7.6] - 2026-03-20
 
