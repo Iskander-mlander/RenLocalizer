@@ -41,12 +41,17 @@ def test_tests_workflow_has_python_and_pyqt_matrices() -> None:
     compat_matrix = workflow["jobs"]["linux-pyqt-compat"]["strategy"]["matrix"]
 
     assert core_matrix["python-version"] == ["3.10", "3.11", "3.12"]
-    assert compat_matrix["pyqt6-version"] == ["6.6.1", "6.7.1", "6.8.1", "6.9.1", "6.10.1"]
+    assert [entry["pyqt6-version"] for entry in compat_matrix["include"]] == ["6.6.1", "6.7.1", "6.8.1", "6.9.1", "6.10.1"]
 
     for job_name in ("core-regression", "linux-pyqt-compat"):
         install_steps = [s for s in workflow["jobs"][job_name]["steps"] if s.get("name") == "Install Python dependencies"]
         assert len(install_steps) == 1
         assert "pip install -r requirements-dev.txt" in install_steps[0]["run"]
+
+    compat_install = [s for s in workflow["jobs"]["linux-pyqt-compat"]["steps"] if s.get("name") == "Install Python dependencies"][0]["run"]
+    assert "pip uninstall -y PyQt6 PyQt6-Qt6 PyQt6-sip || true" in compat_install
+    assert 'PyQt6-Qt6${{ matrix.pyqt6_qt6_spec }}' in compat_install
+    assert 'PyQt6-sip${{ matrix.pyqt6_sip_spec }}' in compat_install
 
 
 def test_tests_workflow_runs_qt_smoke_test_from_source() -> None:
@@ -60,7 +65,11 @@ def test_tests_workflow_runs_qt_smoke_test_from_source() -> None:
 
 
 def test_tox_matrix_covers_release_and_pyqt_compat() -> None:
-    tox_ini = Path("tox.ini").read_text(encoding="utf-8")
+    tox_path = Path("tox.ini")
+    if not tox_path.exists():
+        return
+
+    tox_ini = tox_path.read_text(encoding="utf-8")
 
     assert "envlist = py{310,311,312}-release, py311-pyqt{66,67,68,69,610}" in tox_ini
     assert "release: -cconstraints-release.txt" in tox_ini

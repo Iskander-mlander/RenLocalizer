@@ -78,7 +78,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pyqt6-version: ['6.6.1', '6.7.1', '6.8.1', '6.9.1', '6.10.1']
+        include:
+          - pyqt6-version: '6.6.1'
+            pyqt6_qt6_spec: '>=6.6.0,<6.7.0'
+            pyqt6_sip_spec: '>=13.6,<14'
+          - pyqt6-version: '6.7.1'
+            pyqt6_qt6_spec: '>=6.7.0,<6.8.0'
+            pyqt6_sip_spec: '>=13.8,<14'
+          - pyqt6-version: '6.8.1'
+            pyqt6_qt6_spec: '>=6.8.0,<6.9.0'
+            pyqt6_sip_spec: '>=13.8,<14'
+          - pyqt6-version: '6.9.1'
+            pyqt6_qt6_spec: '>=6.9.0,<6.10.0'
+            pyqt6_sip_spec: '>=13.8,<14'
+          - pyqt6-version: '6.10.1'
+            pyqt6_qt6_spec: '>=6.10.0,<6.11.0'
+            pyqt6_sip_spec: '>=13.8,<14'
 
     steps:
       - name: Checkout code
@@ -105,7 +120,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-          pip install "PyQt6==${{ matrix.pyqt6-version }}"
+          pip uninstall -y PyQt6 PyQt6-Qt6 PyQt6-sip || true
+          pip install --force-reinstall --no-cache-dir \
+            "PyQt6==${{ matrix.pyqt6-version }}" \
+            "PyQt6-Qt6${{ matrix.pyqt6_qt6_spec }}" \
+            "PyQt6-sip${{ matrix.pyqt6_sip_spec }}"
 
       - name: Show resolved PyQt6 version
         run: |
