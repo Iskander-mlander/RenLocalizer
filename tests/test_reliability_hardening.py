@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from src.core.parser import RenPyParser
 from src.core.tl_parser import TranslationEntry, TranslationFile
-from src.core.translation_pipeline import TranslationPipeline
+from src.core.translation_pipeline import PipelineResult, PipelineStage, TranslationPipeline
 from src.core.translator import TranslationEngine, TranslationRequest, TranslationResult
 from src.utils.config import get_effective_batch_size, get_engine_batch_size_cap
 
@@ -161,6 +161,50 @@ def test_pipeline_logs_batch_cap_notice_for_google() -> None:
     assert events
     assert events[0][0] == "info"
     assert "1000" in events[0][1]
+
+
+def test_coverage_warning_summary_logs_without_popup() -> None:
+    pipeline = _make_pipeline()
+    logs: list[tuple[str, str]] = []
+    popups: list[tuple[str, str]] = []
+    pipeline.log_message.connect(lambda level, message: logs.append((level, message)))
+    pipeline.show_warning.connect(lambda title, message: popups.append((title, message)))
+    pipeline.diagnostic_report.add_coverage_warning("image_only_ui", 2)
+    pipeline._last_diagnostic_path = "diag.json"
+
+    pipeline._emit_coverage_warning_summary()
+
+    assert popups == []
+    assert any(level == "warning" for level, _ in logs)
+    assert any("diag.json" in message for _, message in logs)
+
+
+def test_app_backend_completion_summary_includes_review_notes() -> None:
+    from src.backend.app_backend import AppBackend
+
+    fake_backend = SimpleNamespace(
+        config=SimpleNamespace(
+            get_ui_text=lambda key, default=None, **kwargs: (default or key).format(**kwargs) if kwargs else (default or key),
+        ),
+        pipeline=SimpleNamespace(
+            diagnostic_report=SimpleNamespace(coverage_warnings=[{"code": "image_only_ui"}, {"code": "dynamic_ui_runtime"}]),
+            _last_diagnostic_path="diag.json",
+        ),
+    )
+    result = PipelineResult(
+        success=True,
+        message="12 texts translated, 3 files saved",
+        stage=PipelineStage.COMPLETED,
+        output_path="out_dir",
+    )
+
+    payload = AppBackend._build_completion_summary(fake_backend, result)
+
+    assert payload["title"] == "Translation Complete"
+    assert payload["output_path"] == "out_dir"
+    assert payload["diagnostic_path"] == "diag.json"
+    assert payload["review_note_count"] == 2
+    assert "12 texts translated" in payload["message"]
 
 
 def test_guard_reason_text_is_human_readable() -> None:

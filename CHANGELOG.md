@@ -1,6 +1,6 @@
 # RenLocalizer Changelog
 
-### [2.7.7] - Unreleased
+### [2.7.7] - 2026-03-23
 
 ### Translation Coverage Expansion
 - **Structure-Aware Screen Argument Extraction:** Added a conservative parser pass for `call/show screen ...(...)` string arguments so custom screen titles and prompts in data-driven projects are now captured without broadening false positives.
@@ -19,6 +19,8 @@
 - **User-Friendly Guard Reasons:** Technical guard reason codes like `length_inflation` and `placeholder_set_mismatch` now resolve to localized, human-readable explanations in logs.
 - **Theme-Aware Log Semantics:** Home-page log colors were rebalanced for meaning and readability: errors stay red, warnings use amber/orange, guard events use blue, success stays green, and neutral/debug messages keep muted tones across light and dark themes.
 - **Less Noisy GUI Feedback:** Guard events stay visible in the log panel but no longer trigger toast notifications, reducing false alarm perception during normal translation runs.
+- **Coverage Notes Stay Log-Only:** Coverage diagnostics such as image-only UI and dynamic UI risk notes no longer open popup warnings; they remain in logs and diagnostic reports only.
+- **Calmer Completion Dialog:** Successful translation runs now use a dedicated completion summary dialog with output/report shortcuts, keeping review notes separate from real warning popups.
 
 ### Batch Size Flexibility
 - **General Batch Ceiling Raised:** The standard source-install batch setting now supports values up to `10000`, making high-volume non-AI engines less constrained on large projects.

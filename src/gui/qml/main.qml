@@ -239,7 +239,6 @@ ApplicationWindow {
 
         function onTranslationFinished(success, message) {
             homePage.setTranslating(false)
-            homePage.addLog(success ? "success" : "error", message)
         }
 
         function onStatsReady(total, translated, untranslated) {
@@ -250,6 +249,15 @@ ApplicationWindow {
             warningDialog.title = title
             warningDialog.text = message
             warningDialog.open()
+        }
+
+        function onCompletionSummary(title, message, outputPath, diagnosticPath, reviewNoteCount) {
+            completionDialog.title = title
+            completionDialog.summaryText = message
+            completionDialog.outputPath = outputPath
+            completionDialog.diagnosticPath = diagnosticPath
+            completionDialog.reviewNoteCount = reviewNoteCount
+            completionDialog.open()
         }
 
         function onUpdateAvailable(currentVersion, latestVersion, releaseUrl) {
@@ -401,6 +409,101 @@ ApplicationWindow {
                 }
                 onClicked: warningDialog.close()
             }
+            alignment: Qt.AlignHCenter
+            padding: 10
+        }
+    }
+
+    Dialog {
+        id: completionDialog
+        property string summaryText: ""
+        property string outputPath: ""
+        property string diagnosticPath: ""
+        property int reviewNoteCount: 0
+
+        anchors.centerIn: parent
+        width: Math.min(460, root.width * 0.88)
+        modal: true
+        title: "✅ " + (backend.uiTrigger, backend.getTextWithDefault("translation_complete_title", "Translation Complete"))
+
+        background: Rectangle {
+            color: "#252540"
+            radius: 16
+            border.color: "#2b8a3e"
+            border.width: 1
+        }
+
+        header: Rectangle {
+            color: "transparent"
+            height: 52
+
+            Label {
+                anchors.centerIn: parent
+                text: completionDialog.title
+                font.pixelSize: 16
+                font.bold: true
+                color: "#69db7c"
+            }
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 14
+
+            Label {
+                text: completionDialog.summaryText
+                color: "white"
+                wrapMode: Text.Wrap
+                font.pixelSize: 14
+                Layout.fillWidth: true
+                Layout.margins: 20
+                horizontalAlignment: Text.AlignHCenter
+            }
+        }
+
+        footer: DialogButtonBox {
+            background: Rectangle { color: "transparent" }
+
+            Button {
+                visible: completionDialog.outputPath.length > 0
+                text: (backend.uiTrigger, backend.getTextWithDefault("translation_complete_open_output", "Open Output Folder"))
+                DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
+                background: Rectangle { radius: 8; color: "#1971c2" }
+                contentItem: Label {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: backend.openLocalPath(completionDialog.outputPath)
+            }
+
+            Button {
+                visible: completionDialog.diagnosticPath.length > 0
+                text: (backend.uiTrigger, backend.getTextWithDefault("translation_complete_open_report", "Open Diagnostic Report"))
+                DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
+                background: Rectangle { radius: 8; color: "#495057" }
+                contentItem: Label {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: backend.openLocalPath(completionDialog.diagnosticPath)
+            }
+
+            Button {
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_close", "Close"))
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                background: Rectangle { radius: 8; color: Material.accent }
+                contentItem: Label {
+                    text: parent.text
+                    color: "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: completionDialog.close()
+            }
+
             alignment: Qt.AlignHCenter
             padding: 10
         }

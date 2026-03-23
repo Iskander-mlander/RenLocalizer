@@ -807,32 +807,18 @@ class TranslationPipeline(QObject):
         if not warnings:
             return
 
-        title = self.config.get_ui_text('coverage_warning_title', 'Coverage Warning')
-        lines = [self.config.get_ui_text('coverage_warning_summary', 'Potential translation coverage risks were detected.')]
-
         for warning in warnings[:3]:
             text_key = COVERAGE_WARNING_UI_KEYS.get(warning.get('code', ''), '')
             default_text = warning.get('code', 'warning')
             localized = self.config.get_ui_text(text_key, default_text).format(count=warning.get('count', 0))
             self.log_message.emit('warning', f"⚠️ {localized}")
-            lines.append(f"- {localized}")
-
-        if len(warnings) > 3:
-            lines.append(
-                self.config.get_ui_text('coverage_warning_more', '...and {count} more risk(s).').format(
-                    count=len(warnings) - 3,
-                )
-            )
 
         if self._last_diagnostic_path:
             report_line = self.config.get_ui_text(
                 'coverage_warning_report_path',
                 'Diagnostics report: {path}',
             ).format(path=self._last_diagnostic_path)
-            lines.append(report_line)
             self.log_message.emit('warning', report_line)
-
-        self.show_warning.emit(title, '\n'.join(lines))
 
     def _is_generated_export_file(self, file_path: str) -> bool:
         basename = os.path.basename(file_path or '')

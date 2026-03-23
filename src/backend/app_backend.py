@@ -57,6 +57,7 @@ class AppBackend(QObject):
     translationStarted = pyqtSignal()
     translationFinished = pyqtSignal(bool, str, arguments=['success', 'message'])
     statsReady = pyqtSignal(int, int, int, arguments=['total', 'translated', 'untranslated'])
+    completionSummary = pyqtSignal(str, str, str, str, int, arguments=['title', 'message', 'outputPath', 'diagnosticPath', 'reviewNoteCount'])
     warningMessage = pyqtSignal(str, str, arguments=['title', 'message'])
     languageRefresh = pyqtSignal()
     updateAvailable = pyqtSignal(str, str, str, arguments=['currentVersion', 'latestVersion', 'releaseUrl'])
@@ -310,6 +311,18 @@ class AppBackend(QObject):
     def openUrl(self, url: str):
         """Harici URL aç."""
         QDesktopServices.openUrl(QUrl(url))
+
+    @pyqtSlot(str, result=bool)
+    def openLocalPath(self, path: str) -> bool:
+        """Open a local file or directory path with the desktop shell."""
+        if not path:
+            return False
+
+        if path.startswith("file://"):
+            url = QUrl(path)
+        else:
+            url = QUrl.fromLocalFile(path)
+        return bool(QDesktopServices.openUrl(url))
 
     @pyqtSlot(str, result=bool)
     def copyTextToClipboard(self, text: str) -> bool:
@@ -1234,7 +1247,46 @@ class AppBackend(QObject):
     def _on_show_warning(self, title: str, message: str):
         """Show warning popup from pipeline."""
         self.warningMessage.emit(title, message)
-    
+
+    def _build_completion_summary(self, result) -> dict:
+        """Build a user-friendly completion summary payload for the GUI."""
+        review_note_count = 0
+        diagnostic_path = ""
+        if self.pipeline is not None:
+            review_note_count = len(getattr(self.pipeline.diagnostic_report, 'coverage_warnings', []) or [])
+            diagnostic_path = getattr(self.pipeline, '_last_diagnostic_path', '') or ''
+
+        lines = [result.message]
+        if review_note_count > 0:
+            lines.append(
+                self.config.get_ui_text(
+                    'translation_complete_with_notes',
+                    '{count} review note(s) are available in diagnostics.',
+                ).format(count=review_note_count)
+            )
+        else:
+            lines.append(
+                self.config.get_ui_text(
+                    'translation_complete_no_notes',
+                    'No review notes were detected.',
+                )
+            )
+
+        lines.append(
+            self.config.get_ui_text(
+                'translation_complete_hint',
+                "Tip: If the game doesn't start in the translated language, press Shift+L to switch.",
+            )
+        )
+
+        return {
+            'title': self.config.get_ui_text('translation_complete_title', 'Translation Complete'),
+            'message': '\n'.join(line for line in lines if line),
+            'output_path': result.output_path or '',
+            'diagnostic_path': diagnostic_path,
+            'review_note_count': review_note_count,
+        }
+
     def _on_pipeline_finished(self, result):
         """Handle pipeline completion."""
         self._is_translating = False
@@ -1254,6 +1306,16 @@ class AppBackend(QObject):
         
         if self.config.translation_settings.auto_generate_hook and result.success:
             self.generateRuntimeHook()
+
+        if result.success:
+            completion = self._build_completion_summary(result)
+            self.completionSummary.emit(
+                completion['title'],
+                completion['message'],
+                completion['output_path'],
+                completion['diagnostic_path'],
+                completion['review_note_count'],
+            )
 
         self.translationFinished.emit(result.success, result.message)
         
