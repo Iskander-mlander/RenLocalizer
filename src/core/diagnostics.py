@@ -39,6 +39,7 @@ class DiagnosticReport:
     total_recovered_by_retry: int = 0
     total_recovered_by_synthesized_variant: int = 0
     files: Dict[str, FileReport] = field(default_factory=dict)
+    coverage_warnings: List[Dict[str, Any]] = field(default_factory=list)
 
     def add_extracted(self, file_path: str, entry: Dict[str, Any]):
         fr = self.files.get(file_path)
@@ -173,6 +174,24 @@ class DiagnosticReport:
             fr.recovered_variant += 1
             self.total_recovered_by_synthesized_variant += 1
 
+    def add_coverage_warning(
+        self,
+        code: str,
+        count: int,
+        *,
+        samples: List[Dict[str, Any]] | None = None,
+        metadata: Dict[str, Any] | None = None,
+    ) -> None:
+        rec: Dict[str, Any] = {
+            'code': code,
+            'count': int(count),
+        }
+        if samples:
+            rec['samples'] = samples
+        if metadata:
+            rec['metadata'] = metadata
+        self.coverage_warnings.append(rec)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'project': self.project,
@@ -187,7 +206,9 @@ class DiagnosticReport:
                 'blocked_as_corrupted': self.total_blocked_as_corrupted,
                 'recovered_by_retry': self.total_recovered_by_retry,
                 'recovered_by_synthesized_variant': self.total_recovered_by_synthesized_variant,
+                'coverage_warning_count': len(self.coverage_warnings),
             },
+            'coverage_warnings': self.coverage_warnings,
             'files': {p: {
                 'extracted': fr.extracted,
                 'translated': fr.translated,

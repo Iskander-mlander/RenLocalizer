@@ -138,7 +138,7 @@ ApplicationWindow {
     Rectangle {
         id: toast
         property string message: ""
-        property string type: "info" // info, success, error, warning
+        property string type: "info" // info, success, error, warning, guard
         
         visible: opacity > 0
         opacity: 0
@@ -151,7 +151,7 @@ ApplicationWindow {
         width: Math.min(contentLayout.implicitWidth + 60, root.width - 60)
         height: Math.max(54, contentLayout.implicitHeight + 24)
         radius: 10
-        color: type === "error" ? "#c0392b" : type === "success" ? "#27ae60" : type === "warning" ? "#d35400" : "#2c3e50"
+        color: type === "error" ? "#c92a2a" : type === "success" ? "#2b8a3e" : type === "warning" ? "#e67700" : type === "guard" ? "#1971c2" : "#495057"
         border.color: "white"
         border.width: 1
         
@@ -165,7 +165,7 @@ ApplicationWindow {
             spacing: 12
 
             Label {
-                text: toast.type === "success" ? "✅" : toast.type === "error" ? "❌" : toast.type === "warning" ? "⚠️" : "ℹ️"
+                text: toast.type === "success" ? "✅" : toast.type === "error" ? "❌" : toast.type === "warning" ? "⚠️" : toast.type === "guard" ? "ℹ️" : "ℹ️"
                 font.pixelSize: 18
                 font.family: root.iconFontFamily
             }
@@ -213,6 +213,10 @@ ApplicationWindow {
 
         function onLogMessage(level, message) {
             homePage.addLog(level, message)
+
+            if (level === "guard") {
+                return
+            }
             
             // Eğer ana sayfada değilsek her şeyi (info dahil) göster, 
             // ana sayfadaysak sadece önemli olanları (success/error/warning) göster

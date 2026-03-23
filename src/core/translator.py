@@ -35,6 +35,7 @@ from src.core.constants import (
     YANDEX_WIDGET_JS_URL,
     YANDEX_SID_LIFETIME,
 )
+from src.utils.config import get_effective_batch_size
 
 class TranslationEngine(Enum):
     GOOGLE = "google"
@@ -284,7 +285,10 @@ class GoogleTranslator(BaseTranslator):
             # Slider ile kontrol edilen 'max_concurrent_threads' değerini baz alıyoruz
             self.multi_q_concurrency = getattr(ts, 'max_concurrent_threads', 16)
             self.max_slice_chars = getattr(ts, 'max_chars_per_request', 2000)
-            self.max_texts_per_slice = getattr(ts, 'max_batch_size', 200)  # Use general batch size for Google
+            self.max_texts_per_slice = get_effective_batch_size(
+                getattr(ts, 'max_batch_size', 200),
+                TranslationEngine.GOOGLE,
+            )
             self.aggressive_retry = getattr(ts, 'aggressive_retry_translation', False)
             # HTML Protection: force-off for Google web endpoints (/translate_a/single).
             # Those endpoints are unofficial and HTML behavior is inconsistent.

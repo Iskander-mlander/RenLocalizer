@@ -23,7 +23,7 @@ from typing import Optional, TYPE_CHECKING
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, pyqtProperty, QUrl, QThread
 from PyQt6.QtGui import QDesktopServices, QGuiApplication
 
-from src.utils.config import ConfigManager
+from src.utils.config import ConfigManager, get_effective_batch_size, get_engine_batch_size_cap
 from src.version import VERSION
 from src.utils.constants import (
     AI_DEFAULT_TEMPERATURE, AI_DEFAULT_TIMEOUT, MAX_CHARS_PER_REQUEST,
@@ -649,6 +649,22 @@ class AppBackend(QObject):
         if changed:
             self.engineChanged.emit()
         self.logMessage.emit("info", self.config.get_log_text("log_engine_selected", engine=engine))
+
+        requested_batch = getattr(self.config.translation_settings, 'max_batch_size', 100)
+        effective_batch = get_effective_batch_size(requested_batch, engine)
+        cap = get_engine_batch_size_cap(engine)
+        if cap is not None and effective_batch != requested_batch:
+            self.logMessage.emit(
+                "info",
+                self.config.get_log_text(
+                    'log_batch_size_engine_cap_applied',
+                    'Requested batch size {requested} exceeds the effective limit for {engine}; using {effective} (cap: {cap}).',
+                    requested=requested_batch,
+                    engine=engine,
+                    effective=effective_batch,
+                    cap=cap,
+                ),
+            )
         
         # Trigger async initialization
         self.update_translation_engine()

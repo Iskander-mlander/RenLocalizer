@@ -10,6 +10,7 @@ Bu modül tüm çeviri sürecini entegre bir pipeline olarak yönetir.
 
 import os
 import sys
+import ast
 import logging
 import asyncio
 import json
@@ -25,7 +26,7 @@ from src.core.runtime_hook_template import render_runtime_hook
 
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
-from src.utils.config import ConfigManager
+from src.utils.config import ConfigManager, get_effective_batch_size, get_engine_batch_size_cap
 # sdk_finder removed
 from src.core.tl_parser import TLParser, TranslationFile, TranslationEntry, get_translation_stats
 from src.core.parser import RenPyParser
@@ -98,6 +99,29 @@ PLACEHOLDER_REMNANT_RE = re.compile(
     r"(?i)(?:R[A-Z]{0,6}LPH[0-9A-F]{3,}|XRPYX_[A-Z0-9_]+|RNPY_[A-Z0-9_]+)"
 )
 TRANSLATION_ID_KEY_RE = re.compile(r"^id_[0-9a-f]{16,}$")
+QUOTED_LITERAL_RE = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\'')
+IMAGE_ONLY_BLOCK_RE = re.compile(r'^\s*(?P<kind>imagebutton|hotspot)\b')
+TEXTUAL_UI_HINT_RE = re.compile(r'\b(?:tooltip|alt)\b|^\s*(?:text|textbutton|label|caption)\b|\bText\s*\(')
+HELPER_PROPERTY_RE = re.compile(r'^\s*(?:idle|hover|selected|selected_idle|selected_hover|background|foreground|add)\b')
+DYNAMIC_UI_LINE_RE = re.compile(
+    r'^\s*(?:text|tooltip|label|caption)\b.*(?:\.format\(|\bf["\'])|\bText\s*\(\s*(?:[fF]["\']|.*\.format\()'
+)
+
+COVERAGE_WARNING_UI_KEYS = {
+    'image_only_ui': 'coverage_warning_image_only_ui',
+    'compiled_only_scripts': 'coverage_warning_compiled_only',
+    'dynamic_ui_runtime': 'coverage_warning_dynamic_ui',
+}
+
+COVERAGE_AUDIT_EXCLUDE_DIRS = {
+    'tl',
+    'cache',
+    'saves',
+    'renpy',
+    'python-packages',
+    'lib',
+    '__pycache__',
+}
 
 
 class PipelineStage(Enum):
@@ -213,6 +237,7 @@ class TranslationPipeline(QObject):
         # Use a less alarming name for error log, e.g. pipeline_debug.log
         self.error_log_path = Path("pipeline_debug.log")
         self.normalize_count = 0
+        self._last_diagnostic_path: Optional[str] = None
         
         # State
         self.current_stage = PipelineStage.IDLE
@@ -254,6 +279,7 @@ class TranslationPipeline(QObject):
 
     def _reset_translation_diagnostics(self) -> None:
         self.diagnostic_report = DiagnosticReport()
+        self._last_diagnostic_path = None
         self._translation_guard_events = []
         self._translation_guard_counts = {
             'unchanged_by_engine': 0,
@@ -322,6 +348,40 @@ class TranslationPipeline(QObject):
             return 'renpy_tag_set_mismatch'
         return None
 
+    def _get_guard_reason_text(self, reason: str) -> str:
+        reason_key_map = {
+            'separator_remnant': (
+                'guard_reason_separator_remnant',
+                'separator markers leaked into the output',
+            ),
+            'placeholder_remnant': (
+                'guard_reason_placeholder_remnant',
+                'placeholder tokens leaked into the output',
+            ),
+            'html_leakage': (
+                'guard_reason_html_leakage',
+                'HTML markup leaked into the output',
+            ),
+            'length_inflation': (
+                'guard_reason_length_inflation',
+                'translated text expanded far beyond the source',
+            ),
+            'placeholder_set_mismatch': (
+                'guard_reason_placeholder_set_mismatch',
+                'placeholder structure changed',
+            ),
+            'renpy_tag_set_mismatch': (
+                'guard_reason_renpy_tag_set_mismatch',
+                "Ren'Py text tags changed",
+            ),
+        }
+
+        key, default = reason_key_map.get(
+            reason,
+            ('guard_reason_unknown', (reason or 'suspicious translator output').replace('_', ' ')),
+        )
+        return self.config.get_log_text(key, default)
+
     def _sanitize_translation_for_output(
         self,
         *,
@@ -357,6 +417,37 @@ class TranslationPipeline(QObject):
 
     def _should_retry_unchanged_core_ui(self, original_text: str) -> bool:
         return (original_text or '').strip() in CORE_UI_RETRY_STRINGS
+
+    def _get_requested_translation_batch_size(self) -> int:
+        """Return the user-requested batch size for the active engine family."""
+        if self.engine in (TranslationEngine.OPENAI, TranslationEngine.GEMINI, TranslationEngine.LOCAL_LLM):
+            return getattr(self.config.translation_settings, 'ai_batch_size', 50)
+        return getattr(self.config.translation_settings, 'max_batch_size', 100)
+
+    def _get_effective_translation_batch_size(self) -> int:
+        """Return the runtime-effective batch size after engine-specific caps."""
+        requested = self._get_requested_translation_batch_size()
+        if self.engine in (TranslationEngine.OPENAI, TranslationEngine.GEMINI, TranslationEngine.LOCAL_LLM):
+            return requested
+        return get_effective_batch_size(requested, self.engine)
+
+    def _emit_batch_size_cap_notice_if_needed(self, requested: int, effective: int) -> None:
+        """Log a friendly info message when an engine-specific batch cap is applied."""
+        if effective == requested:
+            return
+        cap = get_engine_batch_size_cap(self.engine) or effective
+        engine_name = getattr(self.engine, 'value', str(self.engine))
+        self.log_message.emit(
+            "info",
+            self.config.get_log_text(
+                'log_batch_size_engine_cap_applied',
+                'Requested batch size {requested} exceeds the effective limit for {engine}; using {effective} (cap: {cap}).',
+                requested=requested,
+                engine=engine_name,
+                effective=effective,
+                cap=cap,
+            ),
+        )
 
     def _execute_single_request_with_retry_mode(
         self,
@@ -524,6 +615,7 @@ class TranslationPipeline(QObject):
         os.makedirs(diag_dir, exist_ok=True)
         diag_path = os.path.join(diag_dir, f'diagnostic_{self.target_language}.json')
         self.diagnostic_report.write(diag_path)
+        self._last_diagnostic_path = diag_path
         self.log_message.emit('info', self.config.get_log_text('log_diagnostic_written', path=diag_path))
 
         report_path = os.path.join(diag_dir, 'translation_blocked_or_fallback.json')
@@ -534,6 +626,213 @@ class TranslationPipeline(QObject):
             'samples': self._translation_guard_events,
         }
         save_text_safely(Path(report_path), json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    def _iter_audit_files(self, game_dir: str, extension: str):
+        for root, dirs, files in os.walk(game_dir):
+            dirs[:] = [
+                d for d in dirs
+                if d.lower() not in COVERAGE_AUDIT_EXCLUDE_DIRS
+            ]
+            for filename in files:
+                if filename.lower().endswith(extension):
+                    yield Path(root) / filename
+
+    def _relative_audit_path(self, game_dir: str, file_path: Path) -> str:
+        try:
+            return file_path.relative_to(game_dir).as_posix()
+        except Exception:
+            return file_path.as_posix()
+
+    def _decode_literal_candidate(self, raw_literal: str) -> str:
+        try:
+            value = ast.literal_eval(raw_literal)
+            return value if isinstance(value, str) else ""
+        except Exception:
+            return raw_literal.strip('"\'')
+
+    def _block_has_textual_hint(self, parser: RenPyParser, block_lines: List[str]) -> bool:
+        for line in block_lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if TEXTUAL_UI_HINT_RE.search(line):
+                return True
+            if not HELPER_PROPERTY_RE.match(line) and 'Notify(' not in line:
+                continue
+            for raw_literal in QUOTED_LITERAL_RE.findall(line):
+                candidate = self._decode_literal_candidate(raw_literal)
+                if candidate and parser.is_meaningful_text(candidate):
+                    return True
+        return False
+
+    def _audit_image_only_ui(self, game_dir: str) -> Dict[str, Any] | None:
+        parser = RenPyParser(self.config)
+        samples: List[Dict[str, Any]] = []
+        count = 0
+
+        for file_path in self._iter_audit_files(game_dir, '.rpy'):
+            content = read_text_safely(file_path)
+            if not content:
+                continue
+            lines = content.splitlines()
+            idx = 0
+            while idx < len(lines):
+                raw_line = lines[idx]
+                match = IMAGE_ONLY_BLOCK_RE.match(raw_line)
+                if not match:
+                    idx += 1
+                    continue
+
+                start_idx = idx
+                block_lines = [raw_line]
+                stripped = raw_line.strip()
+                base_indent = len(raw_line) - len(raw_line.lstrip())
+                idx += 1
+
+                if stripped.endswith(':'):
+                    while idx < len(lines):
+                        next_line = lines[idx]
+                        next_stripped = next_line.strip()
+                        if next_stripped and not next_stripped.startswith('#'):
+                            next_indent = len(next_line) - len(next_line.lstrip())
+                            if next_indent <= base_indent:
+                                break
+                        block_lines.append(next_line)
+                        idx += 1
+
+                if self._block_has_textual_hint(parser, block_lines):
+                    continue
+
+                count += 1
+                if len(samples) < 20:
+                    samples.append({
+                        'file_path': self._relative_audit_path(game_dir, file_path),
+                        'line_number': start_idx + 1,
+                        'kind': match.group('kind'),
+                    })
+
+        if not count:
+            return None
+        return {
+            'code': 'image_only_ui',
+            'count': count,
+            'samples': samples,
+        }
+
+    def _audit_compiled_only_scripts(self, game_dir: str) -> Dict[str, Any] | None:
+        rpyc_enabled = bool(
+            getattr(self.config.translation_settings, 'enable_rpyc_reader', False)
+            or getattr(self, 'include_rpyc', False)
+        )
+        if rpyc_enabled:
+            return None
+
+        rpy_paths = {
+            self._relative_audit_path(game_dir, path.with_suffix(''))
+            for path in self._iter_audit_files(game_dir, '.rpy')
+        }
+        rpyc_only = sorted(
+            self._relative_audit_path(game_dir, path)
+            for path in self._iter_audit_files(game_dir, '.rpyc')
+            if self._relative_audit_path(game_dir, path.with_suffix('')) not in rpy_paths
+        )
+        if not rpyc_only:
+            return None
+
+        return {
+            'code': 'compiled_only_scripts',
+            'count': len(rpyc_only),
+            'samples': [{'file_path': path} for path in rpyc_only[:20]],
+        }
+
+    def _audit_dynamic_ui_runtime(self, game_dir: str) -> Dict[str, Any] | None:
+        runtime_hook_enabled = bool(
+            getattr(self.config.translation_settings, 'auto_generate_hook', False)
+            or getattr(self.config.translation_settings, 'enable_runtime_hook', False)
+        )
+        if runtime_hook_enabled:
+            return None
+
+        samples: List[Dict[str, Any]] = []
+        count = 0
+        for file_path in self._iter_audit_files(game_dir, '.rpy'):
+            content = read_text_safely(file_path)
+            if not content:
+                continue
+            for idx, raw_line in enumerate(content.splitlines(), start=1):
+                stripped = raw_line.strip()
+                if not stripped or stripped.startswith('#'):
+                    continue
+                if not DYNAMIC_UI_LINE_RE.search(raw_line):
+                    continue
+                count += 1
+                if len(samples) < 20:
+                    samples.append({
+                        'file_path': self._relative_audit_path(game_dir, file_path),
+                        'line_number': idx,
+                        'preview': stripped[:160],
+                    })
+
+        if not count:
+            return None
+        return {
+            'code': 'dynamic_ui_runtime',
+            'count': count,
+            'samples': samples,
+        }
+
+    def _collect_coverage_warnings(self, game_dir: str) -> List[Dict[str, Any]]:
+        warnings: List[Dict[str, Any]] = []
+        for collector in (
+            self._audit_image_only_ui,
+            self._audit_compiled_only_scripts,
+            self._audit_dynamic_ui_runtime,
+        ):
+            try:
+                warning = collector(game_dir)
+            except Exception as exc:
+                self.logger.debug("Coverage audit '%s' failed: %s", collector.__name__, exc)
+                continue
+            if warning:
+                warnings.append(warning)
+                self.diagnostic_report.add_coverage_warning(
+                    warning['code'],
+                    warning['count'],
+                    samples=warning.get('samples'),
+                )
+        return warnings
+
+    def _emit_coverage_warning_summary(self) -> None:
+        warnings = getattr(self.diagnostic_report, 'coverage_warnings', [])
+        if not warnings:
+            return
+
+        title = self.config.get_ui_text('coverage_warning_title', 'Coverage Warning')
+        lines = [self.config.get_ui_text('coverage_warning_summary', 'Potential translation coverage risks were detected.')]
+
+        for warning in warnings[:3]:
+            text_key = COVERAGE_WARNING_UI_KEYS.get(warning.get('code', ''), '')
+            default_text = warning.get('code', 'warning')
+            localized = self.config.get_ui_text(text_key, default_text).format(count=warning.get('count', 0))
+            self.log_message.emit('warning', f"⚠️ {localized}")
+            lines.append(f"- {localized}")
+
+        if len(warnings) > 3:
+            lines.append(
+                self.config.get_ui_text('coverage_warning_more', '...and {count} more risk(s).').format(
+                    count=len(warnings) - 3,
+                )
+            )
+
+        if self._last_diagnostic_path:
+            report_line = self.config.get_ui_text(
+                'coverage_warning_report_path',
+                'Diagnostics report: {path}',
+            ).format(path=self._last_diagnostic_path)
+            lines.append(report_line)
+            self.log_message.emit('warning', report_line)
+
+        self.show_warning.emit(title, '\n'.join(lines))
 
     def _is_generated_export_file(self, file_path: str) -> bool:
         basename = os.path.basename(file_path or '')
@@ -990,6 +1289,11 @@ class TranslationPipeline(QObject):
                     })
         except Exception:
             pass
+
+        try:
+            self._collect_coverage_warnings(game_dir)
+        except Exception as exc:
+            self.logger.debug(f"Coverage warning collection failed: {exc}")
         
         if not all_entries:
             stats = get_translation_stats(tl_files)
@@ -1009,6 +1313,12 @@ class TranslationPipeline(QObject):
                         self.log_message.emit("info", "Auto-exported translation strings to classic .rpy files.")
                 except Exception as e:
                     self.logger.warning(f"Auto-export to RPY failed: {e}")
+
+                try:
+                    self._write_translation_reports(lang_dir)
+                    self._emit_coverage_warning_summary()
+                except Exception as exc:
+                    self.logger.debug(f"Failed to write translation reports: {exc}")
                     
             return PipelineResult(
                 success=True,
@@ -1126,6 +1436,7 @@ class TranslationPipeline(QObject):
 
         try:
             self._write_translation_reports(report_dir)
+            self._emit_coverage_warning_summary()
         except Exception as exc:
             self.logger.debug(f"Failed to write translation reports: {exc}")
 
@@ -2899,12 +3210,22 @@ init python:
             return translations
 
         # Batch çeviri için hazırla
-        batch_size = self.config.translation_settings.max_batch_size
-        
-        # Optimize for AI: Use the user-defined ai_batch_size from settings
+        requested_batch_size = self._get_requested_translation_batch_size()
+        batch_size = self._get_effective_translation_batch_size()
+
         if self.engine in (TranslationEngine.OPENAI, TranslationEngine.GEMINI, TranslationEngine.LOCAL_LLM):
-            batch_size = getattr(self.config.translation_settings, 'ai_batch_size', 50)
             self.log_message.emit("debug", f"AI engine detected, using batch size: {batch_size}")
+            if batch_size > 1000:
+                self.log_message.emit(
+                    "info",
+                    self.config.get_log_text(
+                        'log_ai_batch_large_notice',
+                        'Large AI batch size in use ({batch}). This may increase token usage, latency, or API failure risk.',
+                        batch=batch_size,
+                    ),
+                )
+        else:
+            self._emit_batch_size_cap_notice_if_needed(requested_batch_size, batch_size)
 
         api_target_lang = RENPY_TO_API_LANG.get(self.target_language, self.target_language)
         
@@ -3466,7 +3787,15 @@ init python:
                             restored = rejoin_angle_pipe_groups(translated_template, translated_groups)
                             
                             if restored is None:
-                                self.log_message.emit("warning", f"[MultiGroup] Structural corruption detected, using original: {orig_text[:80]}")
+                                self.log_message.emit(
+                                    "guard",
+                                    self.config.get_log_text(
+                                        'log_guard_structural_original',
+                                        '{category} guard kept original text after structural validation: {preview}',
+                                        category='[MultiGroup]',
+                                        preview=orig_text[:80],
+                                    ),
+                                )
                                 _entry_results.append((tid, orig_text, entry, True, None, None))
                             else:
                                 _entry_results.append((tid, restored, entry, True, None, None))
@@ -3525,7 +3854,15 @@ init python:
                             
                             if restored is None:
                                 # Yapısal bozulma tespit edildi — orijinal metni koru
-                                self.log_message.emit("warning", f"[Delimiter] Structural corruption detected, using original: {orig_text[:80]}")
+                                self.log_message.emit(
+                                    "guard",
+                                    self.config.get_log_text(
+                                        'log_guard_structural_original',
+                                        '{category} guard kept original text after structural validation: {preview}',
+                                        category='[Delimiter]',
+                                        preview=orig_text[:80],
+                                    ),
+                                )
                                 _entry_results.append((tid, orig_text, entry, True, None, None))
                             else:
                                 _entry_results.append((tid, restored, entry, True, None, None))
@@ -3590,9 +3927,16 @@ init python:
                             line_number=entry.line_number,
                         )
                         if blocked_reason is not None:
+                            guard_reason_text = self._get_guard_reason_text(blocked_reason)
                             self.log_message.emit(
-                                "warning",
-                                f"[Guard] Blocked corrupted translation ({blocked_reason}) in {entry.file_path}:{entry.line_number}",
+                                "guard",
+                                self.config.get_log_text(
+                                    'log_guard_reverted_translation',
+                                    'Guard kept original text after suspicious translator output ({reason}) in {path}:{line}',
+                                    reason=guard_reason_text,
+                                    path=entry.file_path,
+                                    line=entry.line_number,
+                                ),
                             )
                         
                         if restored:

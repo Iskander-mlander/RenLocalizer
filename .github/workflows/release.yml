@@ -24,7 +24,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install -r requirements.txt
+          pip install -c constraints-release.txt -r requirements.txt
 
       - name: Build with PyInstaller
         run: |
@@ -70,7 +70,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install -r requirements.txt
+          pip install -c constraints-release.txt -r requirements.txt
 
       - name: Build with PyInstaller
         run: |
@@ -260,7 +260,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install -r requirements.txt
+          pip install -c constraints-release.txt -r requirements.txt
 
       - name: Build with PyInstaller
         run: |

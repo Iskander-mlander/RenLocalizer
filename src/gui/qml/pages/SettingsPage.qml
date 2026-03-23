@@ -459,10 +459,35 @@ Rectangle {
                     
                     RowLayout {
                         SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("batch_size_label", "Batch Size:")); Layout.fillWidth: true;
-                            SpinBox { from: 1; to: 400; value: settingsBackend.getBatchSize(); onValueChanged: settingsBackend.setBatchSize(value); editable: true }
+                            SpinBox { id: generalBatchSpinBox; from: 1; to: settingsBackend.getBatchSizeMax(); stepSize: 100; value: settingsBackend.getBatchSize(); onValueChanged: settingsBackend.setBatchSize(value); editable: true }
                         }
                         SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("concurrent_threads_label", "Concurrent Threads:")); Layout.fillWidth: true;
                             SpinBox { from: 1; to: 64; value: settingsBackend.getConcurrentThreads(); onValueChanged: settingsBackend.setConcurrentThreads(value); editable: true }
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        color: root.secondaryTextColor
+                        font.pixelSize: 12
+                        text: {
+                            var selectedEngine = backend.selectedEngine
+                            var requested = generalBatchSpinBox.value
+                            var cap = settingsBackend.getSelectedEngineBatchCap()
+                            var effective = settingsBackend.getEffectiveBatchSizeForSelectedEngine()
+                            var base = backend.getTextWithDefault(
+                                "batch_size_engine_cap_note",
+                                "General batch size can be set up to 10000. Google Translate and Yandex use a maximum effective batch size of 1000."
+                            )
+                            if (cap > 0 && effective < requested) {
+                                var extra = backend.getTextWithDefault(
+                                    "batch_size_effective_note",
+                                    "Current engine will use an effective batch size of {effective}."
+                                )
+                                return base + "\n" + extra.replace("{effective}", effective)
+                            }
+                            return base
                         }
                     }
 
@@ -664,7 +689,8 @@ Rectangle {
                     RowLayout {
                         SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_batch_important_label", "AI Batch Size:")); Layout.fillWidth: true;
                             SpinBox { 
-                                from: 1; to: 100; 
+                                id: aiBatchSpinBox
+                                from: 1; to: settingsBackend.getAIBatchSizeMax(); stepSize: 100;
                                 value: settingsBackend.getAIBatchSize(); 
                                 onValueChanged: settingsBackend.setAIBatchSize(value); 
                                 editable: true 
@@ -672,6 +698,28 @@ Rectangle {
                         }
                         SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_parallel_label", "AI Parallel Requests:")); Layout.fillWidth: true;
                             SpinBox { from: 1; to: 10; value: settingsBackend.getAIConcurrency(); onValueChanged: settingsBackend.setAIConcurrency(value); editable: true }
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        color: root.secondaryTextColor
+                        font.pixelSize: 12
+                        text: {
+                            var base = backend.getTextWithDefault(
+                                "ai_batch_limit_note",
+                                "AI batch size can also be set up to 10000, but very large values may increase token usage, latency, and API failure risk."
+                            )
+                            if ((backend.selectedEngine === "openai" || backend.selectedEngine === "gemini" || backend.selectedEngine === "deepseek" || backend.selectedEngine === "local_llm")
+                                    && aiBatchSpinBox.value > 1000) {
+                                var extra = backend.getTextWithDefault(
+                                    "ai_batch_large_warning",
+                                    "Current AI batch size is very high; if you see timeouts, quota spikes, or failed requests, lower it."
+                                )
+                                return base + "\n" + extra
+                            }
+                            return base
                         }
                     }
 

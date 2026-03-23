@@ -124,7 +124,11 @@ Windows:
 
 ```bash
 .venv\Scripts\activate
+# flexible source install
 pip install -r requirements.txt
+
+# optional: match the exact packaged-build Qt stack
+# pip install -c constraints-release.txt -r requirements.txt
 python run.py
 ```
 
@@ -132,7 +136,11 @@ Linux / macOS:
 
 ```bash
 source .venv/bin/activate
+# flexible source install (CI-smoke-tested across PyQt6 6.6-6.10 on Linux)
 pip install -r requirements.txt
+
+# optional: match the exact packaged-build Qt stack
+# pip install -c constraints-release.txt -r requirements.txt
 python run.py
 ```
 

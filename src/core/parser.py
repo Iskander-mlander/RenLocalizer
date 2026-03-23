@@ -8,6 +8,7 @@ which strings should be translated and which ones belong to technical code.
 from __future__ import annotations
 
 import asyncio
+import ast
 import json
 import logging
 import re
@@ -464,6 +465,13 @@ class RenPyParser:
         )
         self.copy_clipboard_re = re.compile(
             rf'CopyToClipboard\s*\(\s*{_QUOTED_STRING_PATTERN}'
+        )
+        self.screen_call_start_re = re.compile(
+            r'^\s*(?P<stmt>call|show)\s+screen\s+(?P<screen_name>[A-Za-z_]\w*)\s*(?P<paren>\()'
+        )
+        self.screen_displayable_call_re = re.compile(
+            r'^\s*(?P<property>idle|hover|selected|selected_idle|selected_hover|background|foreground|add)\s+'
+            r'(?P<expr>(?:[A-Za-z_][\w.]*)\s*\(.*)$'
         )
 
         # Deep extraction: use module-level shared analyzer (avoids recompiling 15 regexes per parser instance)
@@ -1353,6 +1361,57 @@ class RenPyParser:
                             file_path=file_path
                         )
 
+            # --- v2.7.7: Secondary Pass for call/show screen string arguments ---
+            # Captures user-facing titles/prompts such as:
+            #   call screen menu_interactive_scr("COMMUNICATION UPLINK ESTABLISHED...", ...)
+            if self._is_deep_feature_enabled('deep_extraction_screen_arguments'):
+                screen_call_match = self.screen_call_start_re.match(raw_line)
+                if screen_call_match:
+                    paren_col = screen_call_match.start('paren')
+                    expr_source, _ = self._collect_parenthesized_expression(lines, idx, paren_col)
+                    wrapped_expr = f"__screen_call{expr_source}" if expr_source else ""
+                    for raw_candidate, text_candidate in self._extract_expression_text_candidates(
+                        wrapped_expr,
+                        mode='screen_call',
+                    ):
+                        self._record_secondary_text_candidate(
+                            text=text_candidate,
+                            raw_text=raw_candidate,
+                            text_type=TextType.UI_ACTION,
+                            idx=idx,
+                            stripped_line=stripped_line,
+                            current_path=current_path,
+                            seen_texts=seen_texts,
+                            entries=entries,
+                            file_path=file_path,
+                            log_label='SCREEN_CALL',
+                        )
+
+            # --- v2.7.7: Secondary Pass for screen helper/displayable call args ---
+            # Captures UI labels embedded in helper calls such as:
+            #   idle build_loc_icon("pool_icon.png", "Pool", overlay)
+            if self._is_deep_feature_enabled('deep_extraction_displayable_calls'):
+                displayable_call_match = self.screen_displayable_call_re.match(raw_line)
+                if displayable_call_match:
+                    expr_col = displayable_call_match.start('expr')
+                    expr_source, _ = self._collect_parenthesized_expression(lines, idx, expr_col)
+                    for raw_candidate, text_candidate in self._extract_expression_text_candidates(
+                        expr_source,
+                        mode='displayable_call',
+                    ):
+                        self._record_secondary_text_candidate(
+                            text=text_candidate,
+                            raw_text=raw_candidate,
+                            text_type=TextType.SCREEN_TEXT,
+                            idx=idx,
+                            stripped_line=stripped_line,
+                            current_path=current_path,
+                            seen_texts=seen_texts,
+                            entries=entries,
+                            file_path=file_path,
+                            log_label='DISPLAYABLE_CALL',
+                        )
+
         return entries
 
     def _process_secondary_extraction(
@@ -1418,6 +1477,200 @@ class RenPyParser:
             # Catch-all for unexpected errors
             if self.logger.isEnabledFor(logging.ERROR):
                 self.logger.error(f"Unexpected error in secondary extraction at {file_path}:{idx+1}: {e}")
+
+    def _record_secondary_text_candidate(
+        self,
+        *,
+        text: str,
+        raw_text: Optional[str],
+        text_type: str,
+        idx: int,
+        stripped_line: str,
+        current_path: List[str],
+        seen_texts: Set[Tuple],
+        entries: List[Dict[str, Any]],
+        file_path: Union[str, Path],
+        log_label: str,
+    ) -> None:
+        """Record a secondary extraction candidate using the normal filter chain."""
+        if not text:
+            return
+
+        key = (text, EMPTY_CHARACTER, tuple(current_path) if current_path else ())
+        if key in seen_texts:
+            return
+
+        entry = self._record_entry(
+            text=text,
+            raw_text=raw_text,
+            line_number=idx + 1,
+            context_line=stripped_line,
+            text_type=text_type,
+            context_path=list(current_path) if current_path else [],
+            character=EMPTY_CHARACTER,
+            file_path=str(file_path),
+        )
+        if not entry:
+            return
+
+        entries.append(entry)
+        seen_texts.add(key)
+        if self.logger.isEnabledFor(logging.INFO):
+            self.logger.info(f"[ENTRY+{log_label}] {file_path}:{idx+1} [{text_type}] text={text}")
+
+    def _find_matching_bracket_end(
+        self,
+        text: str,
+        open_char: str = '(',
+        close_char: str = ')',
+    ) -> int:
+        """Return the index of the matching closing bracket, ignoring quoted strings."""
+        depth = 0
+        in_string = False
+        string_char = ''
+        triple_quote = False
+        escaped = False
+        saw_open = False
+        idx = 0
+
+        while idx < len(text):
+            ch = text[idx]
+
+            if escaped:
+                escaped = False
+                idx += 1
+                continue
+
+            if ch == '\\':
+                escaped = True
+                idx += 1
+                continue
+
+            if in_string:
+                if triple_quote:
+                    if (
+                        ch == string_char
+                        and idx + 2 < len(text)
+                        and text[idx + 1] == string_char
+                        and text[idx + 2] == string_char
+                    ):
+                        in_string = False
+                        triple_quote = False
+                        idx += 3
+                        continue
+                elif ch == string_char:
+                    in_string = False
+                idx += 1
+                continue
+
+            if ch in ('"', "'"):
+                if idx + 2 < len(text) and text[idx + 1] == ch and text[idx + 2] == ch:
+                    in_string = True
+                    string_char = ch
+                    triple_quote = True
+                    idx += 3
+                    continue
+                in_string = True
+                string_char = ch
+                idx += 1
+                continue
+
+            if ch == open_char:
+                saw_open = True
+                depth += 1
+            elif ch == close_char and saw_open:
+                depth -= 1
+                if depth == 0:
+                    return idx
+
+            idx += 1
+
+        return -1
+
+    def _collect_parenthesized_expression(
+        self,
+        lines: List[str],
+        start_idx: int,
+        start_col: int,
+    ) -> Tuple[str, int]:
+        """Collect a possibly multi-line parenthesized expression starting at start_col."""
+        collected = ""
+        for line_idx in range(start_idx, len(lines)):
+            chunk = lines[line_idx][start_col:] if line_idx == start_idx else lines[line_idx]
+            collected += chunk
+            end_idx = self._find_matching_bracket_end(collected, '(', ')')
+            if end_idx != -1:
+                return collected[:end_idx + 1], line_idx
+        return collected, len(lines) - 1
+
+    def _normalize_inline_text_candidate(self, text: str) -> str:
+        """Strip Ren'Py tags/placeholders before lightweight UI-label heuristics."""
+        return re.sub(r'\{/?[^}]*\}|\[[^\]]*\]', '', text or '').strip()
+
+    def _looks_like_user_facing_label(self, text: str) -> bool:
+        """Conservative label detector for short UI strings and screen titles."""
+        normalized = self._normalize_inline_text_candidate(text)
+        if not normalized:
+            return False
+        if sum(1 for ch in normalized if ch.isalpha()) < 2:
+            return False
+
+        words = [part for part in re.split(r'\s+', normalized) if part]
+        if len(words) >= 2:
+            return True
+
+        first_alpha = next((ch for ch in normalized if ch.isalpha()), '')
+        if not first_alpha:
+            return False
+        return first_alpha.isupper() or normalized.isupper()
+
+    def _is_expression_text_candidate(self, text: str, mode: str) -> bool:
+        """Apply conservative filters for supplemental expression-based extraction."""
+        normalized = self._normalize_inline_text_candidate(text)
+        if not normalized:
+            return False
+        if self._deep_var_analyzer.is_technical_string(normalized):
+            return False
+
+        if mode == 'screen_call':
+            return self.is_meaningful_text(text) and self._looks_like_user_facing_label(text)
+        if mode == 'displayable_call':
+            return self._looks_like_user_facing_label(text)
+        return self.is_meaningful_text(text)
+
+    def _extract_expression_text_candidates(
+        self,
+        expression_source: str,
+        *,
+        mode: str,
+    ) -> List[Tuple[Optional[str], str]]:
+        """Extract literal/f-string text candidates from a Python expression source."""
+        try:
+            tree = ast.parse(expression_source, mode='eval')
+        except SyntaxError:
+            return []
+
+        candidates: List[Tuple[Optional[str], str]] = []
+        seen_local: Set[Tuple[Optional[str], str]] = set()
+        for node in ast.walk(tree):
+            raw_segment = ast.get_source_segment(expression_source, node)
+            text = None
+
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                text = node.value
+            elif isinstance(node, ast.JoinedStr) and self._is_deep_feature_enabled('deep_extraction_fstrings'):
+                text = FStringReconstructor.extract_from_ast_node(node, expression_source)
+
+            if not text or not self._is_expression_text_candidate(text, mode):
+                continue
+
+            key = (raw_segment, text)
+            if key in seen_local:
+                continue
+            seen_local.add(key)
+            candidates.append((raw_segment, text))
+
+        return candidates
 
     def extract_from_json(self, file_path: Path) -> List[Dict[str, Any]]:
         """

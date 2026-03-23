@@ -9,7 +9,14 @@ Provides settings management functionality for QML UI.
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, pyqtProperty
 from PyQt6.QtWidgets import QApplication
 
-from src.utils.config import ConfigManager, Language
+from src.utils.config import (
+    ConfigManager,
+    Language,
+    MAX_AI_BATCH_SIZE,
+    MAX_GENERAL_BATCH_SIZE,
+    get_effective_batch_size,
+    get_engine_batch_size_cap,
+)
 
 
 class SettingsBackend(QObject):
@@ -191,10 +198,25 @@ class SettingsBackend(QObject):
     @pyqtSlot(result=int)
     def getBatchSize(self) -> int:
         return self.config.translation_settings.max_batch_size
+
+    @pyqtSlot(result=int)
+    def getBatchSizeMax(self) -> int:
+        return MAX_GENERAL_BATCH_SIZE
+
+    @pyqtSlot(result=int)
+    def getSelectedEngineBatchCap(self) -> int:
+        cap = get_engine_batch_size_cap(getattr(self.config.translation_settings, 'selected_engine', 'google'))
+        return int(cap or 0)
+
+    @pyqtSlot(result=int)
+    def getEffectiveBatchSizeForSelectedEngine(self) -> int:
+        requested = getattr(self.config.translation_settings, 'max_batch_size', 100)
+        engine = getattr(self.config.translation_settings, 'selected_engine', 'google')
+        return get_effective_batch_size(requested, engine)
     
     @pyqtSlot(int)
     def setBatchSize(self, value: int):
-        self.config.translation_settings.max_batch_size = value
+        self.config.translation_settings.max_batch_size = max(1, min(int(value), MAX_GENERAL_BATCH_SIZE))
         self.config.save_config()
     
     @pyqtSlot(result=float)
@@ -575,9 +597,13 @@ class SettingsBackend(QObject):
     def getAIBatchSize(self) -> int:
         return self.config.translation_settings.ai_batch_size
 
+    @pyqtSlot(result=int)
+    def getAIBatchSizeMax(self) -> int:
+        return MAX_AI_BATCH_SIZE
+
     @pyqtSlot(int)
     def setAIBatchSize(self, value: int):
-        self.config.translation_settings.ai_batch_size = value
+        self.config.translation_settings.ai_batch_size = max(1, min(int(value), MAX_AI_BATCH_SIZE))
         self.config.save_config()
 
     @pyqtSlot(result=int)

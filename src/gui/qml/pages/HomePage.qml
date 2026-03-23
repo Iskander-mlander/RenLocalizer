@@ -34,6 +34,7 @@ Rectangle {
         var trig = backend.uiTrigger
         if (level === "error") return backend.getTextWithDefault("log_tag_error", "[ERROR]")
         if (level === "warning") return backend.getTextWithDefault("log_tag_warn", "[WARN]")
+        if (level === "guard") return backend.getTextWithDefault("log_tag_guard", "[GUARD]")
         if (level === "success") return backend.getTextWithDefault("log_tag_ok", "[OK]")
         if (level === "debug") return backend.getTextWithDefault("log_tag_debug", "[DEBUG]")
         return backend.getTextWithDefault("log_tag_info", "[INFO]")
@@ -776,11 +777,12 @@ Rectangle {
                             
                             // Dynamic Logic in Delegate
                             property string colorCode: {
-                                if (level === "error") return "#ff6b6b"
-                                if (level === "warning") return "#ffd93d"
-                                if (level === "success") return "#6bcb77"
-                                if (level === "debug") return "#7f8c8d"
-                                return "#aaa" // info or default
+                                if (level === "error") return root.currentTheme === "light" ? "#e03131" : "#ff8787"
+                                if (level === "warning") return root.currentTheme === "light" ? "#e67700" : "#ffd43b"
+                                if (level === "guard") return root.currentTheme === "light" ? "#1c7ed6" : "#74c0fc"
+                                if (level === "success") return root.currentTheme === "light" ? "#2b8a3e" : "#69db7c"
+                                if (level === "debug") return root.currentTheme === "light" ? "#868e96" : "#8b949e"
+                                return root.currentTheme === "light" ? "#495057" : "#cfd8dc"
                             }
 
                             property string prefixText: {

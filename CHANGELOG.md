@@ -1,6 +1,39 @@
 # RenLocalizer Changelog
 
-### [2.7.6] - Unreleased
+### [2.7.7] - Unreleased
+
+### Translation Coverage Expansion
+- **Structure-Aware Screen Argument Extraction:** Added a conservative parser pass for `call/show screen ...(...)` string arguments so custom screen titles and prompts in data-driven projects are now captured without broadening false positives.
+- **Displayable Helper Label Extraction:** Added a second guarded pass for screen/displayable helper calls such as `idle build_loc_icon(..., "Pool", ...)` and `add Text(...)`, improving coverage for custom navigation UI and helper-driven labels.
+- **Config-Gated Deep Extraction Flags:** New `deep_extraction_screen_arguments` and `deep_extraction_displayable_calls` toggles extend coverage without changing legacy extraction behavior, and both default to the safe enabled path for 2.7.7.
+- **Regression Coverage Added:** Locked the new structure-aware extraction behavior with dedicated tests covering screen titles, helper labels, asset-path skipping, and low-signal lowercase argument rejection.
+
+### Coverage Diagnostics & User Guidance
+- **Coverage Warning Audit Layer:** The pipeline now records likely non-fatal coverage risks into diagnostics, including image-only interactive UI, compiled-only scripts when `RPYC Reader` is disabled, and dynamic UI text patterns when the runtime hook is unavailable.
+- **GUI Warning Localization:** Coverage warning summaries and report-path hints were added to all 8 GUI locale files so the Home/UI warning flow remains fully localized.
+- **Diagnostics Report Enrichment:** `diagnostic_<lang>.json` now includes serialized `coverage_warnings` metadata and total warning counts for post-run inspection.
+- **Locale Coverage Cleanup:** High-visibility locale gaps in nested pipeline log blocks were cleaned up, and all 8 locale files were rechecked against `en.json` so no translation keys are missing after the 2.7.7 additions.
+
+### Guard Messaging & UX Polish
+- **Dedicated Guard Log Level:** Translator-output safety messages that keep the original text are no longer surfaced as generic warnings; they now use a dedicated `guard` log level to clearly signal “protected fallback” rather than “hard failure.”
+- **User-Friendly Guard Reasons:** Technical guard reason codes like `length_inflation` and `placeholder_set_mismatch` now resolve to localized, human-readable explanations in logs.
+- **Theme-Aware Log Semantics:** Home-page log colors were rebalanced for meaning and readability: errors stay red, warnings use amber/orange, guard events use blue, success stays green, and neutral/debug messages keep muted tones across light and dark themes.
+- **Less Noisy GUI Feedback:** Guard events stay visible in the log panel but no longer trigger toast notifications, reducing false alarm perception during normal translation runs.
+
+### Batch Size Flexibility
+- **General Batch Ceiling Raised:** The standard source-install batch setting now supports values up to `10000`, making high-volume non-AI engines less constrained on large projects.
+- **AI Batch Ceiling Raised Too:** The dedicated AI batch setting can now also be increased up to `10000` for users who intentionally want larger request grouping.
+- **Engine-Specific Effective Caps:** Google Translate and Yandex continue to enforce a safer effective batch cap of `1000`, while still honoring lower user-selected values normally.
+- **Localized UI Guidance:** Settings now explain the wider batch range, the AI trade-offs of very large batches, and the effective cap behavior for the currently selected engine in all GUI locale files.
+- **Runtime Cap Notice:** When a stored batch size exceeds an engine's safe effective limit, the pipeline logs a friendly informational notice instead of silently surprising the user; very large AI batches now also emit a low-noise informational caution in logs.
+
+### PyQt6 Source Compatibility & CI
+- **Source Install Range Opened Carefully:** `requirements.txt` now allows the tested PyQt6 `6.6.x` through `6.10.x` line for source installs instead of forcing a single patch version.
+- **Release Build Pin Preserved:** Official packaged builds still resolve through `constraints-release.txt`, keeping the release pipeline pinned to the validated `PyQt6 6.10.1` stack.
+- **New Linux Compatibility Matrix:** Added a dedicated GitHub Actions workflow that validates source installs against multiple PyQt6 minor lines with a real Qt/QML startup smoke test under Xvfb.
+- **Local Matrix Helper:** Added `tox.ini` so PyQt6 compatibility checks can also be reproduced locally without manually editing dependency pins.
+
+### [2.7.6] - 2026-03-20
 
 ### Linux UI Icon Reliability
 - **Bundled Emoji Font Bridged Into QML:** Linux/macOS startup now passes the registered emoji font family into QML so icon-like emoji labels can explicitly use the bundled/system emoji font instead of depending on distro-specific fallback behavior.

@@ -57,6 +57,13 @@ VALID_APP_THEMES: tuple[str, ...] = (
     "auto",
 )
 
+MAX_GENERAL_BATCH_SIZE = 10000
+MAX_AI_BATCH_SIZE = 10000
+ENGINE_BATCH_SIZE_CAPS: dict[str, int] = {
+    "google": 1000,
+    "yandex": 1000,
+}
+
 LEGACY_APP_SETTING_ALIASES: dict[str, str] = {
     "theme": "app_theme",
 }
@@ -66,6 +73,29 @@ def _is_turkic_locale(code: str) -> bool:
     normalized = (code or "").lower().replace("_", "-")
     primary = normalized.split('-')[0]
     return primary in TURKIC_LANGUAGE_CODES
+
+
+def normalize_engine_code(engine: Any) -> str:
+    """Normalize engine enum/string values to a lowercase config code."""
+    if hasattr(engine, "value"):
+        engine = getattr(engine, "value")
+    return str(engine or "").strip().lower()
+
+
+def get_engine_batch_size_cap(engine: Any) -> Optional[int]:
+    """Return the hard cap for engines that require a lower effective batch size."""
+    return ENGINE_BATCH_SIZE_CAPS.get(normalize_engine_code(engine))
+
+
+def get_effective_batch_size(requested: int, engine: Any) -> int:
+    """Apply engine-specific hard limits while preserving the stored user setting."""
+    try:
+        requested_int = max(1, int(requested))
+    except (ValueError, TypeError):
+        requested_int = 1
+
+    cap = get_engine_batch_size_cap(engine)
+    return min(requested_int, cap) if cap is not None else requested_int
 
 
 def detect_system_language() -> str:
@@ -174,6 +204,8 @@ class TranslationSettings:
     deep_extraction_multiline_structures: bool = True  # Multi-line dict/list parsing
     deep_extraction_extended_api: bool = True  # Extended Ren'Py API call coverage
     deep_extraction_tooltip_properties: bool = True  # tooltip property extraction
+    deep_extraction_screen_arguments: bool = True  # call/show screen positional string args
+    deep_extraction_displayable_calls: bool = True  # screen helper/displayable call args
     # Delimiter-Aware Translation (v2.7.2): Split pipe-delimited variant text before translation
     # Handles patterns like <seg1|seg2|seg3> commonly used for random NPC dialogue
     enable_delimiter_aware_translation: bool = True
@@ -195,7 +227,7 @@ class TranslationSettings:
     ai_temperature: float = AI_DEFAULT_TEMPERATURE  # 0.0-1.0, lower = more consistent, higher = more creative
     ai_timeout: int = AI_DEFAULT_TIMEOUT  # seconds, timeout for AI requests
     ai_max_tokens: int = AI_DEFAULT_MAX_TOKENS  # max output tokens
-    ai_batch_size: int = 50  # Number of lines per AI request batch (1-200) tokens
+    ai_batch_size: int = 50  # Number of lines per AI request batch (1-10000)
     ai_retry_count: int = AI_MAX_RETRIES  # number of retries on failure
     ai_concurrency: int = 2  # NEW: Maximum concurrent requests for AI engines
     ai_request_delay: float = 1.5  # NEW: Delay between AI requests (seconds)
@@ -253,7 +285,7 @@ class TranslationSettings:
         # --- Numeric clamps (prevent infinite loops, deadlocks, OOM) ---
         self.max_concurrent_threads = _safe_int(self.max_concurrent_threads, 4, 1, 64)
         self.request_delay = _safe_float(self.request_delay, 0.5, 0.0, 60.0)
-        self.max_batch_size = _safe_int(self.max_batch_size, 50, 1, 500)
+        self.max_batch_size = _safe_int(self.max_batch_size, 100, 1, MAX_GENERAL_BATCH_SIZE)
         self.max_retries = _safe_int(self.max_retries, 3, 1, 20)
         self.timeout = _safe_int(self.timeout, 30, 5, 600)
         self.max_chars_per_request = _safe_int(self.max_chars_per_request, 4500, 100, 50000)
@@ -262,7 +294,7 @@ class TranslationSettings:
         self.ai_temperature = _safe_float(self.ai_temperature, 0.3, 0.0, 2.0)
         self.ai_timeout = _safe_int(self.ai_timeout, 60, 5, 600)
         self.ai_max_tokens = _safe_int(self.ai_max_tokens, 4096, 64, 32768)
-        self.ai_batch_size = _safe_int(self.ai_batch_size, 10, 1, 200)
+        self.ai_batch_size = _safe_int(self.ai_batch_size, 50, 1, MAX_AI_BATCH_SIZE)
         self.ai_retry_count = _safe_int(self.ai_retry_count, 3, 0, 20)
         self.ai_concurrency = _safe_int(self.ai_concurrency, 1, 1, 20)
         self.ai_request_delay = _safe_float(self.ai_request_delay, 1.5, 0.0, 60.0)
