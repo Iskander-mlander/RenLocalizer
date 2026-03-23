@@ -1,6 +1,6 @@
 # RenLocalizer Changelog
 
-### [2.7.7] - Unreleased
+### [2.7.7] - 2026-03-23
 
 ### Translation Coverage Expansion
 - **Structure-Aware Screen Argument Extraction:** Added a conservative parser pass for `call/show screen ...(...)` string arguments so custom screen titles and prompts in data-driven projects are now captured without broadening false positives.
