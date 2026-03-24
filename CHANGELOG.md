@@ -1,12 +1,20 @@
 # RenLocalizer Changelog
 
-### [2.7.7] - 2026-03-23
+### [2.7.7] - 2026-03-24
+
+### Ren'Py Runtime Hardening (Phase 1-6)
+- **Template-Aware Runtime Matching:** Added `_rl_template_match` to the runtime hook, enabling intelligent translation of text containing dynamic interpolation (e.g. `Score: [score]`) by matching against learned "template shapes" in `strings.json`.
+- **Conflict Management & Diagnostics:** The translation pipeline now detects and reports `duplicate_key_conflict` and `case_insensitive_conflict` during `strings.json` generation. Conflicts are recorded with source file names and line numbers in `diagnostics/strings_json_skipped_corruptions.json`.
+- **Enhanced ReplaceText Coverage:** `strings.json` now synthesizes tag-stripped variants to ensure `config.replace_text` can match text fragments separated by Ren'Py tags (e.g., `{b}Hello{/b}` → matching `Hello` alone).
+- **Consolidated Miss Diagnostics:** Improved categorization of runtime misses in `runtime_missed_strings.jsonl`, distinguishing between `template_candidate_miss`, `exact_match_miss`, and `case_insensitive_miss` for easier troubleshooting.
+- **Robust Placeholder Injection:** Increased the safety of the runtime template matcher to only process stable shapes with single placeholders, preventing recursive evaluation or injection risks.
 
 ### Translation Coverage Expansion
 - **Structure-Aware Screen Argument Extraction:** Added a conservative parser pass for `call/show screen ...(...)` string arguments so custom screen titles and prompts in data-driven projects are now captured without broadening false positives.
 - **Displayable Helper Label Extraction:** Added a second guarded pass for screen/displayable helper calls such as `idle build_loc_icon(..., "Pool", ...)` and `add Text(...)`, improving coverage for custom navigation UI and helper-driven labels.
 - **Config-Gated Deep Extraction Flags:** New `deep_extraction_screen_arguments` and `deep_extraction_displayable_calls` toggles extend coverage without changing legacy extraction behavior, and both default to the safe enabled path for 2.7.7.
 - **Regression Coverage Added:** Locked the new structure-aware extraction behavior with dedicated tests covering screen titles, helper labels, asset-path skipping, and low-signal lowercase argument rejection.
+- **No-Space Say Syntax Support:** Character dialogue lines written as `a"..."` (without a space after the speaker name) are now extracted safely, while common screen/UI statement keywords remain excluded to avoid false positives.
 
 ### Coverage Diagnostics & User Guidance
 - **Coverage Warning Audit Layer:** The pipeline now records likely non-fatal coverage risks into diagnostics, including image-only interactive UI, compiled-only scripts when `RPYC Reader` is disabled, and dynamic UI text patterns when the runtime hook is unavailable.
@@ -35,6 +43,9 @@
 - **New Linux Compatibility Matrix:** Added a dedicated GitHub Actions workflow that validates source installs against multiple PyQt6 minor lines with a real Qt/QML startup smoke test under Xvfb.
 - **Local Matrix Helper:** Added `tox.ini` so PyQt6 compatibility checks can also be reproduced locally without manually editing dependency pins.
 - **Matrix Verified:** The Linux source compatibility matrix now passes across the tested PyQt6 `6.6.1` through `6.10.1` range, confirming that source installs no longer require forcing only the newest tested minor line.
+
+### Documentation & Developer Experience
+- **Architecture & Engine Sync:** Updated `AGENTS.md` to accurately reflect the v4.1.1 4-layer runtime hook structure and corrected the active translation engine count to 8, establishing clarity on available providers (including Yandex).
 
 ### [2.7.6] - 2026-03-20
 

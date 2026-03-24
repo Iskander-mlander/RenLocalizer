@@ -104,3 +104,12 @@ def test_all_locales_include_batch_cap_messages() -> None:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         missing = required.difference(data)
         assert not missing, f"{path.name} missing: {sorted(missing)}"
+
+
+def test_runtime_pipeline_uses_atomic_strings_json_writes_and_shared_hook_flag() -> None:
+    pipeline_source = Path("src/core/translation_pipeline.py").read_text(encoding="utf-8")
+
+    assert "def _is_runtime_hook_enabled(self)" in pipeline_source
+    assert 'runtime_hook_enabled = self._is_runtime_hook_enabled()' in pipeline_source
+    assert "save_text_safely(\n                    Path(json_path)" in pipeline_source
+    assert "save_text_safely(\n                        Path(report_path)" in pipeline_source

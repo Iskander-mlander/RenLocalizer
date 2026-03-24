@@ -94,3 +94,29 @@ label start:
     assert "Inner call" in texts
     assert "Double underscore" in texts
     assert "Talk" in texts
+
+
+def test_char_dialog_regex_accepts_no_space_after_character_name():
+    parser = RenPyParser()
+    match = parser.char_dialog_re.match('a"Hello there."')
+    assert match is not None
+    assert match.group('char') == 'a'
+
+
+def test_char_dialog_regex_still_accepts_normal_spacing():
+    parser = RenPyParser()
+    match = parser.char_dialog_re.match('e "Hi."')
+    assert match is not None
+    assert match.group('char') == 'e'
+
+
+def test_char_dialog_regex_does_not_treat_screen_text_as_speaker():
+    parser = RenPyParser()
+    assert parser.char_dialog_re.match('text"Hello"') is None
+    assert parser.char_dialog_re.match('textbutton"Start"') is None
+    assert parser.char_dialog_re.match('label"Name"') is None
+
+
+def test_classify_text_type_supports_no_space_character_dialogue():
+    parser = RenPyParser()
+    assert parser.classify_text_type('a"Hello there."') == "character"

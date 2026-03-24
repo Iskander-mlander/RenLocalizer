@@ -746,10 +746,7 @@ class TranslationPipeline(QObject):
         }
 
     def _audit_dynamic_ui_runtime(self, game_dir: str) -> Dict[str, Any] | None:
-        runtime_hook_enabled = bool(
-            getattr(self.config.translation_settings, 'auto_generate_hook', False)
-            or getattr(self.config.translation_settings, 'enable_runtime_hook', False)
-        )
+        runtime_hook_enabled = self._is_runtime_hook_enabled()
         if runtime_hook_enabled:
             return None
 
@@ -824,6 +821,17 @@ class TranslationPipeline(QObject):
         basename = os.path.basename(file_path or '')
         lowered = basename.lower()
         return lowered.startswith('zz_rl_exported_') and lowered.endswith('.rpy')
+
+    def _is_runtime_hook_enabled(self) -> bool:
+        """Single source of truth for whether runtime assets should be generated."""
+        ts = getattr(self.config, 'translation_settings', None)
+        if ts is None:
+            return False
+
+        enable_runtime_hook = bool(getattr(ts, 'enable_runtime_hook', True))
+        auto_generate_hook = bool(getattr(ts, 'auto_generate_hook', True))
+        force_runtime = bool(getattr(ts, 'force_runtime_translation', False))
+        return force_runtime or (enable_runtime_hook and auto_generate_hook)
 
     def emit_log(self, level: str, message: str):
         """
@@ -1548,7 +1556,10 @@ class TranslationPipeline(QObject):
                 'placeholder_set_mismatch': 0,
                 'renpy_tag_set_mismatch': 0,
                 'duplicate_key_conflict': 0,
+                'case_insensitive_conflict': 0,
             }
+            mapping_sources: Dict[str, List[dict]] = {} # Track where each mapping comes from
+            lower_to_orig: Dict[str, List[str]] = {}   # Track case fragments for CI checks
             skipped_samples = []
 
             def _mark_skipped(reason: str, original: str, translated: str):
@@ -1556,14 +1567,18 @@ class TranslationPipeline(QObject):
                 skipped_corrupt += 1
                 if reason in skipped_reason_counts:
                     skipped_reason_counts[reason] += 1
-                if len(skipped_samples) < 100:
-                    skipped_samples.append({
+                if len(skipped_samples) < 200:
+                    sample = {
                         'reason': reason,
-                        'original_preview': original[:120],
-                        'translated_preview': translated[:120],
-                    })
+                        'original': original,
+                        'translated': translated,
+                    }
+                    if reason == 'duplicate_key_conflict' and original in mapping:
+                        sample['existing_translation'] = mapping[original]
+                        sample['sources'] = mapping_sources.get(original, [])
+                    skipped_samples.append(sample)
 
-            def _try_add_mapping(original: str, translated: str) -> None:
+            def _try_add_mapping(original: str, translated: str, source_file: str = None, line_num: int = None) -> None:
                 orig = (original or '').strip()
                 trans = (translated or '').strip()
                 if not orig or not trans or orig == trans:
@@ -1593,12 +1608,42 @@ class TranslationPipeline(QObject):
                         )
                     return
 
+                # CI Conflict check
+                lower_orig = orig.lower()
+                if lower_orig in lower_to_orig:
+                    # Check if any existing same-lower key has different translation
+                    has_ci_conflict = False
+                    for other_orig in lower_to_orig[lower_orig]:
+                        if mapping[other_orig] != trans:
+                            has_ci_conflict = True
+                            break
+                    
+                    if has_ci_conflict:
+                        # Report CI conflict but STILL ADD to mapping (runtime hook will handle it)
+                        # We don't skip it here because exact-match should still work.
+                        # But we mark it for diagnostics.
+                        _mark_skipped('case_insensitive_conflict', orig, trans)
+                    
+                    if orig not in lower_to_orig[lower_orig]:
+                        lower_to_orig[lower_orig].append(orig)
+                else:
+                    lower_to_orig[lower_orig] = [orig]
+
                 mapping[orig] = trans
+                if source_file:
+                    if orig not in mapping_sources:
+                        mapping_sources[orig] = []
+                    mapping_sources[orig].append({'file': source_file, 'line': line_num})
 
             for tfile in tl_files:
                 for entry in tfile.entries:
                     if entry.original_text and entry.translated_text:
-                        _try_add_mapping(entry.original_text, entry.translated_text)
+                        _try_add_mapping(
+                            entry.original_text, 
+                            entry.translated_text,
+                            source_file=os.path.basename(tfile.file_path),
+                            line_num=entry.line_number
+                        )
             
             # ── Atomik segment çevirileri ekle (v2.7.1) ──
             # Delimiter gruplarından gelen bağımsız segment çevirileri,
@@ -1801,22 +1846,28 @@ class TranslationPipeline(QObject):
                     diag_dir = os.path.join(lang_dir, 'diagnostics')
                     os.makedirs(diag_dir, exist_ok=True)
                     report_path = os.path.join(diag_dir, 'strings_json_skipped_corruptions.json')
-                    with open(report_path, 'w', encoding='utf-8') as rf:
-                        json.dump({
+                    save_text_safely(
+                        Path(report_path),
+                        json.dumps({
                             'generated_at': int(time.time()),
                             'total_skipped': skipped_corrupt,
                             'reason_counts': skipped_reason_counts,
                             'sample_limit': 100,
                             'samples': skipped_samples,
-                        }, rf, ensure_ascii=False, indent=2)
+                        }, ensure_ascii=False, indent=2),
+                        encoding='utf-8',
+                    )
                     self.logger.info(f"strings.json: Wrote skipped-corruption report -> {report_path}")
                 except Exception as report_exc:
                     self.logger.debug(f"strings.json: Failed to write skipped-corruption report: {report_exc}")
             
             if mapping:
                 json_path = os.path.join(lang_dir, "strings.json")
-                with open(json_path, 'w', encoding='utf-8') as f:
-                    json.dump(mapping, f, ensure_ascii=False, indent=4)
+                save_text_safely(
+                    Path(json_path),
+                    json.dumps(mapping, ensure_ascii=False, indent=4),
+                    encoding='utf-8',
+                )
                 self.log_message.emit('info', self.config.get_log_text('log_strings_json_generated', count=len(mapping)))
         except Exception as e:
             self.logger.warning(f"Failed to generate strings.json: {e}")
@@ -1862,10 +1913,7 @@ class TranslationPipeline(QObject):
                 if old.name != hook_filename:
                     old.unlink(missing_ok=True)
 
-            # Settings check: auto_generate_hook OR force_runtime_translation
-            auto_gen = getattr(self.config.translation_settings, 'auto_generate_hook', True)
-            force_run = getattr(self.config.translation_settings, 'force_runtime_translation', False)
-            should_exist = auto_gen or force_run
+            should_exist = self._is_runtime_hook_enabled()
             
             # Hedef dili al
             target_lang = getattr(self, 'target_language', None) or getattr(self.config.translation_settings, 'target_language', 'turkish') or 'turkish'

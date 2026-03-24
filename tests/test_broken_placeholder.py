@@ -155,3 +155,31 @@ def test_half_bracket_rlph_token_recovery():
     half = protected.replace('⟦', '').replace('⟧', ']')
     restored = restore_renpy_syntax(half, placeholders)
     assert "[name]" in restored
+
+
+def test_placeholder_boundary_spacing_repairs_prefix_attachment():
+    original = "Merhaba [player]"
+    protected, placeholders = protect_renpy_syntax(original)
+
+    merged = re.sub(r'\s+(⟦[^⟧]+⟧)', r'\1', protected)
+    restored = restore_renpy_syntax(merged, placeholders)
+
+    assert restored == original
+
+
+def test_placeholder_boundary_spacing_repairs_suffix_attachment():
+    original = "[player] geldi"
+    protected, placeholders = protect_renpy_syntax(original)
+
+    merged = re.sub(r'(⟦[^⟧]+⟧)\s+', r'\1', protected)
+    restored = restore_renpy_syntax(merged, placeholders)
+
+    assert restored == original
+
+
+def test_placeholder_boundary_spacing_does_not_break_apostrophe_suffix():
+    original = "[player]'s ship"
+    protected, placeholders = protect_renpy_syntax(original)
+    restored = restore_renpy_syntax(protected, placeholders)
+
+    assert restored == original

@@ -531,7 +531,22 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
     result = re.sub(r'\]\s*\]', ']]', result)
     result = re.sub(r'\[\s+([a-zA-Z0-9_]+)\s+\]', r'[\1]', result)
     result = re.sub(r'\[\s*(\d+)\s*\]', r'[\1]', result)
-    
+
+    # AŞAMA 5.25: Placeholder boundary spacing repair
+    # Bazı motorlar placeholder'ı komşu kelimeye yapıştırabilir:
+    #   Merhaba[player] -> Merhaba [player]
+    #   [player]geldi   -> [player] geldi
+    # Yalnızca [] değişken placeholder'larında ve yalnızca alfanümerik komşulukta
+    # boşluk ekleriz; noktalama eklerinin (örn. [name]'s, Hello,[name]!) davranışı
+    # korunur.
+    bracket_placeholders = [
+        value for value in vars_only.values()
+        if isinstance(value, str) and value.startswith('[') and value.endswith(']')
+    ]
+    for placeholder in sorted(set(bracket_placeholders), key=len, reverse=True):
+        result = re.sub(rf'(?<=\w){re.escape(placeholder)}', f' {placeholder}', result, flags=re.UNICODE)
+        result = re.sub(rf'{re.escape(placeholder)}(?=\w)', f'{placeholder} ', result, flags=re.UNICODE)
+
     # AŞAMA 5.5: Fuzzy Recovery - Bracket içindeki bozuk boşlukları temizle
     # Google Translate bazen [player.name] → [player. name] veya [player .name] yapıyor
     # Hedef dile göre bu oran artıyor (SOV diller, Arapça, vb.)

@@ -763,40 +763,16 @@ class AppBackend(QObject):
             return
 
         try:
-            # Logic mirrored from TranslationPipeline
-            should_use_global_cache = getattr(self.config.translation_settings, 'use_global_cache', True)
-            
-            # Determine Project Directory
-            project_dir = os.path.dirname(self._project_path) if os.path.isfile(self._project_path) else self._project_path
-            
-            if should_use_global_cache:
-                # Global Cache Path
-                project_name = os.path.basename(project_dir.rstrip('/\\'))
-                if not project_name:
-                    project_name = "default_project"
-                
-                # Use program directory (next to run.py/executable)
-                app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                if getattr(sys, 'frozen', False):
-                    app_dir = os.path.dirname(sys.executable)
-                
-                base_cache_dir = os.path.join(app_dir, getattr(self.config.translation_settings, 'cache_path', 'cache'))
-                cache_dir = os.path.join(base_cache_dir, project_name, self._target_language)
-            else:
-                # Local Cache Path
-                cache_dir = os.path.join(project_dir, 'game', 'tl', self._target_language)
+            cache_file = self._get_current_cache_file()
 
-            cache_file = os.path.join(cache_dir, "translation_cache.json")
-            
-            if os.path.exists(cache_file):
+            # Always reset before loading so project/language switches never leak stale entries.
+            self.translation_manager._cache.clear()
+            self.translation_manager.cache_hits = 0
+            self.translation_manager.cache_misses = 0
+
+            if cache_file and os.path.exists(cache_file):
                 self.translation_manager.load_cache(cache_file)
-                # self.logMessage.emit("debug", f"Cache reloaded from: {cache_file}") # Too verbose?
-            else:
-                # Clear cache if file doesn't exist for this new context, to avoid showing old project data
-                self.translation_manager._cache.clear()
-                self.translation_manager.cache_hits = 0
-                self.translation_manager.cache_misses = 0
-                
+
         except Exception as e:
             self.logger.error(f"Failed to update cache path: {e}")
     
@@ -1410,6 +1386,9 @@ class AppBackend(QObject):
         # We'll take a snapshot
         
         try:
+            # Refresh from the active cache file so the page stays aligned with
+            # the current project/language after data-dir/path changes.
+            self._update_cache_path()
             cache_snapshot = list(self.translation_manager._cache.items())
             
             # Sort by most recent (which are at the end of OrderedDict) -> reverse

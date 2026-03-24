@@ -90,12 +90,19 @@ init -999 python:
     _rl_runtime_miss_path = None
     _rl_translations = {{}}
     _rl_translations_ci = {{}}     # Case-insensitive: lower_key -> value (v4.1.0)
+    _rl_ci_conflicts_global = set() # Track ambiguous lower-case keys for diagnostics
+    _rl_runtime_template_matching = True # Experimental: Feature flag for template-aware runtime
+    _rl_template_map = [] # Store exact template shapes extracted from strings.json
     _rl_loaded = False
+    _rl_loaded_language = None
     _rl_prev_say_menu_filter = None
     _rl_prev_replace_text = None
     _rl_hotkey_visible_re = _rl_re.compile(r"^.+\s\[[A-Za-z]\]$")
     _rl_placeholder_remnant_re = _rl_re.compile(
         r"(?i)(?:R[A-Z]{0,6}LPH[0-9A-F]{3,}|XRPYX_[A-Z0-9_]+|RNPY_[A-Z0-9_]+)"
+    )
+    _rl_placeholder_template_re = _rl_re.compile(
+        r"(\[[^\]]+\]|\{[^\}]+\}|%\([^\)]+\)[sdi]|\%[sdi])"
     )
 
     # Punct spacing regex — used ONLY in Layer 2 (post-interpolation)
@@ -165,12 +172,39 @@ init -999 python:
         stripped = (text or "").strip()
         if not stripped:
             return default_reason
+            
+        active_lang = _rl_get_active_language()
+        if not _rl_loaded or _rl_loaded_language != active_lang:
+            return "language_reload_miss"
+            
         if "⟦" in stripped or "⟧" in stripped or _rl_placeholder_remnant_re.search(stripped):
             return "corruption_driven_miss"
-        if default_reason == "quote_lookup_miss":
-            return default_reason
+            
+        if stripped.lower() in _rl_ci_conflicts_global:
+            return "duplicate_source_conflict"
+            
+        if "{image=" in stripped.lower() or stripped.lower().endswith((".png", ".webp", ".jpg")):
+            return "image_only_ui"
+            
+        if ("[" in stripped and "]" in stripped) or ("{" in stripped and "}" in stripped):
+            return "template_candidate_miss"
+            
         if _rl_hotkey_visible_re.match(stripped):
             return "hotkey_visible_form_miss"
+            
+        if default_reason == "quote_lookup_miss":
+            return default_reason
+            
+        if default_reason == "no_exact_match_post_interpolation":
+            # Heuristic for screen_bypass_miss or dynamic_ui_runtime
+            # since it arrived at replace_text without matching in say_menu
+            if len(stripped) < 15 and (stripped.isupper() or stripped.istitle()):
+                return "dynamic_ui_runtime"
+            return "screen_bypass_miss"
+            
+        if default_reason == "no_exact_match_pre_interpolation":
+            return "exact_lookup_miss"
+            
         return default_reason
 
     def _rl_log_runtime_miss(layer, text, reason):
@@ -214,12 +248,7 @@ init -999 python:
 
     def _rl_find_strings_json():
         """Find strings.json with exhaustive path search."""
-        lang = "{renpy_lang}"
-        try:
-            if hasattr(_preferences, 'language') and _preferences.language:
-                lang = _preferences.language
-        except Exception:
-            pass
+        lang = _rl_get_active_language()
 
         candidates = []
         if hasattr(config, 'gamedir') and config.gamedir:
@@ -263,8 +292,17 @@ init -999 python:
 
         return None
 
+    def _rl_get_active_language():
+        lang = "{renpy_lang}"
+        try:
+            if hasattr(_preferences, 'language') and _preferences.language:
+                lang = _preferences.language
+        except Exception:
+            pass
+        return lang
+
     def _rl_load_translations():
-        global _rl_translations, _rl_translations_ci, _rl_loaded, _rl_translated_values
+        global _rl_translations, _rl_translations_ci, _rl_loaded, _rl_translated_values, _rl_loaded_language, _rl_ci_conflicts_global, _rl_template_map
 
         json_path = _rl_find_strings_json()
         if not json_path:
@@ -294,7 +332,8 @@ init -999 python:
             # "An", "NOT", "MA", "INT" inside longer translated text.
             _rl_translations_ci = {{}}
             _rl_translated_values = set()
-            _rl_ci_conflicts = set()  # Track ambiguous lower-case keys
+            _rl_ci_conflicts_global = set()  # Track ambiguous lower-case keys
+            _rl_template_map = []
 
             for k, v in _rl_translations.items():
                 if k and v and k.strip() and v.strip() and k.strip() != v.strip():
@@ -302,24 +341,54 @@ init -999 python:
                     clean_v = v.strip()
                     _rl_translated_values.add(clean_v)
                     lower_k = clean_k.lower()
-                    if lower_k in _rl_ci_conflicts:
+                    if lower_k in _rl_ci_conflicts_global:
                         pass  # Already marked ambiguous — skip
                     elif lower_k in _rl_translations_ci:
                         if _rl_translations_ci[lower_k] != clean_v:
                             # Same key different translations (e.g. "Skip"->"Geç", "skip"->"atla")
                             # Remove from CI dict to prevent wrong translation.
                             # Exact case-sensitive lookup still works for both.
-                            _rl_ci_conflicts.add(lower_k)
+                            _rl_ci_conflicts_global.add(lower_k)
                             del _rl_translations_ci[lower_k]
                     else:
                         _rl_translations_ci[lower_k] = clean_v
 
-            del _rl_ci_conflicts  # Free memory
+                if _rl_runtime_template_matching:
+                    k_ph = _rl_placeholder_template_re.findall(k)
+                    if len(k_ph) == 1:
+                        ph = k_ph[0]
+                        if v.count(ph) == 1:
+                            k_parts = k.split(ph)
+                            v_parts = v.split(ph)
+                            if len(k_parts) == 2 and len(v_parts) == 2:
+                                k_pre, k_suf = k_parts
+                                v_pre, v_suf = v_parts
+                                sig = k_pre + k_suf
+                                if sum(1 for c in sig if c.isalnum()) >= 2:
+                                    _rl_template_map.append((k_pre, k_suf, v_pre, v_suf))
+
+            if _rl_runtime_template_matching:
+                _rl_template_map.sort(key=lambda x: len(x[0]) + len(x[1]), reverse=True)
+
+            # del _rl_ci_conflicts_global  # Removed to keep it global
 
             _rl_loaded = True
+            _rl_loaded_language = _rl_get_active_language()
             return True
         except Exception:
             return False
+
+    def _rl_ensure_language_sync():
+        global _rl_runtime_miss_path, _rl_runtime_miss_logged
+        try:
+            active_lang = _rl_get_active_language()
+            if _rl_loaded and _rl_loaded_language == active_lang:
+                return
+            _rl_runtime_miss_path = None
+            _rl_runtime_miss_logged = set()
+            _rl_load_translations()
+        except Exception:
+            pass
 
     # Load translations at startup
     if not _rl_load_translations():
@@ -357,6 +426,7 @@ init -999 python:
         _original_text = text
         _had_local_match = False
         try:
+            _rl_ensure_language_sync()
             if text and _rl_loaded:
                 # Try 1: Exact match (preserves tags, whitespace, everything)
                 translated = _rl_translations.get(text)
@@ -425,6 +495,21 @@ init -999 python:
     # Example: "Hello {b}World{/b}!" calls replace_text 3 times:
     #   replace_text("Hello "), replace_text("World"), replace_text("!")
 
+    def _rl_template_match(text):
+        if not text or not _rl_template_map:
+            return None
+        t_len = len(text)
+        for k_pre, k_suf, v_pre, v_suf in _rl_template_map:
+            if t_len < len(k_pre) + len(k_suf):
+                continue
+            if k_pre and not text.startswith(k_pre):
+                continue
+            if k_suf and not text.endswith(k_suf):
+                continue
+            inner = text[len(k_pre) : t_len - len(k_suf) if k_suf else t_len]
+            return v_pre + inner + v_suf
+        return None
+
     def _rl_replace_text(text):
         """Direct comparison translation on post-interpolation text fragments.
 
@@ -435,6 +520,7 @@ init -999 python:
         """
         _original_text = text
         try:
+            _rl_ensure_language_sync()
             if not text or not _rl_loaded:
                 if _rl_prev_replace_text:
                     return _rl_prev_replace_text(text)
@@ -507,6 +593,10 @@ init -999 python:
                             leading = text[:len(text) - len(text.lstrip())]
                             trailing = text[len(text.rstrip()):]
                             translated = leading + translated + trailing
+
+            # 4. Try template matching
+            if translated is None and _rl_runtime_template_matching:
+                translated = _rl_template_match(text)
 
             if translated is not None:
                 result = translated

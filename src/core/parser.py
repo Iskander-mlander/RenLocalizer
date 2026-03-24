@@ -225,8 +225,13 @@ class RenPyParser:
         # Common quoted-string pattern (handles optional prefixes like r, u, b, f)
         self._quoted_string = r'(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
 
+        _dialogue_speaker_name = (
+            r'(?!(?:textbutton|text|label|tooltip|screen|menu|scene|show|hide|call|jump|'
+            r'python|init|define|default|style|image|caption|frame|transform)\b)'
+            r'[A-Za-z_][\w\.]*'
+        )
         self.char_dialog_re = re.compile(
-            r'^(?P<indent>\s*)(?P<char>[A-Za-z_][\w\.]*)\s+'
+            rf'^(?P<indent>\s*)(?P<char>{_dialogue_speaker_name})\s*'
             r'(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
         )
         self.narrator_re = re.compile(
@@ -234,7 +239,7 @@ class RenPyParser:
         )
 
         self.char_multiline_re = re.compile(
-            r'^(?P<indent>\s*)(?P<char>[A-Za-z_]\w*)\s+(?P<delim>"""|\'\'\')(?P<body>.*)$'
+            rf'^(?P<indent>\s*)(?P<char>{_dialogue_speaker_name})\s*(?P<delim>"""|\'\'\')(?P<body>.*)$'
         )
         self.narrator_multiline_re = re.compile(
             r'^(?P<indent>\s*)(?P<delim>"""|\'\'\')(?P<body>(?![\s]*\)).*)$'

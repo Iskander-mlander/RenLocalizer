@@ -404,6 +404,20 @@ def test_dynamic_ui_warning_only_when_runtime_hook_disabled(tmp_path: Path) -> N
     assert warning["count"] == 1
 
 
+def test_runtime_hook_enablement_requires_master_and_auto_flags() -> None:
+    pipeline = _make_pipeline(auto_generate_hook=True, enable_runtime_hook=True)
+    assert pipeline._is_runtime_hook_enabled() is True
+
+    pipeline = _make_pipeline(auto_generate_hook=False, enable_runtime_hook=True)
+    assert pipeline._is_runtime_hook_enabled() is False
+
+    pipeline = _make_pipeline(auto_generate_hook=True, enable_runtime_hook=False)
+    assert pipeline._is_runtime_hook_enabled() is False
+
+    pipeline = _make_pipeline(auto_generate_hook=False, enable_runtime_hook=False, force_runtime_translation=True)
+    assert pipeline._is_runtime_hook_enabled() is True
+
+
 def test_dynamic_ui_warning_skipped_when_runtime_hook_enabled(tmp_path: Path) -> None:
     pipeline = _make_pipeline(auto_generate_hook=True, enable_runtime_hook=True)
     game_dir = tmp_path / "game"
