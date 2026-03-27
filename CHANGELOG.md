@@ -45,6 +45,7 @@
 - **Matrix Verified:** The Linux source compatibility matrix now passes across the tested PyQt6 `6.6.1` through `6.10.1` range, confirming that source installs no longer require forcing only the newest tested minor line.
 
 ### Documentation & Developer Experience
+- **Community Manifesto & Covenant:** Rewrote `CODE_OF_CONDUCT.md` and `CONTRIBUTING.md` to establish the "RenLocalizer Manifesto." This version formalizes the project's "Free Forever" guarantee and the non-commercial commitment required from all future forks and contributors.
 - **Architecture & Engine Sync:** Updated `AGENTS.md` to accurately reflect the v4.1.1 4-layer runtime hook structure and corrected the active translation engine count to 8, establishing clarity on available providers (including Yandex).
 
 ### [2.7.6] - 2026-03-20

@@ -1,131 +1,61 @@
-# Contributor Covenant Code of Conduct
+# 📜 RenLocalizer Community Manifesto & Code of Conduct
 
-## Our Pledge
+> [!IMPORTANT]
+> **Our Mission:** Community First, Free Forever. This project is a volunteer effort dedicated to breaking language barriers in storytelling.
 
-We as members, contributors, and maintainers pledge to make participation in
-our community a harassment-free experience for everyone, regardless of age,
-body size, visible or invisible disability, ethnicity, sex characteristics,
-gender identity and expression, level of experience, education,
-socio-economic status, nationality, personal appearance, race, caste, color,
-religion, or sexual identity and orientation.
+---
 
-We pledge to act and interact in ways that contribute to an open, welcoming,
-diverse, inclusive, and healthy community.
+## 🏛️ 1. Our Core Philosophy
 
-## Our Standards
+RenLocalizer was born from a simple idea: **Great stories should be accessible to everyone.** 
 
-Examples of behavior that contributes to a positive environment include:
+### 💎 The "Free Forever" Guarantee
+**This project is, and will always be, Free and Open Source.** 
 
-- showing empathy and patience
-- being respectful of differing opinions and experiences
-- giving and accepting constructive feedback
-- taking responsibility for mistakes and learning from them
-- focusing on what improves the project and community as a whole
+*   **🌍 The Mission Outlives the Individual:** People come and go, but community-driven tools must endure. This software belongs to the community.
+*   **🤝 Altruism over Profit:** Volunteerism is our engine. While maintainers may accept personal gifts or donations specifically for their time, the **software itself** shall never be sold, rented, or gated.
+*   **📜 The Legacy Covenant:** If you fork this project or become a future maintainer: **Keep it free. Keep it open. Respect the community.**
 
-Examples of unacceptable behavior include:
+---
 
-- sexualized language, imagery, or unwanted advances
-- trolling, insulting, or derogatory comments
-- personal or political attacks
-- public or private harassment
-- publishing another person's private information without permission
-- any other conduct that would reasonably be considered inappropriate in a
-  professional or collaborative setting
+## 🤝 2. Our Pledge
 
-## Enforcement Responsibilities
+We pledge to make participation in our community a **harassment-free experience** for everyone. We act in ways that contribute to a healthy, welcoming, and productive volunteer environment where the goal is helping players and creators.
 
-Project maintainers are responsible for clarifying and enforcing our standards
-of acceptable behavior and will take appropriate and fair corrective action in
-response to behavior they deem inappropriate, threatening, offensive, or harmful.
+---
 
-Project maintainers may remove, edit, or reject comments, commits, code, wiki
-edits, issues, discussions, or other contributions that are not aligned with
-this Code of Conduct. When appropriate, they will communicate the reason for
-moderation decisions.
+## ✨ 3. Our Standards
 
-## Scope
+**✅ We Encourage:**
+*   **Respecting Volunteer Time:** Everyone here is a volunteer. Be patient, kind, and appreciative.
+*   **Focusing on the Players:** Prioritize changes that bring the most benefit to the community.
+*   **Sharing Knowledge:** Help newcomers understand the code and the world of localization.
 
-This Code of Conduct applies within all project spaces and also applies when an
-individual is officially representing the project in public spaces.
+**❌ We Prohibit:**
+*   Trolling, insults, or derogatory comments.
+*   Public or private harassment.
+*   **Monetizing the Community Effort:** Any attempt to turn this shared tool into a paid service.
+*   Personal attacks or unprofessional conduct.
 
-Examples include:
+---
 
-- using an official project or maintainer account
-- posting from official community channels
-- representing the project in discussions, events, or social spaces
+## ⏳ 4. Continuity & Succession
 
-## Reporting and Enforcement
+When the time comes for the original creators to move on to other life chapters, the project is intended to be handed over to the community.
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers.
+**If you wish to lead the project forward:**
+1.  **Preserve the License:** Stay open-source (GPL-3.0).
+2.  **Zero Barriers:** No "Pro" versions, no "Paid" updates.
+3.  **Community Impact:** Focus on what helps the most players.
 
-For ordinary project disagreements, bugs, or product criticism, use the normal
-GitHub workflow.
+---
 
-For Code of Conduct reports or sensitive incidents:
+## ⚖️ 5. Enforcement
 
-- do not use a public issue if the report contains personal or sensitive details
-- prefer private maintainer contact methods available through GitHub
-- include enough context for maintainers to investigate fairly
+Maintainers are the guardians of these values. They have the authority and responsibility to remove content or restrict participants who violate this manifesto or harm the community's health.
 
-All reports will be reviewed and investigated promptly and fairly. Maintainers
-will respect the privacy and security of the reporter as much as reasonably
-possible.
+---
 
-## Enforcement Guidelines
+> *"People are temporary, but a legacy of helping others is permanent."*
 
-Maintainers may use these Community Impact Guidelines when determining
-consequences for any action they find to be in violation of this Code of Conduct.
 
-### 1. Correction
-
-**Community Impact**: Use of inappropriate language or other behavior deemed
-unprofessional or unwelcome.
-
-**Consequence**: A private written warning from maintainers, explaining the
-nature of the violation and why the behavior was inappropriate. A public
-apology may be requested when appropriate.
-
-### 2. Warning
-
-**Community Impact**: A violation through a single incident or a series of actions.
-
-**Consequence**: A formal warning with consequences for continued behavior. For
-a specified period of time, no interaction with the people involved, including
-unsolicited interaction with those enforcing the Code of Conduct, is allowed.
-Violating these terms may lead to a temporary or permanent ban.
-
-### 3. Temporary Ban
-
-**Community Impact**: A serious violation of community standards, including
-sustained inappropriate behavior.
-
-**Consequence**: A temporary ban from any sort of interaction or public
-communication within the project community for a specified period of time.
-Violating these terms may lead to a permanent ban.
-
-### 4. Permanent Ban
-
-**Community Impact**: Demonstrating a pattern of violating community standards,
-including sustained inappropriate behavior, harassment of an individual, or
-aggression toward protected classes of people.
-
-**Consequence**: A permanent ban from public interaction within the project
-community.
-
-## Attribution
-
-This Code of Conduct is adapted from the [Contributor Covenant][homepage],
-version 2.1, available at
-[https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1].
-
-Community Impact Guidelines were inspired by
-[Mozilla's code of conduct enforcement ladder][mozilla-coc].
-
-For answers to common questions about this Code of Conduct, see the FAQ at
-[https://www.contributor-covenant.org/faq][faq].
-
-[homepage]: https://www.contributor-covenant.org
-[v2.1]: https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
-[mozilla-coc]: https://github.com/mozilla/diversity
-[faq]: https://www.contributor-covenant.org/faq

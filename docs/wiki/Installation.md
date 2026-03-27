@@ -82,7 +82,11 @@ Since RenLocalizer is built with Python 3, it works natively on Unix-based syste
 
 3.  **Install Dependencies:**
     ```bash
+    # Flexible source install (CI-smoke-tested across PyQt6 6.6-6.10 on Linux)
     pip install -r requirements.txt
+
+    # Optional: match the exact packaged-build Qt stack
+    # pip install -c constraints-release.txt -r requirements.txt
     ```
 
 4.  **Launch the Application:**
@@ -104,7 +108,12 @@ We provide pre-made scripts to handle the environment setup automatically:
 
 ## 📦 Core Dependencies
 The tool relies on these main libraries:
-*   **UI:** `PyQt6` & `PyQt6-Fluent-Widgets`
+*   **UI:** `PyQt6` + QML/Qt Quick
 *   **AI:** `openai`, `google-genai`
 *   **Extraction:** `unrpa`
 *   **Engines:** `requests`, `httpx`, `beautifulsoup4`
+
+### PyQt6 Compatibility Policy
+*   **Source installs:** use the tested compatibility range from `requirements.txt`.
+*   **Official packaged builds / reproducible local builds:** use `constraints-release.txt` together with `requirements.txt`.
+*   **CI coverage:** Linux source installs are validated with a Qt startup smoke test across the PyQt6 `6.6.x` to `6.10.x` line.
