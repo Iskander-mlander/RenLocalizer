@@ -8,20 +8,18 @@
 - **QML Binding Loop Fix:** Resolved "Binding loop detected" errors in CachePage and fixed "Unable to assign [undefined] to QColor" warnings by improving property binding structure and removing invalid Material.dark references.
 
 ### External TM Enhancements
-- **Detailed TM Statistics in Logs:** Translation completion logs now include detailed TM usage statistics: hit count, hit rate percentage, miss count, source names with entry counts, and total memory entries. This helps users understand how effectively their TM is being utilized.
-- **TM Management UI:** Added a dedicated options menu (⚙️) for each TM source in the Translation Reuse Center with three management capabilities:
-  - **Rename:** Rename TM sources with a dedicated dialog
-  - **Export/Backup:** Export TM sources to external files for backup purposes
-  - **Delete:** Remove TM sources with immediate UI refresh
-- **TM Backend Operations:** Added three new backend slots (`renameTMSource`, `mergeTMSources`, `exportTMSource`) to the AppBackend for TM management operations. Merge functionality is available in the backend and ready for future UI integration.
+- **TM Management UI:** Moved External TM from Tools page to Translation Reuse Center (CachePage) with a dedicated section including:
+  - **Toggle Switch:** High-visibility Switch component to activate/deactivate TM usage
+  - **Selection Status:** Real-time display of "Selected: X / Y" count
+  - **CheckBox Selection:** Each TM source can be individually selected for use
+  - **Options Menu (⚙️):** Right-click or button menu for each source with Rename, Export, and Delete options
+- **Detailed TM Statistics in Logs:** Translation completion logs now include hit count, hit rate percentage, miss count, source names with entry counts, and total memory entries.
+- **TM Backend Operations:** Added new backend slots (`renameTMSource`, `mergeTMSources`, `exportTMSource`) to AppBackend. Merge functionality is available in the backend and ready for future UI integration.
 
 ### Translation & Engine Updates
-- **Engine Decommissioning:** Removed the redundant standalone DeepSeek engine to streamline the AI translation architecture; DeepSeek remains fully supported via the unified OpenAI/OpenRouter-compatible framework.
-- **Engine Simplification:** Removed the experimental Opus MT (Local Transformers) engine to reduce application complexity and dependency weight (torch/transformers).
+- **External TM UI Redesign:** Moved the External Translation Memory system from the Tools page to a dedicated section in the Translation Reuse Center (CachePage). The toggle is now combined with TM source management for a unified experience.
 - **Google Batch Fix:** Resolved a rare "NoneType object has no attribute strip" error in the Google Translate engine by adding robust null-checks to the batch processing logic.
 - **Custom AI System Prompt Persistence:** Fixed a bug where user-defined system prompts entered in the AI Tuning settings were not being saved to `config.json`. The `getAISystemPrompt` / `setAISystemPrompt` backend slots now correctly persist the value, and the QML input field uses a 500 ms debounce timer plus `onActiveFocusChanged` / `Component.onDestruction` guards to ensure the prompt is never lost. Additionally fixed a `KeyError` crash in `LocalLLMTranslator` when a custom prompt contained literal curly braces (e.g. `{i}`, `{b}`); now uses safe `str.replace()` instead of `str.format()`, consistent with all other AI engines.
-- **External TM Relocation:** Moved the "External Translation Memory" toggle from the main Settings page to the Translation Reuse Center (CachePage) for better UX flow.
-- **Toggle Upgrade:** Replaced the External TM CheckBox with a high-visibility Switch component.
 
 ### UI & UX Improvements
 - **Tools Page Polish:** Fixed visual corruption in `ToolsPage.qml` by restoring proper UTF-8 encoding for Turkish characters and emojis.
