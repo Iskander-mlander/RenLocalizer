@@ -63,6 +63,7 @@ class AppBackend(QObject):
     updateAvailable = pyqtSignal(str, str, str, arguments=['currentVersion', 'latestVersion', 'releaseUrl'])
     updateCheckFinished = pyqtSignal(bool, str, arguments=['hasUpdate', 'message']) # NEW explicit signal
     engineChanged = pyqtSignal()
+    tmSourcesChanged = pyqtSignal()
     
     # Initialization Signals (For UI BusyIndicator)
     initializationChanged = pyqtSignal()
@@ -211,6 +212,9 @@ class AppBackend(QObject):
         # Attach Google as fallback for Yandex
         yandex_translator.set_fallback_translator(google_translator)
         self.translation_manager.add_translator(TranslationEngine.YANDEX, yandex_translator)
+
+        # Opus MT (Local Transformers) - Removed in v2.7.8
+        pass
     
     @pyqtSlot()
     def refreshUI(self):
@@ -1707,6 +1711,7 @@ class AppBackend(QObject):
                     "tm_import_success",
                     "TM imported successfully: {count} entries from '{name}'"
                 ).replace("{count}", str(result.imported)).replace("{name}", source_name))
+                self.tmSourcesChanged.emit()
 
                 details = []
                 if result.skipped_empty > 0:
@@ -1755,9 +1760,69 @@ class AppBackend(QObject):
                 self.logMessage.emit("info", self.config.get_ui_text(
                     "tm_source_deleted", "TM source deleted."
                 ))
+                self.tmSourcesChanged.emit()
             return success
         except Exception as e:
             self.logMessage.emit("error", f"TM delete error: {e}")
+            return False
+
+    @pyqtSlot(str, str, result=bool)
+    def renameTMSource(self, file_path: str, new_name: str) -> bool:
+        """Bir TM kaynağının adını değiştirir."""
+        try:
+            from src.tools.external_tm import ExternalTMStore
+            tm_dir = str(os.path.join(self.config.data_dir, "tm"))
+            store = ExternalTMStore(tm_dir=tm_dir)
+            success, msg = store.rename_source(file_path, new_name)
+            if success:
+                self.logMessage.emit("success", f"TM renamed: {msg}")
+                self.tmSourcesChanged.emit()
+            else:
+                self.logMessage.emit("error", f"TM rename failed: {msg}")
+            return success
+        except Exception as e:
+            self.logMessage.emit("error", f"TM rename error: {e}")
+            return False
+
+    @pyqtSlot(str, str, result=bool)
+    def mergeTMSources(self, source_paths_json: str, new_name: str) -> bool:
+        """Birden fazla TM kaynağını birleştirir."""
+        import json as _json
+        try:
+            source_paths = _json.loads(source_paths_json)
+            if len(source_paths) < 2:
+                self.logMessage.emit("error", "Need at least 2 sources to merge")
+                return False
+            
+            from src.tools.external_tm import ExternalTMStore
+            tm_dir = str(os.path.join(self.config.data_dir, "tm"))
+            store = ExternalTMStore(tm_dir=tm_dir)
+            success, msg, new_path = store.merge_sources(source_paths, new_name)
+            if success:
+                self.logMessage.emit("success", f"TM merged: {msg}")
+                self.tmSourcesChanged.emit()
+            else:
+                self.logMessage.emit("error", f"TM merge failed: {msg}")
+            return success
+        except Exception as e:
+            self.logMessage.emit("error", f"TM merge error: {e}")
+            return False
+
+    @pyqtSlot(str, str, result=bool)
+    def exportTMSource(self, file_path: str, export_path: str) -> bool:
+        """Bir TM kaynağını yedekler."""
+        try:
+            from src.tools.external_tm import ExternalTMStore
+            tm_dir = str(os.path.join(self.config.data_dir, "tm"))
+            store = ExternalTMStore(tm_dir=tm_dir)
+            success, msg = store.export_source(file_path, export_path)
+            if success:
+                self.logMessage.emit("success", f"TM exported: {msg}")
+            else:
+                self.logMessage.emit("error", f"TM export failed: {msg}")
+            return success
+        except Exception as e:
+            self.logMessage.emit("error", f"TM export error: {e}")
             return False
 
     @pyqtSlot(result=bool)

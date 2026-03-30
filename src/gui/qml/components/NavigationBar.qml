@@ -72,7 +72,7 @@ Rectangle {
 
         NavButton {
             icon: "🧠"
-            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_cache", "Translation Memory (TM)"))
+            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_cache", "Translation Reuse"))
             selected: navRoot.currentIndex === 3
             onClicked: {
                 navRoot.currentIndex = 3

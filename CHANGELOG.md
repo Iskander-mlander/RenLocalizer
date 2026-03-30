@@ -1,5 +1,35 @@
 # RenLocalizer Changelog
 
+### [2.7.8] - 2026-03-29
+
+### Bug Fixes
+- **External TM Selection Fix:** Fixed a critical UX bug where imported External TM sources were listed but could not be selected. The Translation Reuse Center (CachePage) now includes CheckBox controls for each TM source with visual highlighting (accent-colored border for selected items) and a status label showing "Selected: X / Y". Selection changes are properly persisted via `toggleTMSource()` and reflected immediately in the Home page TM card.
+- **External TM Real-time Refresh:** Fixed a bug where newly imported TM sources did not appear in the Home page until the application was restarted. Added a new `tmSourcesChanged` signal to the backend that is emitted after TM import and delete operations. Both HomePage and CachePage now listen to this signal and refresh their TM source lists in real-time.
+- **QML Binding Loop Fix:** Resolved "Binding loop detected" errors in CachePage and fixed "Unable to assign [undefined] to QColor" warnings by improving property binding structure and removing invalid Material.dark references.
+
+### External TM Enhancements
+- **Detailed TM Statistics in Logs:** Translation completion logs now include detailed TM usage statistics: hit count, hit rate percentage, miss count, source names with entry counts, and total memory entries. This helps users understand how effectively their TM is being utilized.
+- **TM Management UI:** Added a dedicated options menu (⚙️) for each TM source in the Translation Reuse Center with three management capabilities:
+  - **Rename:** Rename TM sources with a dedicated dialog
+  - **Export/Backup:** Export TM sources to external files for backup purposes
+  - **Delete:** Remove TM sources with immediate UI refresh
+- **TM Backend Operations:** Added three new backend slots (`renameTMSource`, `mergeTMSources`, `exportTMSource`) to the AppBackend for TM management operations. Merge functionality is available in the backend and ready for future UI integration.
+
+### Translation & Engine Updates
+- **Engine Decommissioning:** Removed the redundant standalone DeepSeek engine to streamline the AI translation architecture; DeepSeek remains fully supported via the unified OpenAI/OpenRouter-compatible framework.
+- **Engine Simplification:** Removed the experimental Opus MT (Local Transformers) engine to reduce application complexity and dependency weight (torch/transformers).
+- **Google Batch Fix:** Resolved a rare "NoneType object has no attribute strip" error in the Google Translate engine by adding robust null-checks to the batch processing logic.
+- **Custom AI System Prompt Persistence:** Fixed a bug where user-defined system prompts entered in the AI Tuning settings were not being saved to `config.json`. The `getAISystemPrompt` / `setAISystemPrompt` backend slots now correctly persist the value, and the QML input field uses a 500 ms debounce timer plus `onActiveFocusChanged` / `Component.onDestruction` guards to ensure the prompt is never lost. Additionally fixed a `KeyError` crash in `LocalLLMTranslator` when a custom prompt contained literal curly braces (e.g. `{i}`, `{b}`); now uses safe `str.replace()` instead of `str.format()`, consistent with all other AI engines.
+- **External TM Relocation:** Moved the "External Translation Memory" toggle from the main Settings page to the Translation Reuse Center (CachePage) for better UX flow.
+- **Toggle Upgrade:** Replaced the External TM CheckBox with a high-visibility Switch component.
+
+### UI & UX Improvements
+- **Tools Page Polish:** Fixed visual corruption in `ToolsPage.qml` by restoring proper UTF-8 encoding for Turkish characters and emojis.
+- **Dialog Binding Fixed:** Resolved "Binding loop detected" errors in the CachePage clear confirmation dialog by assigning explicit widths and proper contentItem structure.
+
+### Localization
+- **Multi-Language Support:** Updated all 8 supported UI languages (EN, TR, DE, ES, FR, RU, FA, ZH-CN) with translations for the relocated External TM settings, TM management dialogs, and new UI elements (tm_selected_count, tm_rename_title, tm_rename_desc, tm_export_title, tm_export_desc, tm_export_select_location, btn_rename, btn_export, btn_delete, btn_options, placeholder_new_name, placeholder_select_destination).
+
 ### [2.7.7] - 2026-03-24
 
 ### Ren'Py Runtime Hardening (Phase 1-6)

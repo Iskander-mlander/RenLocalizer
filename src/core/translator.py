@@ -1356,12 +1356,13 @@ class GoogleTranslator(BaseTranslator):
                             for i, (req, translated) in enumerate(zip(batch, result)):
                                 
                                 # Restore logic
+                                translated_clean = translated if translated is not None else ""
                                 if use_html:
-                                    restored = restore_renpy_syntax_html(translated.strip())
+                                    restored = restore_renpy_syntax_html(translated_clean.strip())
                                     missing = []
                                 else:
                                     placeholders = all_placeholders[i]
-                                    restored = restore_renpy_syntax(translated.strip(), placeholders)
+                                    restored = restore_renpy_syntax(translated_clean.strip(), placeholders)
                                     missing = validate_translation_integrity(restored, placeholders)
                                 
                                 # Truncation check - çeviri orijinalin %30'undan kısa mı?
@@ -1388,7 +1389,9 @@ class GoogleTranslator(BaseTranslator):
                                             restored, req.text, placeholders, missing
                                         )
                                         still_missing = validate_translation_integrity(injected, placeholders)
-                                        if not still_missing or (restored.strip() and restored.strip() != _orig.strip()):
+                                        restored_strip = restored.strip() if restored else ""
+                                        orig_strip = _orig.strip() if _orig else ""
+                                        if not still_missing or (restored_strip and restored_strip != orig_strip):
                                             self.logger.info(f"Batch injection rescued: {_orig[:40]}...")
                                             restored = injected
                                         else:
@@ -1770,7 +1773,11 @@ class DeepLTranslator(BaseTranslator):
         for attempt in range(self.MAX_RETRIES):
             try:
                 session = await self._get_session()
-                proxy = self.proxy_manager.get_next_proxy().url if self.use_proxy and self.proxy_manager else None
+                proxy = None
+                if self.use_proxy and self.proxy_manager:
+                    p = self.proxy_manager.get_next_proxy()
+                    if p:
+                        proxy = p.url
 
                 async with session.post(base_url, data=data, headers=headers, proxy=proxy, timeout=aiohttp.ClientTimeout(total=45)) as resp:
                     if resp.status != 200:
@@ -2525,8 +2532,7 @@ class YandexTranslator(BaseTranslator):
             'uz': 'Uzbek', 'vi': 'Vietnamese', 'xh': 'Xhosa', 'yi': 'Yiddish',
             'zh': 'Chinese', 'zu': 'Zulu',
         }
-
-
+    
 class TranslationManager:
     def __init__(self, proxy_manager=None, config_manager=None):
         self.proxy_manager = proxy_manager
@@ -2978,9 +2984,24 @@ class TranslationManager:
             # bu, "clear cache" gibi akışlarda eski dosyanın yeniden yüklenmesini engeller.
             data = {}
             for key, val in self._cache.items():
-                # key: (engine_str, sl, tl, text)
-                engine_str, sl, tl, text = key
-                data.setdefault(engine_str, {}).setdefault(sl, {}).setdefault(tl, {})[text] = val.translated_text
+                try:
+                    engine_str, sl, tl, text = key
+                    
+                    if engine_str not in data:
+                        data[engine_str] = {}
+                    
+                    engine_dict = data[engine_str]
+                    if sl not in engine_dict:
+                        engine_dict[sl] = {}
+                        
+                    sl_dict = engine_dict[sl]
+                    if tl not in sl_dict:
+                        sl_dict[tl] = {}
+                        
+                    tl_dict = sl_dict[tl]
+                    tl_dict[text] = val.translated_text
+                except (ValueError, TypeError, KeyError):
+                    continue
 
             # Dizini kontrol et
             os.makedirs(os.path.dirname(file_path), exist_ok=True)

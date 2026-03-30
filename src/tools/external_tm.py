@@ -509,6 +509,165 @@ class ExternalTMStore:
             "hit_rate": round(self._lookup_hits / total * 100, 1) if total > 0 else 0.0,
         }
     
+    @property
+    def loaded_source_names(self) -> List[str]:
+        """Yüklü kaynak isimlerini döndür."""
+        names = []
+        for path in self._loaded_sources:
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                name = data.get("meta", {}).get("source_name", os.path.basename(path))
+                entry_count = len(data.get("entries", {}))
+                names.append(f"{name} ({entry_count})")
+            except Exception:
+                names.append(os.path.basename(path))
+        return names
+    
     def is_loaded(self) -> bool:
         """TM yüklü ve kullanılabilir mi?"""
         return len(self._entries) > 0
+    
+    def rename_source(self, file_path: str, new_name: str) -> Tuple[bool, str]:
+        """
+        Bir TM kaynağının adını değiştirir.
+        
+        Args:
+            file_path: TM JSON dosya yolu
+            new_name: Yeni kaynak adı
+            
+        Returns:
+            (başarılı mı, mesaj)
+        """
+        try:
+            if not os.path.isfile(file_path):
+                return False, "File not found"
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            data["meta"]["source_name"] = new_name
+            
+            # Atomic write
+            fd, tmp_path = tempfile.mkstemp(dir=self.tm_dir, suffix='.tmp')
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp_path, file_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            
+            logger.info(f"TM renamed: {new_name} ({file_path})")
+            return True, f"Renamed to '{new_name}'"
+        except Exception as e:
+            logger.error(f"TM rename error: {file_path} — {e}")
+            return False, str(e)
+    
+    def merge_sources(self, source_paths: List[str], new_name: str) -> Tuple[bool, str, str]:
+        """
+        Birden fazla TM kaynağını birleştirir ve yeni bir dosya oluşturur.
+        
+        Args:
+            source_paths: Birleştirilecek TM dosya yolları
+            new_name: Yeni kaynak adı
+            
+        Returns:
+            (başarılı mı, mesaj, yeni dosya yolu)
+        """
+        try:
+            merged_entries: Dict[str, str] = {}
+            total_entries = 0
+            
+            for path in source_paths:
+                if not os.path.isabs(path):
+                    path = os.path.join(self.base_dir, path)
+                
+                if not os.path.isfile(path):
+                    continue
+                
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                entries = data.get("entries", {})
+                for original, translated in entries.items():
+                    if original and translated and original != translated:
+                        if original not in merged_entries:
+                            merged_entries[original] = translated
+                            total_entries += 1
+            
+            if not merged_entries:
+                return False, "No valid entries to merge", ""
+            
+            # Yeni dosya oluştur
+            safe_name = re.sub(r'[^\w\-]', '_', new_name)
+            filename = f"{safe_name}_merged.json"
+            output_path = os.path.join(self.tm_dir, filename)
+            
+            # Dilleri birleştir
+            languages = set()
+            for path in source_paths:
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    lang = data.get("meta", {}).get("language", "unknown")
+                    languages.add(lang)
+                except Exception:
+                    pass
+            
+            tm_data = {
+                "meta": {
+                    "source_name": new_name,
+                    "language": ", ".join(sorted(languages)) if languages else "unknown",
+                    "entry_count": len(merged_entries),
+                    "created": datetime.now().isoformat(),
+                    "merged_from": len(source_paths),
+                    "version": "1.0"
+                },
+                "entries": merged_entries
+            }
+            
+            # Atomic write
+            fd, tmp_path = tempfile.mkstemp(dir=self.tm_dir, suffix='.tmp')
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(tm_data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp_path, output_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            
+            logger.info(f"TM merged: {output_path} ({total_entries} entries from {len(source_paths)} sources)")
+            return True, f"Merged {total_entries} entries from {len(source_paths)} sources", output_path
+        except Exception as e:
+            logger.error(f"TM merge error: {e}")
+            return False, str(e), ""
+    
+    def export_source(self, file_path: str, export_path: str) -> Tuple[bool, str]:
+        """
+        Bir TM kaynağını belirtilen yere kopyalar (yedekleme).
+        
+        Args:
+            file_path: Kaynak TM dosya yolu
+            export_path: Hedef dosya yolu
+            
+        Returns:
+            (başarılı mı, mesaj)
+        """
+        try:
+            if not os.path.isfile(file_path):
+                return False, "Source file not found"
+            
+            import shutil
+            shutil.copy2(file_path, export_path)
+            logger.info(f"TM exported: {file_path} -> {export_path}")
+            return True, f"Exported to {export_path}"
+        except Exception as e:
+            logger.error(f"TM export error: {e}")
+            return False, str(e)

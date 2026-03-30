@@ -1,7 +1,7 @@
 # AGENTS.md — RenLocalizer Proje Kılavuzu (AI Agent Bağlamı)
 
 > Bu dosya, AI kodlama asistanlarının (GitHub Copilot, Cursor, Claude vb.) projeyi hızla anlaması için hazırlanmıştır.
-> Son güncelleme: 2026-03-24 | Versiyon: 2.7.7
+> Son güncelleme: 2026-03-29 | Versiyon: 2.7.8
 
 ---
 
@@ -31,7 +31,7 @@ RenLocalizer/
 ├── RenLocalizer.spec       # PyInstaller build spec
 │
 ├── src/
-│   ├── version.py          # VERSION = "2.7.3"
+│   ├── version.py          # VERSION = "2.7.8"
 │   ├── cli_main.py         # CLI ana modülü (argparse + QCoreApplication)
 │   │
 │   ├── core/               # ★ Ana çeviri motoru (17 modül, ~17K satır)
@@ -218,13 +218,12 @@ TranslationPipeline.run()
 - **Özel:** Custom function params (kullanıcı tanımlı, `config.json` → `custom_function_params`)
 
 ### 5.4 Runtime Hook (Oyun İçi Çeviri)
-- **Dosya:** `src/core/runtime_hook_template.py` (v4.1.0)
-- **Mekanizma:** `init -999 python:` bloğu ile `strings.json`'dan çevirileri yükler
-- **Katman 1:** `say_menu_text_filter` — pre-interpolation exact dict lookup
-- **Layer 2:** `_rl_translations_ci` — Case-insensitive lookup (Layer 2.5)
-- **Katman 2:** `replace_text` — post-interpolation direct comparison + case-insensitive
-- **Katman 4:** `_rl_template_match` — Template-aware matching (dinamik interpolasyonlu metinler - [name] şablonları)
-- **Güvenlik:** Kısmi substring replacement yapılmaz (`[GAME.ship.name]` bozulma riski)
+- **Dosya:** `src/core/runtime_hook_template.py` (v4.1.1)
+- **Mekanizma:** `init -999 python:` bloğu ile `strings.json` yüklenir; exact-match odaklı runtime çeviri yapılır
+- **Katman 1:** `config.say_menu_text_filter` — pre-interpolation exact dict lookup
+- **Katman 2:** `config.replace_text` — post-interpolation exact + case-insensitive + sınırlı template-aware eşleme
+- **Ek:** Runtime miss diagnostics (`runtime_missed_strings.jsonl`) ve dil değişiminde yeniden yükleme senkronu
+- **Güvenlik:** Trie/substring replacement kullanılmaz; kısmi replacement yapılmaz (`[GAME.ship.name]` bozulma riski)
 
 ### 5.5 Delimiter-Aware Translation
 - **Pattern'ler:** `<A|B|C>` (angle-pipe) ve `A|B|C` (bare pipe)
@@ -256,7 +255,7 @@ TranslationPipeline.run()
 ## 7. Test Altyapısı
 
 - **Framework:** `unittest` (standart Python)
-- **Toplam:** 520+ test (30+ test dosyası)
+- **Toplam:** 700+ test (40+ test dosyası)
 - **Çalıştırma:** `python -m pytest tests/` veya `python -m unittest discover tests/`
 - **Kapsam alanları:**
   - Parser doğruluğu, edge case'ler, false positive filtreleri
@@ -267,6 +266,7 @@ TranslationPipeline.run()
   - Google batch metadata, HTML mode guard
   - DeepL/AI preprotected flow
   - Çeviri ID hesaplama, robustness
+  - Runtime hook diagnostics, cache/TM akışı, PyQt6 CI/workflow doğrulamaları
 
 ---
 
@@ -275,11 +275,12 @@ TranslationPipeline.run()
 | Platform | Komut / Yöntem | Çıktı |
 |----------|----------------|-------|
 | Windows | `pyinstaller RenLocalizer.spec` | ZIP arşivi |
-| Linux | `build/linux/` scriptleri | AppImage |
+| Linux | `build/linux/` scriptleri | AppImage + tar.gz |
 | macOS | `build/macos/` scriptleri | DMG |
-| CI/CD | GitHub Actions | Paralel üçlü build |
+| CI/CD | GitHub Actions | Release build + source compatibility matrix |
 
-**Bağımlılıklar:** `requirements.txt` — PyQt6, aiohttp, requests, httpx, chardet, openai, google-genai, rapidfuzz, pandas, openpyxl, unrpa, PyYAML, fonttools, Pillow
+**Bağımlılıklar:** `requirements.txt` — PyQt6 (source: `>=6.6,<6.11`), aiohttp, requests, httpx, chardet, openai, google-genai, rapidfuzz, pandas, openpyxl, unrpa, PyYAML, fonttools, Pillow
+**Release pin:** `constraints-release.txt` — PyQt6 6.10.1 stack
 
 ---
 
@@ -317,6 +318,7 @@ SyntaxGuard ← Tüm translator'lar (protect/restore)
 RenPyParser ← Pipeline + RPYC reader (DATA_KEY_WHITELIST paylaşımı)
 BaseTranslator ← Google, DeepL, AI translator'lar (soyut taban)
 encoding.py ← Parser, pipeline, exporter (atomik dosya yazma)
+strings.json ← Runtime hook davranışı için kritik index; yalnızca export artifaktı değildir
 ```
 
 ---
@@ -331,6 +333,7 @@ encoding.py ← Parser, pipeline, exporter (atomik dosya yazma)
 5. `src/gui/qml/pages/HomePage.qml` → motor ComboBox'ına ekle
 6. `src/gui/qml/pages/SettingsPage.qml` → motor ayar bölümü ekle
 7. `locales/*.json` → motor adı çevirilerini ekle
+8. `tests/` → en az parser/runtime/cache/CI etkisi olan alanlar için regresyon ekle
 
 ### Yeni False Positive Filtre Ekleme
 1. `src/core/output_formatter.py` → Pre-compiled regex ekle
@@ -353,10 +356,10 @@ encoding.py ← Parser, pipeline, exporter (atomik dosya yazma)
 
 ## 11. Bilinen Sınırlamalar & Teknik Borç
 
-- **Locale çevirileri eksik:** `de.json`, `zh-CN.json` vb. birçok anahtar İngilizce fallback değer içeriyor
+- **Locale teknik borcu sürüyor:** Görünür anahtarların büyük kısmı temizlenmiş olsa da bazı dil dosyalarında eski fallback/üslup tutarsızlıkları kalmış olabilir
 - **Exponential backoff sabit dizi:** LibreTranslate retry [2, 4, 8] saniye — adaptif jitter yok
 - **Pyparsing opsiyonel:** `pyparse_grammar.py` pyparsing yoksa çalışır ama daha az kapsamlıdır
-- **Test coverage:** 520+ test var ancak `translation_pipeline.py` entegrasyon testleri sınırlı
+- **Test coverage:** Unit/regresyon kapsamı güçlü; gerçek Ren'Py engine ile uçtan uca runtime integration testleri hâlâ sınırlı
 - **rpymc_reader.py:** Nispeten yeni, kapsamı `rpyc_reader.py` kadar geniş değil
 
 ---

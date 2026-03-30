@@ -78,7 +78,7 @@ Advanced controls for Large Language Models.
 Internal mechanics and advanced workflow options.
 
 *   **HTML Wrap Protection:** Uses `<span class="notranslate">` tags to protect code placeholders (Ideal for DeepL/AI).
-*   **External Translation Memory (v2.7.3):** Check imported `.tm` files for matches before calling APIs.
+*   **External Translation Memory (v2.7.8):** *Moved to Translation Reuse Center (Cache page)*. Manage and activate imported `.tm` files for pre-API lookup.
 *   **Auto-Hook Generation:** Automatically produces the `_rl_hook.rpy` after translation.
 *   **Automatic RPA Extraction:** Uses the internal UnRen/UnRPA engine to extract game assets before parsing.
 *   **Custom Function Params:** A JSON field to define which custom Ren'py functions (e.g., `my_custom_notify("text")`) should be scanned for strings.

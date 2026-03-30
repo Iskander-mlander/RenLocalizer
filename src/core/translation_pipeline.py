@@ -37,8 +37,9 @@ from src.core.translator import (
     GoogleTranslator,
     DeepLTranslator,
     YandexTranslator,
+    LibreTranslateTranslator,
 )
-from src.core.ai_translator import OpenAITranslator, GeminiTranslator, LocalLLMTranslator
+from src.core.ai_translator import OpenAITranslator, GeminiTranslator, LocalLLMTranslator, DeepSeekTranslator
 from src.core.output_formatter import RenPyOutputFormatter
 from src.core.diagnostics import DiagnosticReport
 
@@ -4097,13 +4098,25 @@ init python:
             self.translation_manager.save_cache(cache_file)
             self.log_message.emit("info", self.config.get_log_text('log_cache_saved', path=cache_file, count=len(translations)))
 
-            # External TM istatistikleri (v2.7.3)
+            # External TM detaylı istatistikleri (v2.7.8)
             if _external_tm is not None and _tm_hit_count > 0:
                 _tm_stats = _external_tm.stats
+                _source_names = _external_tm.loaded_source_names
+                
+                # Ana istatistik
                 self.log_message.emit("info",
                     f"[ExternalTM] {_tm_hit_count} entries resolved from TM "
-                    f"(hit rate: {_tm_stats['hit_rate']}%, "
-                    f"{_tm_stats['misses']} misses)")
+                    f"(hit rate: {_tm_stats['hit_rate']}%, {_tm_stats['misses']} misses)")
+                
+                # Kaynak detayları
+                if _source_names:
+                    _sources_str = ", ".join(_source_names)
+                    self.log_message.emit("info",
+                        f"[ExternalTM] Sources: {_sources_str}")
+                
+                # Toplam bellekteki entry
+                self.log_message.emit("debug",
+                    f"[ExternalTM] Total TM entries in memory: {_tm_stats['entries']} from {_tm_stats['sources']} source(s)")
 
         finally:
             # Proper cleanup to avoid Proactor errors on Windows

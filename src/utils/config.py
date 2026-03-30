@@ -151,7 +151,7 @@ def detect_system_language() -> str:
 @dataclass
 class TranslationSettings:
     """Translation-related settings."""
-    selected_engine: str = "google"  # Persisted engine selection (google, deepl, openai, gemini, deepseek, local_llm, libretranslate, yandex)
+    selected_engine: str = "google"  # Persisted engine selection (google, deepl, openai, gemini, local_llm, libretranslate, yandex)
     source_language: str = "auto"
     target_language: str = "tr"
     max_concurrent_threads: int = 8  # Lowered from 32 to prevent instant Google bans
@@ -215,7 +215,6 @@ class TranslationSettings:
     # AI Settings (v2.5.0)
     openai_model: str = "gpt-3.5-turbo"
     openai_base_url: str = ""  # For OpenRouter or Local
-    deepseek_model: str = "deepseek-chat"
     gemini_model: str = "gemini-2.5-flash"
     gemini_safety_settings: str = "BLOCK_NONE"  # BLOCK_NONE, BLOCK_ONLY_HIGH, STANDARD
     local_llm_model: str = "llama3.2"
@@ -300,7 +299,7 @@ class TranslationSettings:
         self.ai_request_delay = _safe_float(self.ai_request_delay, 1.5, 0.0, 60.0)
 
         # --- Enum / allowlist checks ---
-        _valid_engines = ("google", "deepl", "openai", "gemini", "deepseek", "local_llm", "libretranslate", "yandex", "pseudo")
+        _valid_engines = ("google", "deepl", "openai", "gemini", "local_llm", "libretranslate", "yandex", "pseudo", "opus_mt")
         if self.selected_engine not in _valid_engines:
             self.selected_engine = "google"
         if self.deepl_formality not in ("default", "formal", "informal"):
@@ -339,14 +338,12 @@ class ApiKeys:
     deepl_api_key: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
-    deepseek_api_key: str = ""
 
     def __post_init__(self):
         """Strip whitespace from all API keys."""
         self.deepl_api_key = (self.deepl_api_key or "").strip()
         self.openai_api_key = (self.openai_api_key or "").strip()
         self.gemini_api_key = (self.gemini_api_key or "").strip()
-        self.deepseek_api_key = (self.deepseek_api_key or "").strip()
 
 @dataclass
 class AppSettings:

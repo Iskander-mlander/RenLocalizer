@@ -17,29 +17,26 @@
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (v2.7.8+)
 
-### Step 1: Import TM from Another Game
+### Step 1: Navigate to Translation Reuse Center
 
-1.  Open RenLocalizer and navigate to the **Tools** page.
-2.  In the **"External Translation Memory"** card, click **"Import from tl/ folder"**.
-3.  A folder picker dialog appears — select the `tl/<language>/` folder from a **previously translated** Ren'Py game.
+1.  Open RenLocalizer and click on the **Çeviri Belleği / Cache** icon in the sidebar to open the **Translation Reuse Center**.
+2.  Select the **"External TM"** tab at the top.
+
+### Step 2: Import TM from Another Game
+
+1.  In the **External TM** tab, click the **"📥 Import New Source"** button.
+2.  A folder picker dialog appears — select the `tl/<language>/` folder from a **previously translated** Ren'Py game.
     *   Example: `C:\Games\MyOtherGame\game\tl\turkish`
-4.  RenLocalizer will parse all `.rpy` translation files in that folder and extract original→translated pairs.
-5.  The TM is saved as a JSON file under the `tm/` directory.
+3.  RenLocalizer will parse all `.rpy` translation files in that folder and extract original→translated pairs.
+4.  The TM is saved as a JSON file under the `tm/` directory and will appear in the list.
 
-### Step 2: Enable TM in Settings
+### Step 3: Activate External TM
 
-1.  Go to **Settings** page.
-2.  Find the **"External Translation Memory"** toggle (under Advanced section).
-3.  Turn it **ON**.
-
-### Step 3: Select TM Sources on Home Page
-
-1.  Go to **Home** page.
-2.  When TM is enabled, a **"Translation Memory Sources"** card appears below the engine selector.
-3.  Check the TM sources you want to use for the current translation.
-4.  Start your translation — TM matches will be applied automatically!
+1.  At the top of the **External TM** tab, toggle the **"Activate External TM"** Switch to **ON**.
+2.  Ensure the specific TM sources you want to use are **checked** in the list below the toggle.
+3.  Go to the **Home** page and start your translation — TM matches will be applied automatically!
 
 ---
 
@@ -162,9 +159,9 @@ After importing, RenLocalizer shows a detailed summary:
 *   **Cause:** The selected folder might not be a valid `tl/<language>/` directory, or the `.rpy` files inside don't follow Ren'Py's translation block format.
 *   **Solution:** Make sure you select the **language subfolder** (e.g., `tl/turkish/`), not the `tl/` folder itself. The folder should contain `.rpy` files with `translate turkish ...` blocks.
 
-### TM card not showing on Home page
-*   **Cause:** External TM is disabled in Settings.
-*   **Solution:** Go to **Settings** and toggle **"External Translation Memory"** ON.
+### TM toggle not found on Home page
+*   **Cause:** As of v2.7.8, the External TM management has moved to a dedicated tab.
+*   **Solution:** Go to **Çeviri Belleği / Cache** (Translation Reuse Center) and toggle **"Activate External TM"** ON in the **External TM** tab.
 
 ### Low hit rate (few TM matches)
 *   **Cause:** The games use very different text. TM only works with **exact** matches.
@@ -223,4 +220,4 @@ hits, misses = store.get_stats()
 *   [[Developer-Guide]] — Contributing to TM module
 
 ---
-*Last updated: March 2026 | RenLocalizer v2.7.3*
+*Last updated: March 2026 | RenLocalizer v2.7.8*

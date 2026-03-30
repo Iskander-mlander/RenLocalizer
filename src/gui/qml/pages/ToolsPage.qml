@@ -1,4 +1,4 @@
-// ToolsPage.qml - Araçlar Sayfası (Restored)
+// ToolsPage.qml - Araçlar Sayfası
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -20,7 +20,7 @@ Rectangle {
             spacing: 24
 
             Label {
-                text: "🛠 " + (backend.uiTrigger, backend.getTextWithDefault("nav_tools", "Tools"))
+                text: "🛠️ " + (backend.uiTrigger, backend.getTextWithDefault("nav_tools", "Tools"))
                 font.pixelSize: 24
                 font.family: root.iconFontFamily
                 font.bold: true
@@ -40,7 +40,7 @@ Rectangle {
                     desc: (backend.uiTrigger, backend.getTextWithDefault("unrpa_desc", "Extract or pack .rpa files."))
                     icon: "📦"
                     btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_manage", "Manage"))
-                    onClicked: backend.runUnRen() // Backend'de tanımlanmalı veya dialog açmalı
+                    onClicked: backend.runUnRen()
                 }
 
                 // --- Sağlık Kontrolü ---
@@ -48,7 +48,7 @@ Rectangle {
                     title: (backend.uiTrigger, backend.getTextWithDefault("health_check_title", "Health Check"))
                     desc: (backend.uiTrigger, backend.getTextWithDefault("diagnostics_desc", "Scan project for errors, missing files."))
                     icon: "🩺"
-                     btnText: (backend.uiTrigger, backend.getTextWithDefault("run_check", "Start Scan"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("run_check", "Start Scan"))
                     onClicked: backend.runHealthCheck()
                 }
 
@@ -70,7 +70,7 @@ Rectangle {
                     onClicked: backend.autoInjectFont()
                 }
 
-                // --- Manuel Font Seçimi (YENİ) ---
+                // --- Manuel Font Seçimi ---
                 ToolCard {
                     title: "🔠 " + (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manual Font Selection"))
                     desc: (backend.uiTrigger, backend.getTextWithDefault("font_manual_desc", "You can select and download a Google Font from the list instead of auto-matching."))
@@ -93,7 +93,7 @@ Rectangle {
                     title: (backend.uiTrigger, backend.getTextWithDefault("pseudo_engine_name", "Pseudo Translation (Test)"))
                     desc: (backend.uiTrigger, backend.getTextWithDefault("pseudo_desc", "Translate with random characters for testing purposes (to see UI overflows)."))
                     icon: "🧪"
-                    btnText: (backend.uiTrigger, backend.getTextWithDefault("start", "Başlat"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("start", "Start"))
                     onClicked: {
                         backend.setEngine("pseudo")
                         backend.startTranslation()
@@ -149,18 +149,9 @@ Rectangle {
                 ToolCard {
                     title: "📦 " + (backend.uiTrigger, backend.getTextWithDefault("tool_rpa_pack_title", "RPA Packing"))
                     desc: (backend.uiTrigger, backend.getTextWithDefault("tool_rpa_pack_desc", "Pack translation files into a Ren'Py-compatible .rpa archive."))
-                    icon: "🗜️"
+                    icon: "🗳️"
                     btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_pack", "Pack"))
                     onClicked: backend.packRPA()
-                }
-
-                // --- Harici Çeviri Belleği (TM) ---
-                ToolCard {
-                    title: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("tm_import_title", "External Translation Memory"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("tm_import_desc", "Import translations from another game's tl/ folder to reuse as Translation Memory."))
-                    icon: "📚"
-                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_import", "Import"))
-                    onClicked: tmImportDialog.open()
                 }
             }
         }
@@ -190,7 +181,7 @@ Rectangle {
                 id: manualFontCombo
                 Layout.fillWidth: true
                 model: backend.getGoogleFontsList()
-                editable: true // Kullanıcı yazarak arayabilsin
+                editable: true
             }
         }
         
@@ -218,7 +209,7 @@ Rectangle {
         width: Math.min(520, root.width * 0.85)
         
         background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
-        header: Label { text: (backend.uiTrigger, backend.getTextWithDefault("tl_dialog_header", "📂 TL Folder Translation")); padding: 20; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; font.pixelSize: 18 }
+        header: Label { text: "📂 " + (backend.uiTrigger, backend.getTextWithDefault("tl_dialog_header", "TL Folder Translation")); padding: 20; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; font.pixelSize: 18 }
         
         contentItem: ColumnLayout {
             spacing: 15
@@ -307,150 +298,6 @@ Rectangle {
         onAccepted: tlPathField.text = selectedFolder.toString().replace("file:///", "")
     }
 
-    // ==================== TM Import Dialog ====================
-    Dialog {
-        id: tmImportDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("tm_import_title", "External Translation Memory"))
-        anchors.centerIn: parent
-        modal: true
-        width: Math.min(480, root.width * 0.85)
-
-        background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
-        header: Label { text: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("tm_import_title", "External Translation Memory")); padding: 20; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; font.pixelSize: 18 }
-
-        contentItem: ColumnLayout {
-            spacing: 15
-
-            Label {
-                text: (backend.uiTrigger, backend.getTextWithDefault("tm_import_instruction", "Select a tl/<language> folder from another Ren'Py game to import as Translation Memory:"))
-                color: root.secondaryTextColor
-                wrapMode: Text.Wrap
-                Layout.fillWidth: true
-            }
-
-            // Kaynak Adı
-            RowLayout {
-                Label { text: (backend.uiTrigger, backend.getTextWithDefault("tm_source_name_label", "Source Name:")); color: root.secondaryTextColor; Layout.preferredWidth: 100 }
-                TextField {
-                    id: tmSourceNameField
-                    Layout.fillWidth: true
-                    placeholderText: (backend.uiTrigger, backend.getTextWithDefault("tm_source_name_placeholder", "e.g. GameA, MyOtherProject"))
-                    color: root.mainTextColor
-                    background: Rectangle { color: root.inputBackground; border.color: root.borderColor; radius: 6 }
-                }
-            }
-
-            // Klasör Seçimi
-            RowLayout {
-                TextField {
-                    id: tmPathField
-                    Layout.fillWidth: true
-                    placeholderText: (backend.uiTrigger, backend.getTextWithDefault("path_not_selected_placeholder", "Path not selected..."))
-                    color: root.mainTextColor
-                    background: Rectangle { color: root.inputBackground; border.color: root.borderColor; radius: 6 }
-                }
-                Button { text: "📁"; font.family: root.iconFontFamily; onClicked: tmFolderDialog.open() }
-            }
-
-            // Dil Seçimi
-            RowLayout {
-                Label { text: (backend.uiTrigger, backend.getTextWithDefault("target_lang_label", "Target Language:")); color: root.secondaryTextColor; Layout.preferredWidth: 100 }
-                ComboBox {
-                    id: tmLangCombo
-                    Layout.fillWidth: true
-                    model: backend.getTargetLanguages()
-                    textRole: "name"
-                    valueRole: "code"
-                }
-            }
-
-            // TM Kaynak Listesi
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(tmSourcesCol.height + 20, 200)
-                radius: 8
-                color: root.inputBackground
-                border.color: root.borderColor
-                visible: tmSourcesRepeater.count > 0
-
-                ScrollView {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    clip: true
-
-                    ColumnLayout {
-                        id: tmSourcesCol
-                        width: parent.width
-                        spacing: 6
-
-                        Label {
-                            text: (backend.uiTrigger, backend.getTextWithDefault("tm_existing_sources", "Existing TM Sources:"))
-                            font.bold: true
-                            font.family: root.iconFontFamily
-                            color: root.mainTextColor
-                            font.pixelSize: 13
-                        }
-
-                        Repeater {
-                            id: tmSourcesRepeater
-                            model: tmImportDialog.visible ? backend.getAvailableTMSources() : []
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 8
-                                Label {
-                                    text: "📚 " + modelData.name + " (" + modelData.language + ") — " + modelData.entry_count + " entries"
-                                    color: root.secondaryTextColor
-                                    font.family: root.iconFontFamily
-                                    font.pixelSize: 12
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                }
-                                Button {
-                                    text: "🗑️"
-                                    font.family: root.iconFontFamily
-                                    flat: true
-                                    implicitWidth: 32
-                                    implicitHeight: 28
-                                    onClicked: {
-                                        backend.deleteTMSource(modelData.file_path)
-                                        tmSourcesRepeater.model = backend.getAvailableTMSources()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        footer: DialogButtonBox {
-            background: Rectangle { color: "transparent" }
-            Button {
-                text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel"))
-                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                flat: true
-            }
-            Button {
-                text: (backend.uiTrigger, backend.getTextWithDefault("tm_btn_import", "Import TM"))
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                highlighted: true
-                enabled: tmPathField.text.length > 0
-                onClicked: {
-                    backend.importExternalTM(tmPathField.text, tmSourceNameField.text, tmLangCombo.currentValue)
-                    tmImportDialog.close()
-                }
-            }
-        }
-    }
-
-    FolderDialog {
-        id: tmFolderDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("tm_select_folder_title", "Select tl/<language> Folder"))
-        currentFolder: "file:///" + backend.get_app_path()
-        onAccepted: tmPathField.text = selectedFolder.toString().replace("file:///", "")
-    }
-
     component ToolCard: Rectangle {
         id: toolCardRoot
         property string title: ""
@@ -491,7 +338,7 @@ Rectangle {
             
             Rectangle { Layout.fillWidth: true; height: 1; color: root.separatorColor }
 
-            // Açıklama Metni (Esnek alan)
+            // Açıklama Metni
             Label { 
                 text: desc; 
                 color: root.secondaryTextColor; 
@@ -504,10 +351,9 @@ Rectangle {
                 clip: true
             }
 
-            // Buton (En altta)
+            // Buton
             Button {
                 id: actionButton
-                // Use backend.isBusy to disable ALL tools when one is running + local visual timer
                 text: (busyTimer.running || backend.isBusy) ? "..." : btnText
                 enabled: !busyTimer.running && !backend.isBusy
                 Layout.fillWidth: true
@@ -521,7 +367,7 @@ Rectangle {
                 
                 Timer {
                     id: busyTimer
-                    interval: 1000 // Short visual feedback only
+                    interval: 1000
                     running: false
                 }
                 

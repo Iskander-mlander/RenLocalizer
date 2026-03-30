@@ -90,6 +90,37 @@ def test_settings_page_exposes_extended_batch_range_and_cap_note() -> None:
     assert 'ai_batch_large_warning' in qml
 
 
+def test_settings_page_textareas_use_debounced_persistence_instead_of_editing_finished() -> None:
+    qml = Path("src/gui/qml/pages/SettingsPage.qml").read_text(encoding="utf-8")
+
+    assert "id: aiPromptArea" in qml
+    assert "id: aiPromptSaveTimer" in qml
+    assert "onTriggered: settingsBackend.setAISystemPrompt(aiPromptArea.text)" in qml
+    assert "id: manualProxySaveTimer" in qml
+    assert "onTriggered: settingsBackend.setManualProxies(manualProxyArea.text)" in qml
+    assert "id: customFuncSaveTimer" in qml
+    assert "onTriggered: settingsBackend.setCustomFunctionParams(customFuncArea.text)" in qml
+    assert "onEditingFinished: settingsBackend.setAISystemPrompt(text)" not in qml
+
+
+def test_cache_page_combines_automatic_cache_and_external_tm_ui() -> None:
+    qml = Path("src/gui/qml/pages/CachePage.qml").read_text(encoding="utf-8")
+
+    assert 'translation_reuse_title' in qml
+    assert 'automatic_cache_tab' in qml
+    assert 'external_tm_tab' in qml
+    assert 'backend.importExternalTM(' in qml
+    assert 'backend.getAvailableTMSources()' in qml
+    assert 'backend.setUseExternalTM(checked)' in qml
+
+
+def test_tools_page_keeps_tm_entry_but_points_users_to_reuse_page() -> None:
+    qml = Path("src/gui/qml/pages/ToolsPage.qml").read_text(encoding="utf-8")
+
+    assert 'tm_import_tools_note' in qml
+    assert 'tmImportDialog.open()' in qml
+
+
 def test_all_locales_include_batch_cap_messages() -> None:
     required = {
         "batch_size_engine_cap_note",
@@ -98,6 +129,17 @@ def test_all_locales_include_batch_cap_messages() -> None:
         "ai_batch_limit_note",
         "ai_batch_large_warning",
         "log_ai_batch_large_notice",
+        "translation_reuse_title",
+        "translation_reuse_desc",
+        "automatic_cache_tab",
+        "automatic_cache_desc",
+        "external_tm_tab",
+        "external_tm_desc",
+        "cache_context_note",
+        "cache_folder_name_note",
+        "external_tm_manual_reuse_note",
+        "use_external_tm_label",
+        "tm_import_tools_note",
     }
 
     for path in Path("locales").glob("*.json"):

@@ -237,6 +237,7 @@ Rectangle {
                             background: Rectangle { radius: 8; color: root.inputBackground; border.color: root.borderColor }
                             placeholderTextColor: Qt.rgba(root.mainTextColor.r, root.mainTextColor.g, root.mainTextColor.b, 0.45)
                         }
+
                     }
 
                     // Gemini Section
@@ -401,6 +402,9 @@ Rectangle {
                         onClicked: libreTestResult.text = settingsBackend.testLibreTranslateConnection()
                     }
                     Label { id: libreTestResult; Layout.fillWidth: true; color: text.includes("✓") ? "#6bcb77" : "#ff6b6b"; wrapMode: Text.Wrap }
+
+
+
 
                     // Yandex Translate Section
                     Label { text: "🔵 " + (backend.uiTrigger, backend.getTextWithDefault("settings_yandex_title", "Yandex Translate (Free)")); font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; Layout.topMargin: 10 }
@@ -593,10 +597,19 @@ Rectangle {
                                 selectByMouse: true
                                 background: null // Container handles the background
                                 
-                                onEditingFinished: settingsBackend.setManualProxies(text)
+                                onTextChanged: manualProxySaveTimer.restart()
+                                onActiveFocusChanged: if (!activeFocus) { manualProxySaveTimer.stop(); settingsBackend.setManualProxies(text) }
+                                Component.onDestruction: settingsBackend.setManualProxies(text)
                                 
                                 // Placeholder style fix
                                 placeholderTextColor: Qt.rgba(root.mainTextColor.r, root.mainTextColor.g, root.mainTextColor.b, 0.35)
+                            }
+
+                            Timer {
+                                id: manualProxySaveTimer
+                                interval: 500
+                                repeat: false
+                                onTriggered: settingsBackend.setManualProxies(manualProxyArea.text)
                             }
                         }
                     }
@@ -756,8 +769,11 @@ Rectangle {
                                 anchors.fill: parent
                                 clip: true
                                 TextArea {
+                                    id: aiPromptArea
                                     text: settingsBackend.getAISystemPrompt()
-                                    onEditingFinished: settingsBackend.setAISystemPrompt(text)
+                                    onTextChanged: aiPromptSaveTimer.restart()
+                                    onActiveFocusChanged: if (!activeFocus) { aiPromptSaveTimer.stop(); settingsBackend.setAISystemPrompt(text) }
+                                    Component.onDestruction: settingsBackend.setAISystemPrompt(text)
                                     placeholderText: (backend.uiTrigger, backend.getTextWithDefault("settings_ai_prompt_desc", "Override default instructions for AI..."))
                                     color: root.mainTextColor
                                     font.pixelSize: 13
@@ -769,6 +785,13 @@ Rectangle {
                                     selectByMouse: true
                                     background: null
                                     placeholderTextColor: Qt.rgba(root.mainTextColor.r, root.mainTextColor.g, root.mainTextColor.b, 0.35)
+                                }
+
+                                Timer {
+                                    id: aiPromptSaveTimer
+                                    interval: 500
+                                    repeat: false
+                                    onTriggered: settingsBackend.setAISystemPrompt(aiPromptArea.text)
                                 }
                             }
                         }
@@ -865,19 +888,7 @@ Rectangle {
                         onToggled: (isChecked) => settingsBackend.setAutoProtectCharNames(isChecked)
                     }
 
-                    // External Translation Memory (v2.7.3)
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: root.separatorColor
-                    }
 
-                    DescriptiveCheck {
-                        label: (backend.uiTrigger, backend.getTextWithDefault("use_external_tm", "External Translation Memory"))
-                        description: (backend.uiTrigger, backend.getTextWithDefault("use_external_tm_desc", "Use imported Translation Memory from other projects to skip API calls for matching texts."))
-                        checked: (backend.uiTrigger, backend.getUseExternalTM())
-                        onToggled: (isChecked) => backend.setUseExternalTM(isChecked)
-                    }
 
                     // Custom Function Params (JSON)
                     ColumnLayout {
@@ -919,8 +930,17 @@ Rectangle {
                                     leftPadding: 12; rightPadding: 12; topPadding: 12; bottomPadding: 12
                                     selectByMouse: true
                                     background: null
-                                    onEditingFinished: settingsBackend.setCustomFunctionParams(text)
+                                    onTextChanged: customFuncSaveTimer.restart()
+                                    onActiveFocusChanged: if (!activeFocus) { customFuncSaveTimer.stop(); settingsBackend.setCustomFunctionParams(text) }
+                                    Component.onDestruction: settingsBackend.setCustomFunctionParams(text)
                                     placeholderTextColor: Qt.rgba(root.mainTextColor.r, root.mainTextColor.g, root.mainTextColor.b, 0.35)
+                                }
+
+                                Timer {
+                                    id: customFuncSaveTimer
+                                    interval: 500
+                                    repeat: false
+                                    onTriggered: settingsBackend.setCustomFunctionParams(customFuncArea.text)
                                 }
                             }
                         }

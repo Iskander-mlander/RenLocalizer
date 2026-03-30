@@ -598,7 +598,18 @@ class OpenAITranslator(LLMTranslator):
 
     async def close(self):
         await self.client.close()
-        await super().close()
+
+
+class DeepSeekTranslator(OpenAITranslator):
+    """DeepSeek-compatible translator (uses the same API as OpenAI)."""
+    def __init__(self, api_key: str, model: str = "deepseek-chat", 
+                 temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
+                 max_tokens=AI_DEFAULT_MAX_TOKENS, **kwargs):
+        # DeepSeek API endpoint
+        base_url = "https://api.deepseek.com/v1"
+        super().__init__(api_key, model, base_url=base_url, 
+                         temperature=temperature, timeout=timeout, 
+                         max_tokens=max_tokens, **kwargs)
 
 
 
@@ -713,7 +724,7 @@ class LocalLLMTranslator(LLMTranslator):
             # Check for custom prompt
             custom_prompt = None
             if self.config_manager:
-                custom_prompt = getattr(self.config_manager.translation_settings, 'ai_custom_prompt', None)
+                custom_prompt = getattr(self.config_manager.translation_settings, 'ai_custom_system_prompt', None)
             
             # Use full names for better quality
             src_name = self._get_lang_name(request.source_lang)
@@ -729,7 +740,7 @@ class LocalLLMTranslator(LLMTranslator):
             context_str = f"Context (Previous line): {context_hint}\nText to translate:\n" if context_hint else ""
             
             if custom_prompt:
-                system_prompt = custom_prompt.format(source_lang=src_name, target_lang=tgt_name)
+                system_prompt = custom_prompt.replace('{source_lang}', src_name).replace('{target_lang}', tgt_name)
                 final_user_prompt = context_str + protected
             else:
                 # For Local LLM, we combine system and user into a single clear instruction 

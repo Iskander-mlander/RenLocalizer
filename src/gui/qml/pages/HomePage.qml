@@ -15,6 +15,25 @@ Rectangle {
     property int translatedLines: 0
     property int untranslatedLines: 0
     property bool statsAvailable: false
+    property var tmHomeSources: []
+
+    function refreshTMHomeSources() {
+        tmHomeSources = backend.getAvailableTMSources()
+    }
+
+    onVisibleChanged: {
+        if (visible) refreshTMHomeSources()
+    }
+
+    Connections {
+        target: backend
+        function onTranslationFinished(success, message) {
+            refreshTMHomeSources()
+        }
+        function onTmSourcesChanged() {
+            refreshTMHomeSources()
+        }
+    }
 
     // Public functions for backend signals
     function addLog(level, message) {
@@ -522,7 +541,7 @@ Rectangle {
 
                     Repeater {
                         id: tmHomeRepeater
-                        model: (backend.uiTrigger, backend.getUseExternalTM()) ? backend.getAvailableTMSources() : []
+                        model: (backend.uiTrigger, backend.getUseExternalTM()) ? tmHomeSources : []
 
                         RowLayout {
                             Layout.fillWidth: true
@@ -537,7 +556,10 @@ Rectangle {
                                         return sources.indexOf(modelData.file_path) >= 0
                                     } catch(e) { return false }
                                 }
-                                onToggled: backend.toggleTMSource(modelData.file_path, checked)
+                                onToggled: {
+                                    backend.toggleTMSource(modelData.file_path, checked)
+                                    homePage.refreshTMHomeSources()
+                                }
 
                                 contentItem: Label {
                                     text: parent.text
@@ -870,6 +892,7 @@ Rectangle {
 
     // Component yüklendiğinde hoşgeldin mesajı
     Component.onCompleted: {
+        refreshTMHomeSources()
         addLog("info", "RenLocalizer v" + backend.version + (backend.uiTrigger, backend.getTextWithDefault("app_log_qt_ui", " - Qt Quick UI")))
         addLog("info", (backend.uiTrigger, backend.getTextWithDefault("welcome_message", "Welcome! Select the game you want to translate.")))
         

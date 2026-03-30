@@ -1,36 +1,41 @@
-// CachePage.qml - Çeviri Belleği (TM) Yöneticisi
+// CachePage.qml - Translation Reuse Center
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 Rectangle {
     id: cachePage
     color: Material.background
-    
-    // Model: Backend'den çekilen cache verilerini tutar
-    ListModel {
-        id: cacheModel
-    }
 
-    function refreshData() {
+    ListModel { id: cacheModel }
+
+    // Use property for model to ensure it's reactive and safe on startup
+    property var tmSourcesModel: backend ? backend.getAvailableTMSources() : []
+
+    function refreshCacheData() {
         var filter = searchField.text
         cacheModel.clear()
-        
-        // Backend'den (snapshot) verilerini al
-        var items = backend.getCacheEntries(filter)
-        
-        // Model'e ekle
-        for(var i=0; i<items.length; i++) {
+        var items = backend ? backend.getCacheEntries(filter) : []
+        for (var i = 0; i < items.length; i++) {
             cacheModel.append(items[i])
         }
     }
-    
-    // Sayfa görünür olduğunda veriyi yükle
-    Component.onCompleted: refreshData()
+    function refreshTMSources() {
+        // Model is bound to property, but we can trigger refresh if needed
+        tmSourcesModel = backend ? backend.getAvailableTMSources() : []
+    }
+
+    Component.onCompleted: {
+        refreshCacheData()
+        refreshTMSources()
+    }
+
     onVisibleChanged: {
         if (visible) {
-            refreshData()
+            refreshCacheData()
+            refreshTMSources()
         }
     }
 
@@ -39,228 +44,634 @@ Rectangle {
 
         function onTranslationFinished(success, message) {
             if (cachePage.visible) {
-                refreshData()
+                refreshCacheData()
+                refreshTMSources()
+            }
+        }
+        function onTmSourcesChanged() {
+            if (cachePage.visible) {
+                refreshTMSources()
             }
         }
     }
-    
-    // Arama gecikmesi için Timer (her tuşta backend'e gitmemek için)
+
     Timer {
         id: searchTimer
         interval: 300
         repeat: false
-        onTriggered: refreshData()
+        onTriggered: refreshCacheData()
+    }
+
+    FolderDialog {
+        id: tmFolderDialog
+        title: (backend.uiTrigger, backend.getTextWithDefault("tm_select_folder_title", "Select tl/<language> Folder"))
+        currentFolder: "file:///" + backend.get_app_path()
+        onAccepted: tmPathField.text = selectedFolder.toString().replace("file:///", "")
     }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 24
-        spacing: 20
+        spacing: 18
 
-        // ==================== HEADER ====================
         RowLayout {
             Layout.fillWidth: true
-            
+
             Label {
-                text: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("nav_cache", "Translation Memory (TM)"))
+                text: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("translation_reuse_title", "Translation Reuse"))
                 font.pixelSize: 24
                 font.family: root.iconFontFamily
                 font.bold: true
                 color: root.mainTextColor
             }
-            
+
             Item { Layout.fillWidth: true }
-            
-            Button {
-                text: "🗑️ " + (backend.uiTrigger, backend.getTextWithDefault("btn_clear_cache", "Clear All"))
-                font.family: root.iconFontFamily
-                Material.background: Material.Red
-                onClicked: clearConfirmDialog.open()
-            }
         }
-        
-        // ==================== TOOLBAR (Search) ====================
-        RowLayout {
+
+        Rectangle {
             Layout.fillWidth: true
-            spacing: 12
-            
-            TextField {
-                id: searchField
-                Layout.fillWidth: true
-                Layout.preferredHeight: 50
-                placeholderText: (backend.uiTrigger, backend.getTextWithDefault("cache_search_placeholder", "Search... (Original, Translation, Engine)"))
-                leftPadding: 16
-                
-                background: Rectangle {
-                    color: root.inputBackground
-                    radius: 8
-                    border.color: searchField.activeFocus ? Material.accent : root.borderColor
+            radius: 12
+            color: root.cardBackground
+            border.color: root.borderColor
+            border.width: 1
+            implicitHeight: helpColumn.implicitHeight + 24
+
+            ColumnLayout {
+                id: helpColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 10
+
+                Label {
+                    text: (backend.uiTrigger, backend.getTextWithDefault("translation_reuse_desc", "Use this page to manage both automatic cache reuse and imported translation memory sources."))
+                    color: root.mainTextColor
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
                 }
-                
-                onTextChanged: searchTimer.restart()
-            }
-            
-            Button {
-                text: "🔄"
-                font.family: root.iconFontFamily
-                onClicked: refreshData()
-                ToolTip.visible: hovered
-                ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("btn_refresh", "Refresh"))
-            }
-            
-            Label {
-                text: (backend.uiTrigger, backend.getTextWithDefault("total_cache", "Entries: {count}")).replace("{count}", cacheModel.count)
-                color: root.secondaryTextColor
+
+                Label {
+                    text: "• " + (backend.uiTrigger, backend.getTextWithDefault("automatic_cache_desc", "Automatic Cache stores translations generated by the program and can reuse them later for the same project context."))
+                    color: root.secondaryTextColor
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                }
+
+                Label {
+                    text: "• " + (backend.uiTrigger, backend.getTextWithDefault("external_tm_desc", "External TM lets you import translations from older versions or other projects and reuse them more reliably."))
+                    color: root.secondaryTextColor
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                }
             }
         }
 
-        // ==================== LIST VIEW ====================
-        ListView {
-            id: cacheList
+        TabBar {
+            id: reuseTabBar
+            Layout.fillWidth: true
+
+            TabButton {
+                text: (backend.uiTrigger, backend.getTextWithDefault("automatic_cache_tab", "Automatic Cache"))
+            }
+
+            TabButton {
+                text: (backend.uiTrigger, backend.getTextWithDefault("external_tm_tab", "External TM"))
+            }
+        }
+
+        StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            model: cacheModel
-            spacing: 8
-            
-            delegate: Rectangle {
-                width: ListView.view.width
-                height: Math.max(80, columnContent.implicitHeight + 24)
-                color: root.cardBackground
-                radius: 8
-                
-                RowLayout {
-                    id: columnContent
+            currentIndex: reuseTabBar.currentIndex
+
+            // ==================== AUTOMATIC CACHE TAB ====================
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 12
-                    
-                    // Engine Badge
+                    spacing: 18
+
                     Rectangle {
-                        Layout.alignment: Qt.AlignTop
-                        width: 60
-                        height: 24
-                        radius: 4
-                        color: {
-                            if (model.engine.includes("google")) return "#4285F4"
-                            if (model.engine.includes("deepl")) return "#0F2B46"
-                            if (model.engine.includes("openai")) return "#10A37F"
-                            if (model.engine.includes("gemini")) return "#8E44AD"
-                            return "#555"
-                        }
-                        
-                        Label {
-                            anchors.centerIn: parent
-                            text: model.engine.toUpperCase()
-                            color: "white"
-                            font.pixelSize: 10
-                            font.bold: true
-                        }
-                    }
-                    
-                    // Texts
-                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
-                        
-                        // Languages
-                        Label {
-                            text: model.source_lang + " ➔ " + model.target_lang
-                            font.pixelSize: 10
-                            color: root.mutedTextColor
-                        }
-                        
-                        // Original
-                        Label {
-                            text: model.original
-                            font.pixelSize: 13
-                            color: root.mainTextColor
-                            wrapMode: Text.Wrap
-                            Layout.fillWidth: true
-                            maximumLineCount: 3
-                            elide: Text.ElideRight
-                        }
-                        
-                        // Translated
-                        Label {
-                            text: model.translated
-                            font.pixelSize: 13
-                            color: Material.accent
-                            font.italic: true
-                            wrapMode: Text.Wrap
-                            Layout.fillWidth: true
-                            maximumLineCount: 3
-                            elide: Text.ElideRight
-                        }
-                    }
-                    
-                    // Actions
-                    RowLayout {
-                        Layout.alignment: Qt.AlignVCenter
-                        spacing: 0
-                        
-                        Button {
-                            text: "✏️"
-                            font.family: root.iconFontFamily
-                            flat: true
-                            onClicked: {
-                                editDialog.engine = model.engine
-                                editDialog.sourceLang = model.source_lang
-                                editDialog.targetLang = model.target_lang
-                                editDialog.original = model.original
-                                editDialog.translation = model.translated
-                                editDialog.open()
+                        radius: 10
+                        color: root.inputBackground
+                        border.color: root.borderColor
+                        border.width: 1
+                        implicitHeight: cacheInfoColumn.implicitHeight + 20
+
+                        ColumnLayout {
+                            id: cacheInfoColumn
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 6
+
+                            Label {
+                                text: (backend.uiTrigger, backend.getTextWithDefault("cache_context_note", "Automatic cache reuse depends on the current project context and folder identity."))
+                                color: root.secondaryTextColor
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
+                            }
+
+                            Label {
+                                text: (backend.uiTrigger, backend.getTextWithDefault("cache_folder_name_note", "If you keep changing the game folder name between versions, cache reuse may become less effective."))
+                                color: root.secondaryTextColor
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
                             }
                         }
-                        
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        TextField {
+                            id: searchField
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 50
+                            placeholderText: (backend.uiTrigger, backend.getTextWithDefault("cache_search_placeholder", "Search... (Original, Translation, Engine)"))
+                            leftPadding: 16
+
+                            background: Rectangle {
+                                color: root.inputBackground
+                                radius: 8
+                                border.color: searchField.activeFocus ? Material.accent : root.borderColor
+                            }
+
+                            onTextChanged: searchTimer.restart()
+                        }
+
                         Button {
-                            text: "❌"
+                            text: "🔄"
                             font.family: root.iconFontFamily
-                            flat: true
-                            onClicked: {
-                                if (backend.deleteCacheEntry(model.engine, model.source_lang, model.target_lang, model.original)) {
-                                    cacheModel.remove(index)
+                            onClicked: refreshCacheData()
+                            ToolTip.visible: hovered
+                            ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("btn_refresh", "Refresh"))
+                        }
+
+                        Button {
+                            text: "🗑️ " + (backend.uiTrigger, backend.getTextWithDefault("btn_clear_cache", "Clear All"))
+                            font.family: root.iconFontFamily
+                            Material.background: Material.Red
+                            onClicked: clearConfirmDialog.open()
+                        }
+
+                        Label {
+                            text: (backend.uiTrigger, backend.getTextWithDefault("total_cache", "Entries: {count}")).replace("{count}", cacheModel.count)
+                            color: root.secondaryTextColor
+                        }
+                    }
+
+                    ListView {
+                        id: cacheList
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        model: cacheModel
+                        spacing: 8
+
+                        delegate: Rectangle {
+                            width: ListView.view.width
+                            height: Math.max(80, columnContent.implicitHeight + 24)
+                            color: root.cardBackground
+                            radius: 8
+
+                            RowLayout {
+                                id: columnContent
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 12
+
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignTop
+                                    width: 60
+                                    height: 24
+                                    radius: 4
+                                    color: {
+                                        if (model.engine.includes("google")) return "#4285F4"
+                                        if (model.engine.includes("deepl")) return "#0F2B46"
+                                        if (model.engine.includes("openai")) return "#10A37F"
+                                        if (model.engine.includes("gemini")) return "#8E44AD"
+                                        return "#555"
+                                    }
+
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: model.engine.toUpperCase()
+                                        color: "white"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+
+                                    Label {
+                                        text: model.source_lang + " ➔ " + model.target_lang
+                                        font.pixelSize: 10
+                                        color: root.mutedTextColor
+                                    }
+
+                                    Label {
+                                        text: model.original
+                                        font.pixelSize: 13
+                                        color: root.mainTextColor
+                                        wrapMode: Text.Wrap
+                                        Layout.fillWidth: true
+                                        maximumLineCount: 3
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Label {
+                                        text: model.translated
+                                        font.pixelSize: 13
+                                        color: Material.accent
+                                        font.italic: true
+                                        wrapMode: Text.Wrap
+                                        Layout.fillWidth: true
+                                        maximumLineCount: 3
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    spacing: 0
+
+                                    Button {
+                                        text: "✏️"
+                                        font.family: root.iconFontFamily
+                                        flat: true
+                                        onClicked: {
+                                            editDialog.engine = model.engine
+                                            editDialog.sourceLang = model.source_lang
+                                            editDialog.targetLang = model.target_lang
+                                            editDialog.original = model.original
+                                            editDialog.translation = model.translated
+                                            editDialog.open()
+                                        }
+                                    }
+
+                                    Button {
+                                        text: "❌"
+                                        font.family: root.iconFontFamily
+                                        flat: true
+                                        onClicked: {
+                                            if (backend.deleteCacheEntry(model.engine, model.source_lang, model.target_lang, model.original)) {
+                                                cacheModel.remove(index)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        ScrollBar.vertical: ScrollBar {
+                            active: true
+                        }
+                    }
+                }
+            }
+
+            // ==================== EXTERNAL TM TAB ====================
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 18
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: 10
+                        color: root.inputBackground
+                        border.color: root.borderColor
+                        border.width: 1
+                        implicitHeight: tmInfoColumn.implicitHeight + 20
+
+                        ColumnLayout {
+                            id: tmInfoColumn
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 6
+
+                            Label {
+                                text: (backend.uiTrigger, backend.getTextWithDefault("external_tm_manual_reuse_note", "Use External TM to reuse manually improved translations from older game versions or other projects."))
+                                color: root.secondaryTextColor
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        
+                        Switch {
+                            id: externalTMSwitch
+                            text: (backend.uiTrigger, backend.getTextWithDefault("use_external_tm", "Activate External TM"))
+                            checked: backend.getUseExternalTM()
+                            onToggled: backend.setUseExternalTM(checked)
+                            font.bold: true
+                        }
+                        
+                        Item { Layout.fillWidth: true }
+
+                        Button {
+                            text: "📥 " + (backend.uiTrigger, backend.getTextWithDefault("tm_btn_import_main", "Import New Source"))
+                            font.family: root.iconFontFamily
+                            highlighted: true
+                            onClicked: tmImportDialog.open()
+                        }
+
+                        Button {
+                            text: "🔄"
+                            font.family: root.iconFontFamily
+                            onClicked: refreshTMSources()
+                            ToolTip.visible: hovered
+                            ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("btn_refresh", "Refresh"))
+                        }
+                    }
+
+                    Label {
+                        text: (backend.uiTrigger, backend.getTextWithDefault("tm_sources_desc", "Select which imported TM sources should be used during translation. Matching texts skip API calls."))
+                        color: root.secondaryTextColor
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
+                        font.pixelSize: 12
+                    }
+
+                    Label {
+                        id: tmSelectionStatus
+                        property int tmTotalCount: tmSourcesRepeater.count
+                        property int tmSelectedCount: {
+                            try {
+                                var sources = JSON.parse(backend.getExternalTMSources())
+                                return sources ? sources.length : 0
+                            } catch(e) { return 0 }
+                        }
+                        text: (backend.uiTrigger, backend.getTextWithDefault("tm_selected_count", "Selected: {selected} / {total}")).replace("{selected}", tmSelectedCount).replace("{total}", tmTotalCount)
+                        color: tmTotalCount > 0 && tmSelectedCount > 0 ? Material.accent : root.mutedTextColor
+                        font.pixelSize: 11
+                        font.bold: tmSelectedCount > 0
+                        Layout.fillWidth: true
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 8
+                        color: root.cardBackground
+                        border.color: root.borderColor
+
+                        Loader {
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            active: tmSourcesRepeater.count === 0
+                            sourceComponent: Label {
+                                text: (backend.uiTrigger, backend.getTextWithDefault("tm_no_sources", "No TM sources available. Import from this page."))
+                                color: root.secondaryTextColor
+                                wrapMode: Text.Wrap
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        ScrollView {
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            clip: true
+                            visible: tmSourcesRepeater.count > 0
+
+                            ColumnLayout {
+                                width: parent.width
+                                spacing: 8
+
+                                Repeater {
+                                    id: tmSourcesRepeater
+                                    model: cachePage.tmSourcesModel
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        radius: 8
+                                        color: root.inputBackground
+                                        border.color: {
+                                            if (tmCheckbox.checked) return Material.accent
+                                            return root.borderColor
+                                        }
+                                        border.width: tmCheckbox.checked ? 2 : 1
+                                        implicitHeight: row.implicitHeight + 18
+
+                                        RowLayout {
+                                            id: row
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 10
+
+                                            CheckBox {
+                                                id: tmCheckbox
+                                                checked: {
+                                                    try {
+                                                        var activeSources = JSON.parse(backend.getExternalTMSources())
+                                                        return activeSources.indexOf(modelData.file_path) !== -1
+                                                    } catch(e) {
+                                                        return false
+                                                    }
+                                                }
+                                                onCheckedChanged: {
+                                                    backend.toggleTMSource(modelData.file_path, checked)
+                                                    refreshTMSources()
+                                                }
+                                            }
+
+                                            Label {
+                                                text: "📚 " + modelData.name + " (" + modelData.language + ") — " + modelData.entry_count + " entries"
+                                                color: root.mainTextColor
+                                                font.family: root.iconFontFamily
+                                                font.pixelSize: 13
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Button {
+                                                id: tmMenuButton
+                                                text: "⚙️"
+                                                font.family: root.iconFontFamily
+                                                font.pixelSize: 14
+                                                flat: false
+                                                implicitWidth: 36
+                                                implicitHeight: 32
+                                                Layout.alignment: Qt.AlignVCenter
+                                                background: Rectangle {
+                                                    color: tmMenuButton.hovered ? Material.accent : root.inputBackground
+                                                    radius: 4
+                                                    border.color: root.borderColor
+                                                    border.width: 1
+                                                }
+                                                contentItem: Label {
+                                                    text: parent.text
+                                                    color: tmMenuButton.hovered ? "white" : root.mainTextColor
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                onClicked: {
+                                                    tmContextMenu.currentFilePath = modelData.file_path
+                                                    tmContextMenu.currentName = modelData.name
+                                                    tmContextMenu.popup()
+                                                }
+                                                ToolTip.visible: hovered
+                                                ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("btn_options", "Options"))
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            
-            ScrollBar.vertical: ScrollBar {
-                active: true
+        }
+    }
+
+    // Global Menu (outside Repeater)
+    Menu {
+        id: tmContextMenu
+        property string currentFilePath: ""
+        property string currentName: ""
+        MenuItem {
+            text: "✏️ " + (backend.uiTrigger, backend.getTextWithDefault("btn_rename", "Rename"))
+            onClicked: {
+                renameDialog.renameOldName = tmContextMenu.currentName
+                renameDialog.renameFilePath = tmContextMenu.currentFilePath
+                renameNameField.text = tmContextMenu.currentName
+                renameDialog.open()
+            }
+        }
+        MenuItem {
+            text: "📤 " + (backend.uiTrigger, backend.getTextWithDefault("btn_export", "Export"))
+            onClicked: {
+                exportDialog.exportSourcePath = tmContextMenu.currentFilePath
+                exportPathField.text = ""
+                exportDialog.open()
+            }
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: "🗑️ " + (backend.uiTrigger, backend.getTextWithDefault("btn_delete", "Delete"))
+            onClicked: {
+                backend.deleteTMSource(tmContextMenu.currentFilePath)
+                refreshTMSources()
             }
         }
     }
-    
-    // ==================== DIALOGS ====================
+
+    Dialog {
+        id: tmImportDialog
+        title: (backend.uiTrigger, backend.getTextWithDefault("tm_import_title", "External Translation Memory"))
+        anchors.centerIn: parent
+        modal: true
+        width: Math.min(480, root.width * 0.85)
+
+        background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
+        header: Label { text: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("tm_import_title", "External Translation Memory")); padding: 20; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; font.pixelSize: 18 }
+
+        contentItem: ColumnLayout {
+            spacing: 15
+
+            Label {
+                text: (backend.uiTrigger, backend.getTextWithDefault("tm_import_instruction", "Select a tl/<language> folder from another Ren'Py game to import as Translation Memory:"))
+                color: root.secondaryTextColor
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+
+            RowLayout {
+                Label { text: (backend.uiTrigger, backend.getTextWithDefault("tm_source_name_label", "Source Name:")); color: root.secondaryTextColor; Layout.preferredWidth: 100 }
+                TextField {
+                    id: tmSourceNameField
+                    Layout.fillWidth: true
+                    placeholderText: (backend.uiTrigger, backend.getTextWithDefault("tm_source_name_placeholder", "e.g. GameA, MyOtherProject"))
+                    color: root.mainTextColor
+                    background: Rectangle { color: root.inputBackground; border.color: root.borderColor; radius: 6 }
+                }
+            }
+
+            RowLayout {
+                TextField {
+                    id: tmPathField
+                    Layout.fillWidth: true
+                    placeholderText: (backend.uiTrigger, backend.getTextWithDefault("path_not_selected_placeholder", "Path not selected..."))
+                    color: root.mainTextColor
+                    background: Rectangle { color: root.inputBackground; border.color: root.borderColor; radius: 6 }
+                }
+                Button { text: "📁"; font.family: root.iconFontFamily; onClicked: tmFolderDialog.open() }
+            }
+
+            RowLayout {
+                Label { text: (backend.uiTrigger, backend.getTextWithDefault("target_lang_label", "Target Language:")); color: root.secondaryTextColor; Layout.preferredWidth: 100 }
+                ComboBox {
+                    id: tmLangCombo
+                    Layout.fillWidth: true
+                    model: backend.getTargetLanguages()
+                    textRole: "name"
+                    valueRole: "code"
+                }
+            }
+        }
+
+        footer: DialogButtonBox {
+            background: Rectangle { color: "transparent" }
+            Button {
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel"))
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                flat: true
+            }
+            Button {
+                text: (backend.uiTrigger, backend.getTextWithDefault("tm_btn_import", "Import TM"))
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                highlighted: true
+                enabled: tmPathField.text.length > 0
+                onClicked: {
+                    backend.importExternalTM(tmPathField.text, tmSourceNameField.text, tmLangCombo.currentValue)
+                    tmImportDialog.close()
+                    refreshTMSources()
+                }
+            }
+        }
+    }
+
     Dialog {
         id: editDialog
         title: (backend.uiTrigger, backend.getTextWithDefault("edit_cache_title", "Edit Cache"))
         anchors.centerIn: parent
         modal: true
         width: Math.min(450, root.width * 0.85)
-        
+
         property string engine: ""
         property string sourceLang: ""
         property string targetLang: ""
         property string original: ""
         property alias translation: translationField.text
-        
+
         background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
-        header: Label { 
+        header: Label {
             text: title
             padding: 20
             font.bold: true
             font.pixelSize: 18
-            color: root.mainTextColor 
+            color: root.mainTextColor
         }
-        
+
         contentItem: ColumnLayout {
             spacing: 15
-            
+
             Label { text: (backend.uiTrigger, backend.getTextWithDefault("original_text", "Original Text")); color: root.secondaryTextColor }
-            TextArea { 
+            TextArea {
                 text: editDialog.original
                 readOnly: true
                 Layout.fillWidth: true
@@ -269,9 +680,9 @@ Rectangle {
                 background: Rectangle { color: root.inputBackground; radius: 6; border.color: root.borderColor }
                 wrapMode: Text.Wrap
             }
-            
+
             Label { text: (backend.uiTrigger, backend.getTextWithDefault("translated_text", "Translation")); color: root.secondaryTextColor }
-            TextArea { 
+            TextArea {
                 id: translationField
                 Layout.fillWidth: true
                 Layout.preferredHeight: 80
@@ -280,21 +691,21 @@ Rectangle {
                 wrapMode: Text.Wrap
             }
         }
-        
+
         footer: DialogButtonBox {
             background: Rectangle { color: "transparent" }
-            Button { 
+            Button {
                 text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel"))
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                flat: true 
+                flat: true
             }
-            Button { 
+            Button {
                 text: (backend.uiTrigger, backend.getTextWithDefault("btn_save", "Save"))
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 highlighted: true
                 onClicked: {
                     if (backend.updateCacheEntry(editDialog.engine, editDialog.sourceLang, editDialog.targetLang, editDialog.original, editDialog.translation)) {
-                        refreshData()
+                        refreshCacheData()
                     }
                 }
             }
@@ -306,18 +717,147 @@ Rectangle {
         title: (backend.uiTrigger, backend.getTextWithDefault("confirm_clear_cache_title", "Clear Cache"))
         anchors.centerIn: parent
         modal: true
+        width: Math.min(440, root.width * 0.9)
         standardButtons: Dialog.Yes | Dialog.No
-        
-        Text {
+
+        background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
+
+        contentItem: Label {
             text: (backend.uiTrigger, backend.getTextWithDefault("confirm_clear_cache_msg", "All translation memory will be deleted. This action cannot be undone.\nDo you want to continue?"))
             color: root.mainTextColor
             padding: 20
+            wrapMode: Text.Wrap
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
-        
+
         onAccepted: {
             if (backend.clearCache()) {
-                refreshData()
+                refreshCacheData()
             }
+        }
+    }
+
+    // Rename Dialog
+    Dialog {
+        id: renameDialog
+        title: "✏️ " + (backend.uiTrigger, backend.getTextWithDefault("tm_rename_title", "Rename TM Source"))
+        anchors.centerIn: parent
+        modal: true
+        width: Math.min(400, root.width * 0.8)
+
+        property string renameFilePath: ""
+        property string renameOldName: ""
+
+        background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
+        header: Label { text: "✏️ " + (backend.uiTrigger, backend.getTextWithDefault("tm_rename_title", "Rename TM Source")); padding: 20; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; font.pixelSize: 18 }
+
+        contentItem: ColumnLayout {
+            spacing: 15
+
+            Label {
+                text: (backend.uiTrigger, backend.getTextWithDefault("tm_rename_desc", "Enter a new name for this TM source:"))
+                color: root.secondaryTextColor
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+
+            TextField {
+                id: renameNameField
+                Layout.fillWidth: true
+                placeholderText: (backend.uiTrigger, backend.getTextWithDefault("placeholder_new_name", "New name..."))
+                color: root.mainTextColor
+                background: Rectangle { color: root.inputBackground; border.color: root.borderColor; radius: 6 }
+            }
+        }
+
+        footer: DialogButtonBox {
+            background: Rectangle { color: "transparent" }
+            Button {
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel"))
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                flat: true
+            }
+            Button {
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_rename", "Rename"))
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                highlighted: true
+                enabled: renameNameField.text.length > 0 && renameNameField.text !== renameDialog.renameOldName
+                onClicked: {
+                    backend.renameTMSource(renameDialog.renameFilePath, renameNameField.text)
+                    renameDialog.close()
+                    refreshTMSources()
+                }
+            }
+        }
+    }
+
+    // Export Dialog
+    Dialog {
+        id: exportDialog
+        title: "📤 " + (backend.uiTrigger, backend.getTextWithDefault("tm_export_title", "Export TM Source"))
+        anchors.centerIn: parent
+        modal: true
+        width: Math.min(450, root.width * 0.85)
+
+        property string exportSourcePath: ""
+
+        background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
+        header: Label { text: "📤 " + (backend.uiTrigger, backend.getTextWithDefault("tm_export_title", "Export TM Source")); padding: 20; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; font.pixelSize: 18 }
+
+        contentItem: ColumnLayout {
+            spacing: 15
+
+            Label {
+                text: (backend.uiTrigger, backend.getTextWithDefault("tm_export_desc", "Select a location to export this TM source as a backup:"))
+                color: root.secondaryTextColor
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+
+            RowLayout {
+                TextField {
+                    id: exportPathField
+                    Layout.fillWidth: true
+                    placeholderText: (backend.uiTrigger, backend.getTextWithDefault("placeholder_select_destination", "Select destination..."))
+                    color: root.mainTextColor
+                    readOnly: true
+                    background: Rectangle { color: root.inputBackground; border.color: root.borderColor; radius: 6 }
+                }
+                Button {
+                    text: "📁"
+                    font.family: root.iconFontFamily
+                    onClicked: exportFileDialog.open()
+                }
+            }
+        }
+
+        footer: DialogButtonBox {
+            background: Rectangle { color: "transparent" }
+            Button {
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel"))
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                flat: true
+            }
+            Button {
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_export", "Export"))
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                highlighted: true
+                enabled: exportPathField.text.length > 0
+                onClicked: {
+                    backend.exportTMSource(exportDialog.exportSourcePath, exportPathField.text)
+                    exportDialog.close()
+                }
+            }
+        }
+    }
+
+    FileDialog {
+        id: exportFileDialog
+        title: (backend.uiTrigger, backend.getTextWithDefault("tm_export_select_location", "Select Export Location"))
+        fileMode: FileDialog.SaveFile
+        onAccepted: {
+            exportPathField.text = selectedFile
         }
     }
 }

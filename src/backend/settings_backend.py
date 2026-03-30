@@ -192,6 +192,24 @@ class SettingsBackend(QObject):
     def setDeepSeekModel(self, value: str):
         self.config.translation_settings.deepseek_model = value
         self.config.save_config()
+
+    @pyqtSlot(result=str)
+    def getDeepSeekBaseUrl(self) -> str:
+        return getattr(self.config.translation_settings, 'deepseek_base_url', 'https://api.deepseek.com')
+
+    @pyqtSlot(str)
+    def setDeepSeekBaseUrl(self, value: str):
+        self.config.translation_settings.deepseek_base_url = value.strip()
+        self.config.save_config()
+
+    @pyqtSlot(result=str)
+    def getOpusMTModel(self) -> str:
+        return getattr(self.config.translation_settings, 'opus_mt_model', 'Helsinki-NLP/opus-mt-en-es')
+
+    @pyqtSlot(str)
+    def setOpusMTModel(self, value: str):
+        self.config.translation_settings.opus_mt_model = value.strip()
+        self.config.save_config()
     
     # ==================== TRANSLATION SETTINGS ====================
     
@@ -720,7 +738,63 @@ class SettingsBackend(QObject):
     def setDeepLFormality(self, formality: str):
         self.config.translation_settings.deepl_formality = formality
         self.config.save_config()
-    
+
+    @pyqtSlot(result=str)
+    def getDeepLApiKey(self) -> str:
+        return self.config.api_keys.deepl_api_key or ""
+
+    @pyqtSlot(str)
+    def setDeepLApiKey(self, key: str):
+        self.config.api_keys.deepl_api_key = key.strip()
+        self.config.save_config()
+
+    # ==================== AI API KEYS & MODELS ====================
+
+    @pyqtSlot(result=str)
+    def getOpenAIApiKey(self) -> str:
+        return self.config.api_keys.openai_api_key or ""
+
+    @pyqtSlot(str)
+    def setOpenAIApiKey(self, key: str):
+        self.config.api_keys.openai_api_key = key.strip()
+        self.config.save_config()
+
+    @pyqtSlot(result=str)
+    def getOpenAIModel(self) -> str:
+        return getattr(self.config.translation_settings, 'openai_model', 'gpt-3.5-turbo')
+
+    @pyqtSlot(str)
+    def setOpenAIModel(self, model: str):
+        self.config.translation_settings.openai_model = model.strip()
+        self.config.save_config()
+
+    @pyqtSlot(result=str)
+    def getOpenAIBaseUrl(self) -> str:
+        return getattr(self.config.translation_settings, 'openai_base_url', '')
+
+    @pyqtSlot(str)
+    def setOpenAIBaseUrl(self, url: str):
+        self.config.translation_settings.openai_base_url = url.strip()
+        self.config.save_config()
+
+    @pyqtSlot(result=str)
+    def getGeminiApiKey(self) -> str:
+        return self.config.api_keys.gemini_api_key or ""
+
+    @pyqtSlot(str)
+    def setGeminiApiKey(self, key: str):
+        self.config.api_keys.gemini_api_key = key.strip()
+        self.config.save_config()
+
+    @pyqtSlot(result=str)
+    def getGeminiModel(self) -> str:
+        return getattr(self.config.translation_settings, 'gemini_model', 'gemini-2.0-flash-exp')
+
+    @pyqtSlot(str)
+    def setGeminiModel(self, model: str):
+        self.config.translation_settings.gemini_model = model.strip()
+        self.config.save_config()
+
     # ==================== ADVANCED SETTINGS ====================
     
     @pyqtSlot(result=bool)
