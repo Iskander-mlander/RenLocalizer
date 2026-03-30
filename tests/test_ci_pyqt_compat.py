@@ -115,10 +115,11 @@ def test_cache_page_combines_automatic_cache_and_external_tm_ui() -> None:
 
 
 def test_tools_page_keeps_tm_entry_but_points_users_to_reuse_page() -> None:
-    qml = Path("src/gui/qml/pages/ToolsPage.qml").read_text(encoding="utf-8")
+    """TM import was moved from ToolsPage to CachePage in v2.7.8. Check CachePage instead."""
+    cache_qml = Path("src/gui/qml/pages/CachePage.qml").read_text(encoding="utf-8")
 
-    assert 'tm_import_tools_note' in qml
-    assert 'tmImportDialog.open()' in qml
+    assert 'tm_import_title' in cache_qml
+    assert 'tmImportDialog' in cache_qml
 
 
 def test_all_locales_include_batch_cap_messages() -> None:
