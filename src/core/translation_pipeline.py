@@ -67,8 +67,35 @@ def _get_renpy_to_api_lang():
             "slovak": "sk", "slovenian": "sl", "serbian": "sr",
         }
 
-# Initialize at module load - used throughout the pipeline
-RENPY_TO_API_LANG = _get_renpy_to_api_lang()
+class _LazyRenpyToApiLangMap:
+    def __init__(self):
+        self._cache = {}
+        self._loaded = False
+
+    def _load(self):
+        if not self._loaded:
+            self._cache = _get_renpy_to_api_lang()
+            self._loaded = True
+        return self._cache
+
+    def get(self, key, default=None):
+        return self._load().get(key, default)
+
+    def items(self):
+        return self._load().items()
+
+    def __iter__(self):
+        return iter(self._load())
+
+    def __len__(self):
+        return len(self._load())
+
+    def __contains__(self, key):
+        return key in self._load()
+
+
+# Lazily loaded on first access to avoid blocking app startup.
+RENPY_TO_API_LANG = _LazyRenpyToApiLangMap()
 
 CORE_UI_RETRY_STRINGS = {
     "About",

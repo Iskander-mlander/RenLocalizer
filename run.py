@@ -57,43 +57,9 @@ except ImportError:
 os.environ["QT_QPA_PLATFORM_THEME"] = ""  # Disable system theme
 os.environ["QT_STYLE_OVERRIDE"] = ""  # Disable style override
 
-# ============================================================
-# QML & MATERIAL STYLE SETTINGS
-# Load theme from config if available, otherwise default to Dark
-# ============================================================
-def _load_configured_app_theme() -> str:
-    try:
-        import json
-        from src.utils.path_manager import get_app_dir, get_data_path
-
-        config_candidates = [
-            get_data_path() / "config.json",
-            get_app_dir() / "config.json",
-        ]
-        checked_paths: set[Path] = set()
-        for config_path in config_candidates:
-            if config_path in checked_paths or not config_path.exists():
-                continue
-            checked_paths.add(config_path)
-            with open(config_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            app_settings = data.get("app_settings", {})
-            configured_theme = (
-                app_settings.get("app_theme")
-                or app_settings.get("theme")
-                or "dark"
-            )
-            return str(configured_theme).strip().lower() or "dark"
-    except Exception:
-        pass
-    return "dark"
-
-
-def _get_material_theme() -> str:
-    return "Light" if _load_configured_app_theme() == "light" else "Dark"
-
 os.environ["QT_QUICK_CONTROLS_STYLE"] = "Material"
-os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = _get_material_theme()
+# Keep startup fast: QML applies the saved app theme later via settingsBackend.
+os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = "Dark"
 os.environ["QT_QUICK_CONTROLS_MATERIAL_ACCENT"] = "Purple"
 
 # Keep macOS layer-backed windows enabled even during direct binary relaunches.
