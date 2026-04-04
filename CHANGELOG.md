@@ -1,5 +1,41 @@
 # RenLocalizer Changelog
 
+### [2.8.0] - 2026-04-04
+
+### UI Revision
+- **Navigation Shell Revamp:** Expanded the left navigation from icon-only shortcuts into a clearer workspace/help sidebar with labeled destinations, improving discoverability without removing any existing actions.
+- **Settings Reorganization:** Split the Settings page into tabbed sections so General, Engines, Translation, Network, AI, and System options stay fully available but are easier to scan and reach.
+- **Localization Expansion:** Added new UI strings for the revised navigation shell and settings tabs across all locale files.
+- **Brand Simplification:** Removed `V2` from visible application labels and subtitles so the UI reads more cleanly across navigation, home, and about surfaces.
+- **Home Dashboard Summary:** Added a compact overview strip for project, language pair, and engine/TM status so the main screen feels more like a guided workspace.
+- **Log Collapse:** Added a collapsible log panel to reduce clutter without hiding functionality.
+- **Page Grouping:** Reworked Glossary, Cache, and Tools into clearer dashboard-style sections with summary cards and grouped tool blocks.
+- **Responsive Card Heights:** Fixed overlapping section text by giving dashboard cards content-driven heights so the revised layouts stay stable on Windows, Linux, and macOS.
+- **Compact Lists:** Loosened glossary rows and cache cards so translated content has more vertical room and stays readable on narrower desktop layouts.
+- **Density Reduction:** Reduced header, toolbar, and row action density in Glossary and Cache for a cleaner, less crowded reading experience.
+- **Icon/Text Split Headers:** Separated icon glyphs from page titles on the revised pages so Linux and macOS font fallback is less likely to disturb alignment or readability.
+- **Settings Header Split:** Separated icon glyphs from major Settings section headers to reduce overlap and improve cross-platform readability.
+- **Micro Layout Polish:** Tightened Settings row widths and relaxed cache/search spacing so compact windows stay readable without squeezing controls.
+- **Live Locale Refresh:** Wired UI language changes to a global QML refresh so the interface updates immediately without needing an app restart.
+
+### Stability Fixes
+- **QML Startup Fix:** Resolved a NavigationBar load failure caused by an invalid `Label` property assignment (`letterSpacing`). The sidebar now uses the supported font property path so the UI loads normally again.
+- **Startup Splash Screen:** Added an English loading splash screen built into the launcher so slow startup work is visible instead of looking frozen, using the bundled `icon.png` without requiring extra assets.
+- **Splash Fallback Safety:** Improved the splash fallback so missing or unreadable `icon.png` still shows a branded loading surface instead of a plain black box.
+- **Animated Splash Messaging:** Added stage-based splash messages with a subtle dot animation to make slow startup feel active instead of frozen.
+
+### Translation Coverage
+- **Safer Say Coverage:** Extended Ren'Py dialogue extraction to cover quoted speaker names and image-attribute say lines like `"Mark" "..."` and `iside basics "..."` while keeping `screen` and command-like statements outside the translation path.
+
+### Language Path Normalization
+- **Ren'Py Folder Keys:** Normalized target language handling so `tl/<lang>/` paths use Ren'Py folder keys consistently across all languages, while API codes remain only for translation requests and legacy configs are auto-mapped.
+
+### Tools
+- **TXT/YAML Translator:** Added a standalone helper tool for `.txt` and `.yml/.yaml` files that scans folders recursively, creates sibling `old-txt-yaml` backups automatically, and replaces files in place with best-effort formatting preservation (Experimental).
+
+### UX Direction
+- **Control Preserved:** The redesign keeps advanced options visible and accessible while reducing visual clutter and improving task orientation.
+
 ### [2.7.8] - 2026-03-29
 
 ### Bug Fixes
@@ -1488,7 +1524,7 @@ Extended `_extract_strings_from_code()` with 3 new patterns to match parser.py:
 - **Maintenance:** Permanently removed legacy "Output Format" selection. The system now defaults to the most stable `old_new` format to ensure 100% compatibility with Ren'Py script updates.
 - **Robust Config Loading:** Implemented a filtering mechanism that ignores unknown configuration keys in the JSON file. This prevents "unexpected keyword argument" crashes when downgrading versions or moving between builds with different settings.
 
-### � Performance & UI Responsiveness
+###   Performance & UI Responsiveness
 - **UI Throttling (Anti-Freeze):** Implemented a log buffering system with a `QTimer` (200ms) to prevent UI freezing during high-frequency logging. The application now remains fully responsive (draggable/clickable) even while processing thousands of files per second.
 - **Multithreading GIL Yields:** Added microscopic `time.sleep` yields in tight parsing and file generation loops. This allows the Python Global Interpreter Lock (GIL) to release more frequently, ensuring the UI thread stays alive and smooth during heavy CPU-bound tasks like scanning tens of thousands of script lines.
 - **Regex Optimization:** Optimized core translation logic by pre-compiling overhead-heavy regular expression patterns. This significantly reduces CPU usage during the "protection" and "restoration" phases of translation.
@@ -1505,7 +1541,7 @@ Extended `_extract_strings_from_code()` with 3 new patterns to match parser.py:
     - Control character detection (`\x00-\x1F`, `\x7F-\x9F`).
     - High ratio of non-printable character analysis (>30% threshold).
     - Low alphabetic content detection (<20% ratio).
-    - Short string corruption pattern matching for strings like `"z�X�"`, `"|d�T"`, `"qu�p��"`.
+    - Short string corruption pattern matching for strings like `"z X "`, `"|d T"`, `"qu p  "`.
 - **Python Code / Docstring Detection (Critical Fix):** New filter to prevent game-breaking translations of embedded code:
     - Detects Python keywords: `def`, `class`, `for`, `if`, `import`, `return`, `raise`, `try`, `except`, `while`, `lambda`, `with`.
     - Filters Ren'Py module calls like `renpy.store.x`, `renpy.block_rollback()`.

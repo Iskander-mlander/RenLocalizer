@@ -84,7 +84,8 @@ ApplicationWindow {
         // Sol Navigasyon Çubuğu
         NavigationBar {
             id: navBar
-            Layout.preferredWidth: 70
+            Layout.preferredWidth: 236
+            Layout.minimumWidth: 220
             Layout.fillHeight: true
             currentIndex: 0
             onPageSelected: function(index) {
@@ -105,6 +106,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: 0
+            onCurrentIndexChanged: navBar.currentIndex = currentIndex
 
             HomePage {
                 id: homePage
@@ -273,6 +275,14 @@ ApplicationWindow {
                 warningDialog.text = message
                 warningDialog.open()
             }
+        }
+    }
+
+    Connections {
+        target: settingsBackend
+
+        function onLanguageChanged(langCode) {
+            backend.refreshUI()
         }
     }
 

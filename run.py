@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-RenLocalizer V2 Launcher
+RenLocalizer Launcher
 Cross-platform launcher for Windows and Unix systems
 Now powered by Qt Quick (QML)
 """
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 sys.setrecursionlimit(5000)
 
 # Default version fallback
-VERSION = "2.7.0"
+VERSION = "2.8.0"
 
 try:
     from src.version import VERSION as _v
@@ -498,12 +498,12 @@ def _attempt_qt_safe_relaunch(
 
 def main() -> int:
     print("=" * 60)
-    print("RenLocalizer V2 (Qt Quick Edition) Starting...")
+    print("RenLocalizer (Qt Quick Edition) Starting...")
     print("=" * 60)
 
     # Initialize Secure Logger
     logger = setup_logger()
-    logger.info(f"RenLocalizer V2 Starting... Version: {VERSION}")
+    logger.info(f"RenLocalizer Starting... Version: {VERSION}")
 
     setup_qt_environment()
 
@@ -533,9 +533,9 @@ def main() -> int:
     try:
         # Import Qt
         from PyQt6.QtCore import QTimer, QUrl, Qt
-        from PyQt6.QtGui import QIcon
+        from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
         from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
-        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtWidgets import QApplication, QSplashScreen
         from PyQt6.QtQml import QQmlApplicationEngine
 
         if graphics_bootstrap.graphics_api == "opengl":
@@ -553,6 +553,57 @@ def main() -> int:
         app = QApplication(sys.argv)
         app.setApplicationName("RenLocalizer")
         app.setOrganizationName("LordOfTurk")
+
+        # Show a lightweight splash screen immediately so slow startup work
+        # does not look like a frozen launch.
+        splash_pixmap_path = resolve_asset_path("icon.png")
+        if splash_pixmap_path.exists():
+            splash_pixmap = QPixmap(str(splash_pixmap_path))
+        else:
+            splash_pixmap = QPixmap(480, 280)
+        if splash_pixmap.isNull():
+            splash_pixmap = QPixmap(480, 280)
+        if splash_pixmap.isNull() or splash_pixmap.size().isEmpty():
+            splash_pixmap.fill(QColor("#121224"))
+            painter = QPainter(splash_pixmap)
+            try:
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setPen(QColor("#ffffff"))
+                title_font = QFont()
+                title_font.setPointSize(28)
+                title_font.setBold(True)
+                painter.setFont(title_font)
+                painter.drawText(splash_pixmap.rect(), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, "RenLocalizer")
+                painter.setFont(QFont())
+                painter.drawText(splash_pixmap.rect().adjusted(0, 60, 0, 0), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, "Loading application...")
+            finally:
+                painter.end()
+
+        splash = QSplashScreen(splash_pixmap, Qt.WindowType.WindowStaysOnTopHint)
+        splash.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+
+        splash_phase_text = "Loading RenLocalizer"
+        splash_dot_count = 0
+
+        def _update_splash_message(new_phase: str | None = None) -> None:
+            nonlocal splash_phase_text, splash_dot_count
+            if new_phase is not None:
+                splash_phase_text = new_phase
+                splash_dot_count = 0
+            dots = "." * splash_dot_count
+            splash.showMessage(
+                f"{splash_phase_text}{dots}",
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                Qt.GlobalColor.white,
+            )
+            splash_dot_count = (splash_dot_count + 1) % 4
+
+        splash_timer = QTimer()
+        splash_timer.timeout.connect(_update_splash_message)
+        splash.show()
+        app.processEvents()
+        splash_timer.start(250)
+        _update_splash_message()
 
         # ── Linux emoji font registration ────────────────────────
         # Bundle carries NotoColorEmoji.ttf in fonts/ directory.
@@ -591,6 +642,9 @@ def main() -> int:
                     "show fallback icons until a system emoji font such as "
                     "Noto Color Emoji is installed."
                 )
+
+        _update_splash_message("Preparing the application")
+        app.processEvents()
         
         # Import Backends (Logic)
         from src.utils.config import ConfigManager
@@ -598,6 +652,9 @@ def main() -> int:
         from src.backend.settings_backend import SettingsBackend
         
         app.setApplicationVersion(VERSION)
+
+        _update_splash_message("Loading user settings")
+        app.processEvents()
 
         # Set application icon
         # Primary: icon.png (Linux/macOS), Fallback: icon.ico (Windows)
@@ -654,6 +711,8 @@ def main() -> int:
         # Load MAIN QML
         # Use resolve_asset_path so it works inside PyInstaller bundle
         qml_path = resolve_asset_path("src/gui/qml/main.qml")
+        _update_splash_message("Starting the interface")
+        app.processEvents()
         print(f"Loading UI: {qml_path}")
         
         if not qml_path.exists():
@@ -668,6 +727,8 @@ def main() -> int:
 
         if not engine.rootObjects():
             print("[ERROR] No root objects created.")
+            splash_timer.stop()
+            splash.close()
             safe_exit = _attempt_qt_safe_relaunch(
                 logger=logger,
                 stage="qml_load",
@@ -707,6 +768,8 @@ def main() -> int:
             # Step 1: Show window FIRST so Windows creates a real HWND
             root_window.show()
             app.processEvents()
+            splash_timer.stop()
+            splash.close()
             
             # Step 2: Apply native Windows icon via ctypes (most reliable for taskbar)
             icon_path = resolve_asset_path("icon.ico")
@@ -824,7 +887,7 @@ def main() -> int:
         return exit_code
 
     except Exception as e:
-        error_msg = f"Error starting RenLocalizer V2: {e}"
+        error_msg = f"Error starting RenLocalizer: {e}"
         print(error_msg)
         import traceback
         traceback.print_exc()

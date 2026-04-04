@@ -883,7 +883,7 @@ def main() -> int:
                     setattr(config_manager.app_settings, k, v)
     
     # 2. Apply explicit CLI args (priority over config file)
-    config_manager.translation_settings.target_language = args.target_lang
+    config_manager.translation_settings.target_language = config_manager.normalize_renpy_language_code(args.target_lang)
     config_manager.translation_settings.source_language = args.source_lang
     
     # Update both translation settings and proxy settings

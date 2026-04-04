@@ -69,6 +69,27 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         r'^(?P<prefix>(?:[A-Za-z_]\w*\s+)?)(?P<delim>"""|\'\'\')(?P<body>.*)$'
     )
 
+    # Broader say-statement support: quoted speaker names and image-attribute variants.
+    dialogue_speaker_re = (
+        r'(?!(?:textbutton|text|label|tooltip|screen|menu|scene|show|hide|call|jump|'
+        r'python|init|define|default|style|image|caption|frame|transform)\b)'
+        r'[A-Za-z_][\w\.]*'
+    )
+    dialogue_attr_token = (
+        r'(?:@\s*)?-?(?!(?:at|as|behind|onlayer|with|zorder|show|hide|scene|call|jump|'
+        r'return|play|stop|queue|pause|python|screen|menu|textbutton|text|label|tooltip|'
+        r'window|frame|transform|define|default|style|image|caption)\b)[A-Za-z_][\w-]*'
+    )
+    dialogue_attr_tail = rf'(?:\s+{dialogue_attr_token})*'
+    dialogue_speaker_or_quoted = rf'(?:{dialogue_speaker_re}|"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
+
+    dialog_re = re.compile(
+        rf'^(?P<char>{dialogue_speaker_or_quoted}){dialogue_attr_tail}\s+(?P<quote>(?:[fFuUrR][fFuUrR]?)?(?:"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\'))'
+    )
+    triple_start_re = re.compile(
+        rf'^(?P<prefix>{dialogue_speaker_or_quoted}{dialogue_attr_tail}\s+)?(?P<delim>"""|\'\'\')(?P<body>.*)$'
+    )
+
     def protect_placeholders(text: str):
         # NEW v2.4.1: Nested interpolation protection (e.g. [[var]])
         nested_var_pat = re.compile(r'\[{2,}[^\]]+\]{2,}')
@@ -422,6 +443,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             q = m_dialog.group("quote")
             protected, ph = protect_placeholders(q[1:-1])
             q_raw = m_dialog.group("quote")
+            character = m_dialog.group("char")
+            if character and len(character) >= 2 and character[0] == character[-1] and character[0] in ('"', "'"):
+                character = character[1:-1]
             entries.append(
                 {
                     "text": restore_placeholders(protected, ph),
@@ -429,7 +453,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
                     "line_number": idx + 1,
                     "context_line": line,
                     "text_type": "dialogue",
-                    "character": m_dialog.group("char"),
+                    "character": character,
                     "file_path": file_path,
                     "context_path": current_context_path(),
                 }

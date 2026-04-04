@@ -1,3 +1,5 @@
+import unittest
+
 from src.core.parser import RenPyParser
 from src.core.output_formatter import RenPyOutputFormatter
 
@@ -110,13 +112,85 @@ def test_char_dialog_regex_still_accepts_normal_spacing():
     assert match.group('char') == 'e'
 
 
+def test_char_dialog_regex_accepts_image_attributes():
+    parser = RenPyParser()
+    match = parser.char_dialog_re.match('iside basics "The house is clean."')
+    assert match is not None
+    assert match.group('char') == 'iside'
+
+
+def test_char_dialog_regex_accepts_quoted_speaker_names():
+    parser = RenPyParser()
+    match = parser.char_dialog_re.match('"Mark" "Come here."')
+    assert match is not None
+    assert match.group('char') == '"Mark"'
+
+
+def test_char_dialog_regex_accepts_attributed_say_variants():
+    parser = RenPyParser()
+    match = parser.char_dialog_re.match('e happy @ vhappy "Really?"')
+    assert match is not None
+    assert match.group('char') == 'e'
+
+
 def test_char_dialog_regex_does_not_treat_screen_text_as_speaker():
     parser = RenPyParser()
     assert parser.char_dialog_re.match('text"Hello"') is None
     assert parser.char_dialog_re.match('textbutton"Start"') is None
     assert parser.char_dialog_re.match('label"Name"') is None
+    assert parser.char_dialog_re.match('window show "Loading"') is None
+    assert parser.char_dialog_re.match('show text "Loading"') is None
+    assert parser.char_dialog_re.match('screen title "Title"') is None
 
 
 def test_classify_text_type_supports_no_space_character_dialogue():
     parser = RenPyParser()
     assert parser.classify_text_type('a"Hello there."') == "character"
+
+
+def test_classify_text_type_supports_image_attribute_dialogue():
+    parser = RenPyParser()
+    assert parser.classify_text_type('iside basics "The house is clean."') == "character"
+
+
+def test_classify_text_type_supports_quoted_speaker_dialogue():
+    parser = RenPyParser()
+    assert parser.classify_text_type('"Mark" "Come here."') == "character"
+
+
+class TestDialogueAttributeVariants(unittest.TestCase):
+    def test_dialogue_attribute_variants_and_false_positives(self):
+        parser = RenPyParser()
+
+        match = parser.char_dialog_re.match('iside basics "The house is clean."')
+        if match is None:
+            self.fail('Expected image-attribute dialogue to match')
+        self.assertEqual(match.group('char'), 'iside')
+
+        match = parser.char_dialog_re.match('"Mark" "Come here."')
+        if match is None:
+            self.fail('Expected quoted speaker dialogue to match')
+        self.assertEqual(match.group('char'), '"Mark"')
+
+        match = parser.char_dialog_re.match('e happy @ vhappy "Really?"')
+        if match is None:
+            self.fail('Expected attributed dialogue to match')
+        self.assertEqual(match.group('char'), 'e')
+
+        self.assertIsNone(parser.char_dialog_re.match('text"Hello"'))
+        self.assertIsNone(parser.char_dialog_re.match('textbutton"Start"'))
+        self.assertIsNone(parser.char_dialog_re.match('label"Name"'))
+        self.assertIsNone(parser.char_dialog_re.match('window show "Loading"'))
+        self.assertIsNone(parser.char_dialog_re.match('show text "Loading"'))
+        self.assertIsNone(parser.char_dialog_re.match('screen title "Title"'))
+
+
+class TestLanguageNormalization(unittest.TestCase):
+    def test_api_and_legacy_codes_map_to_renpy_keys(self):
+        from src.utils.config import ConfigManager
+
+        cm = ConfigManager.__new__(ConfigManager)
+        self.assertEqual(cm.normalize_renpy_language_code('tr'), 'turkish')
+        self.assertEqual(cm.normalize_renpy_language_code('es'), 'spanish')
+        self.assertEqual(cm.normalize_renpy_language_code('zh-CN'), 'chinese_s')
+        self.assertEqual(cm.normalize_renpy_language_code('turkish'), 'turkish')

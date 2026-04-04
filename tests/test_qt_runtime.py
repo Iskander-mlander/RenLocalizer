@@ -79,6 +79,12 @@ def test_spec_bundles_png_icon_for_non_windows_qml_surfaces():
     assert "(os.path.join(project_dir, 'icon.png'), '.')" in spec_text
 
 
+def test_run_launcher_shows_loading_splash():
+    run_text = Path("run.py").read_text(encoding="utf-8")
+    assert "QSplashScreen" in run_text
+    assert "Loading RenLocalizer..." in run_text
+
+
 def test_linux_apprun_generates_runtime_fontconfig_without_in_place_patch():
     apprun_text = Path("build/linux/AppRun").read_text(encoding="utf-8")
     assert "mktemp -d" in apprun_text

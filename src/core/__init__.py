@@ -1,5 +1,5 @@
 """
-Core module for RenLocalizer V2
+Core module for RenLocalizer
 ==============================
 """
 

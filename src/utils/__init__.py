@@ -1,5 +1,5 @@
 """
-Utils module for RenLocalizer V2
+Utils module for RenLocalizer
 ===============================
 """
 

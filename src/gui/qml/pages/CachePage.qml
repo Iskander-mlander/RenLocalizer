@@ -76,13 +76,25 @@ Rectangle {
 
         RowLayout {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
 
             Label {
-                text: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("translation_reuse_title", "Translation Reuse"))
-                font.pixelSize: 24
+                text: "🧠"
+                font.pixelSize: 22
                 font.family: root.iconFontFamily
                 font.bold: true
                 color: root.mainTextColor
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: (backend.uiTrigger, backend.getTextWithDefault("translation_reuse_title", "Translation Reuse"))
+                font.pixelSize: 22
+                font.bold: true
+                color: root.mainTextColor
+                wrapMode: Text.WordWrap
+                elide: Text.ElideRight
             }
 
             Item { Layout.fillWidth: true }
@@ -121,6 +133,52 @@ Rectangle {
                     color: root.secondaryTextColor
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: dashboardRow.implicitHeight + 28
+            radius: 12
+            color: root.inputBackground
+            border.color: root.borderColor
+            border.width: 1
+
+            RowLayout {
+                id: dashboardRow
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 12
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Label {
+                        text: (backend.uiTrigger, backend.getTextWithDefault("cache_dashboard_desc", "Reuse previous translations through the automatic cache or imported translation memory sources."))
+                        color: root.mainTextColor
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 13
+                        maximumLineCount: 2
+                    }
+                }
+
+                Rectangle { width: 1; Layout.fillHeight: true; color: root.borderColor }
+
+                ColumnLayout {
+                    spacing: 4
+                    Label {
+                        text: (backend.uiTrigger, backend.getTextWithDefault("cache_dashboard_entries", "Cached Entries"))
+                        color: root.secondaryTextColor
+                        font.pixelSize: 11
+                        font.bold: true
+                    }
+                    Label {
+                        text: cacheModel.count
+                        color: Material.accent
+                        font.pixelSize: 20
+                        font.bold: true
+                    }
                 }
             }
         }
@@ -184,14 +242,15 @@ Rectangle {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 12
+                        spacing: 10
+                        Layout.minimumWidth: 0
 
                         TextField {
                             id: searchField
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 50
+                            Layout.preferredHeight: 46
                             placeholderText: (backend.uiTrigger, backend.getTextWithDefault("cache_search_placeholder", "Search... (Original, Translation, Engine)"))
-                            leftPadding: 16
+                            leftPadding: 14
 
                             background: Rectangle {
                                 color: root.inputBackground
@@ -205,6 +264,8 @@ Rectangle {
                         Button {
                             text: "🔄"
                             font.family: root.iconFontFamily
+                            font.pixelSize: 12
+                            padding: 6
                             onClicked: refreshCacheData()
                             ToolTip.visible: hovered
                             ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("btn_refresh", "Refresh"))
@@ -213,6 +274,8 @@ Rectangle {
                         Button {
                             text: "🗑️ " + (backend.uiTrigger, backend.getTextWithDefault("btn_clear_cache", "Clear All"))
                             font.family: root.iconFontFamily
+                            font.pixelSize: 12
+                            padding: 6
                             Material.background: Material.Red
                             onClicked: clearConfirmDialog.open()
                         }
@@ -220,6 +283,8 @@ Rectangle {
                         Label {
                             text: (backend.uiTrigger, backend.getTextWithDefault("total_cache", "Entries: {count}")).replace("{count}", cacheModel.count)
                             color: root.secondaryTextColor
+                            Layout.minimumWidth: 90
+                            Layout.alignment: Qt.AlignVCenter
                         }
                     }
 
@@ -233,20 +298,20 @@ Rectangle {
 
                         delegate: Rectangle {
                             width: ListView.view.width
-                            height: Math.max(80, columnContent.implicitHeight + 24)
+                            height: Math.max(104, columnContent.implicitHeight + 32)
                             color: root.cardBackground
-                            radius: 8
+                            radius: 10
 
                             RowLayout {
                                 id: columnContent
                                 anchors.fill: parent
-                                anchors.margins: 12
+                                anchors.margins: 14
                                 spacing: 12
 
                                 Rectangle {
                                     Layout.alignment: Qt.AlignTop
-                                    width: 60
-                                    height: 24
+                                    width: 68
+                                    height: 28
                                     radius: 4
                                     color: {
                                         if (model.engine.includes("google")) return "#4285F4"
@@ -260,14 +325,14 @@ Rectangle {
                                         anchors.centerIn: parent
                                         text: model.engine.toUpperCase()
                                         color: "white"
-                                        font.pixelSize: 10
+                                        font.pixelSize: 9
                                         font.bold: true
                                     }
                                 }
 
                                 ColumnLayout {
                                     Layout.fillWidth: true
-                                    spacing: 4
+                                    spacing: 6
 
                                     Label {
                                         text: model.source_lang + " ➔ " + model.target_lang
@@ -281,7 +346,7 @@ Rectangle {
                                         color: root.mainTextColor
                                         wrapMode: Text.Wrap
                                         Layout.fillWidth: true
-                                        maximumLineCount: 3
+                                        maximumLineCount: 2
                                         elide: Text.ElideRight
                                     }
 
@@ -292,7 +357,7 @@ Rectangle {
                                         font.italic: true
                                         wrapMode: Text.Wrap
                                         Layout.fillWidth: true
-                                        maximumLineCount: 3
+                                        maximumLineCount: 2
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -305,6 +370,9 @@ Rectangle {
                                         text: "✏️"
                                         font.family: root.iconFontFamily
                                         flat: true
+                                        font.pixelSize: 12
+                                        padding: 4
+                                        Layout.alignment: Qt.AlignVCenter
                                         onClicked: {
                                             editDialog.engine = model.engine
                                             editDialog.sourceLang = model.source_lang
@@ -319,6 +387,9 @@ Rectangle {
                                         text: "❌"
                                         font.family: root.iconFontFamily
                                         flat: true
+                                        font.pixelSize: 12
+                                        padding: 4
+                                        Layout.alignment: Qt.AlignVCenter
                                         onClicked: {
                                             if (backend.deleteCacheEntry(model.engine, model.source_lang, model.target_lang, model.original)) {
                                                 cacheModel.remove(index)

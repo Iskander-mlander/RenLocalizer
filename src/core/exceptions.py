@@ -1,9 +1,9 @@
 """
-Custom exceptions for RenLocalizer V2.
+Custom exceptions for RenLocalizer.
 """
 
 class RenLocalizerError(Exception):
-    """Base exception for RenLocalizer V2."""
+    """Base exception for RenLocalizer."""
     pass
 
 class ProxyError(RenLocalizerError):

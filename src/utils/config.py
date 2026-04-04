@@ -416,6 +416,9 @@ class ConfigManager:
         
         # Default configuration
         self.translation_settings = TranslationSettings()
+        self.translation_settings.target_language = self.normalize_renpy_language_code(self.translation_settings.target_language)
+        if self.translation_settings.source_language and self.translation_settings.source_language != "auto":
+            self.translation_settings.source_language = self.normalize_renpy_language_code(self.translation_settings.source_language)
         self.api_keys = ApiKeys()
         self.app_settings = AppSettings()
         self.proxy_settings = ProxySettings()
@@ -565,7 +568,7 @@ class ConfigManager:
         """Fallback translations if JSON files are not available."""
         return {
             'tr': {
-                'app_title': 'RenLocalizer V2',
+                'app_title': 'RenLocalizer',
                 'file_menu': 'Dosya',
                 'help_menu': 'Yardım',
                 'about': 'Hakkında',
@@ -589,7 +592,7 @@ class ConfigManager:
                 }
             },
             'en': {
-                'app_title': 'RenLocalizer V2',
+                'app_title': 'RenLocalizer',
                 'file_menu': 'File',
                 'help_menu': 'Help',
                 'about': 'About',
@@ -627,6 +630,14 @@ class ConfigManager:
                 if 'translation_settings' in config_data:
                     trans_data = self._filter_config_data(TranslationSettings, config_data['translation_settings'])
                     self.translation_settings = TranslationSettings(**trans_data)
+                    normalized_target = self.normalize_renpy_language_code(self.translation_settings.target_language)
+                    normalized_source = self.translation_settings.source_language
+                    if normalized_source and normalized_source != "auto":
+                        normalized_source = self.normalize_renpy_language_code(normalized_source)
+                    if normalized_target != self.translation_settings.target_language or normalized_source != self.translation_settings.source_language:
+                        self.translation_settings.target_language = normalized_target
+                        self.translation_settings.source_language = normalized_source
+                        config_loaded = True
                 
                 # Load API keys
                 if 'api_keys' in config_data:
@@ -703,6 +714,38 @@ class ConfigManager:
             return self.proxy_settings
         return None
 
+    def get_api_to_renpy_map(self) -> Dict[str, str]:
+        """Get API language code to Ren'Py language code mapping."""
+        return {item['api'].lower(): item['renpy'] for item in self.get_all_languages()}
+
+    def normalize_renpy_language_code(self, code: Any) -> str:
+        """Normalize a language code to the Ren'Py folder key.
+
+        Accepts legacy API codes (e.g. tr, es, zh-CN) and returns the
+        Ren'Py language key used for tl/<lang>/ directories.
+        """
+        value = str(code or "").strip()
+        if not value:
+            return "turkish"
+
+        lowered = value.lower()
+        renpy_codes = {item['renpy'].lower(): item['renpy'] for item in self.get_all_languages()}
+        if lowered in renpy_codes:
+            return renpy_codes[lowered]
+
+        api_to_renpy = self.get_api_to_renpy_map()
+        if lowered in api_to_renpy:
+            return api_to_renpy[lowered]
+
+        # Legacy naming fallback
+        legacy_map = {
+            "tr": "turkish",
+            "zh-cn": "chinese_s",
+            "zh_tw": "chinese_t",
+            "zh-tw": "chinese_t",
+        }
+        return legacy_map.get(lowered, value)
+
     def save_glossary(self) -> bool:
         """Save glossary to file."""
         try:
@@ -762,6 +805,11 @@ class ConfigManager:
             if not hasattr(section_obj, setting):
                 self.logger.warning("Unknown config setting requested: %s", key)
                 return
+
+            if section == "translation" and setting == "target_language":
+                value = self.normalize_renpy_language_code(value)
+            elif section == "translation" and setting == "source_language" and value != "auto":
+                value = self.normalize_renpy_language_code(value)
 
             setattr(section_obj, setting, value)
             self._normalize_dataclass_instance(section_obj)

@@ -16,6 +16,17 @@ Rectangle {
     property int untranslatedLines: 0
     property bool statsAvailable: false
     property var tmHomeSources: []
+    property bool logCollapsed: false
+
+    function displayPath(pathText) {
+        if (!pathText || pathText.length === 0) {
+            return backend.getTextWithDefault("home_no_project", "No project selected")
+        }
+        var normalized = pathText.replace(/^[a-zA-Z]:[\\/]/, "")
+        var segments = normalized.split(/[\\/]/)
+        if (segments.length <= 3) return pathText
+        return ".../" + segments.slice(-3).join("/")
+    }
 
     function refreshTMHomeSources() {
         tmHomeSources = backend.getAvailableTMSources()
@@ -193,10 +204,79 @@ Rectangle {
                     }
 
                     Label {
-                        text: (backend.uiTrigger, backend.getTextWithDefault("app_subtitle", "Professional Ren'Py Translation Tool"))
+                        text: (backend.uiTrigger, backend.getTextWithDefault("app_subtitle", "Ren'Py Translation Tool"))
                         font.pixelSize: 16
                         color: root.secondaryTextColor
                         font.weight: Font.Medium
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 88
+                radius: 16
+                color: root.inputBackground
+                border.color: root.borderColor
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        Label {
+                            text: (backend.uiTrigger, backend.getTextWithDefault("home_summary_project", "Project"))
+                            color: root.secondaryTextColor
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                        Label {
+                            text: displayPath(projectPathField.text)
+                            color: root.mainTextColor
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Rectangle { width: 1; Layout.fillHeight: true; color: root.borderColor }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        Label {
+                            text: (backend.uiTrigger, backend.getTextWithDefault("home_summary_languages", "Languages"))
+                            color: root.secondaryTextColor
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                        Label {
+                            text: sourceLangCombo.currentText + " → " + targetLangCombo.currentText
+                            color: root.mainTextColor
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Rectangle { width: 1; Layout.fillHeight: true; color: root.borderColor }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        Label {
+                            text: (backend.uiTrigger, backend.getTextWithDefault("home_summary_engine", "Engine"))
+                            color: root.secondaryTextColor
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                        Label {
+                            text: engineCombo.currentText + (backend.getUseExternalTM() ? " · TM" : "")
+                            color: root.mainTextColor
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                        }
                     }
                 }
             }
@@ -741,7 +821,7 @@ Rectangle {
             // ==================== Log Paneli ====================
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 300
+                Layout.preferredHeight: logCollapsed ? 72 : 300
                 radius: 16
                 color: root.cardBackground
 
@@ -762,6 +842,17 @@ Rectangle {
                         }
 
                         Item { Layout.fillWidth: true }
+
+                        Button {
+                            text: logCollapsed ? "▸" : "▾"
+                            font.pixelSize: 16
+                            font.family: root.iconFontFamily
+                            flat: true
+                            onClicked: logCollapsed = !logCollapsed
+
+                            ToolTip.visible: hovered
+                            ToolTip.text: logCollapsed ? backend.getTextWithDefault("expand", "Expand") : backend.getTextWithDefault("collapse", "Collapse")
+                        }
 
                         Button {
                             text: "📄"
@@ -787,6 +878,7 @@ Rectangle {
 
                     // Log ListView (Virtual Scrolling için optimize)
                     ListView {
+                        visible: !logCollapsed
                         id: logListView
                         Layout.fillWidth: true
                         Layout.fillHeight: true

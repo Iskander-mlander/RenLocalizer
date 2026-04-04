@@ -230,16 +230,26 @@ class RenPyParser:
             r'python|init|define|default|style|image|caption|frame|transform)\b)'
             r'[A-Za-z_][\w\.]*'
         )
+        _dialogue_attr_token = (
+            r'(?:@\s*)?-?(?!(?:at|as|behind|onlayer|with|zorder|show|hide|scene|call|jump|'
+            r'return|play|stop|queue|pause|python|screen|menu|textbutton|text|label|tooltip|'
+            r'window|frame|transform|define|default|style|image|caption)\b)[A-Za-z_][\w-]*'
+        )
+        _dialogue_attr_tail = rf'(?:\s+{_dialogue_attr_token})*'
+        _dialogue_speaker_or_quoted = (
+            rf'(?:{_dialogue_speaker_name}|"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
+        )
         self.char_dialog_re = re.compile(
-            rf'^(?P<indent>\s*)(?P<char>{_dialogue_speaker_name})\s*'
+            rf'^(?P<indent>\s*)(?P<char>{_dialogue_speaker_or_quoted}){_dialogue_attr_tail}\s*'
             r'(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
+            r'(?P<trailing>\s*(?:(?:with|nointeract|at)\s+\S+)?\s*(?:#.*)?)$'
         )
         self.narrator_re = re.compile(
             r'^(?P<indent>\s+)(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')(?P<trailing>\s*(?:(?:with|nointeract|at)\s+\S+)?\s*(?:#.*)?)$'
         )
 
         self.char_multiline_re = re.compile(
-            rf'^(?P<indent>\s*)(?P<char>{_dialogue_speaker_name})\s*(?P<delim>"""|\'\'\')(?P<body>.*)$'
+            rf'^(?P<indent>\s*)(?P<char>{_dialogue_speaker_or_quoted}){_dialogue_attr_tail}\s*(?P<delim>"""|\'\'\')(?P<body>.*)$'
         )
         self.narrator_multiline_re = re.compile(
             r'^(?P<indent>\s*)(?P<delim>"""|\'\'\')(?P<body>(?![\s]*\)).*)$'
@@ -1036,6 +1046,8 @@ class RenPyParser:
                 char_group = descriptor.get('character_group')
                 if char_group and match.groupdict().get(char_group):
                     character = match.group(char_group)
+                    if character and len(character) >= 2 and character[0] == character[-1] and character[0] in ('"', "'"):
+                        character = character[1:-1]
                 
                 for quote in quotes:
                     # preserve both raw and unescaped variants for exact matching and ID generation
@@ -2090,6 +2102,8 @@ class RenPyParser:
             char_group = descriptor.get('character_group')
             if char_group and match.groupdict().get(char_group):
                 character = match.group(char_group)
+                if character and len(character) >= 2 and character[0] == character[-1] and character[0] in ('"', "'"):
+                    character = character[1:-1]
 
             entry = self._record_entry(
                 text=text,

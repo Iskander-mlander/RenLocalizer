@@ -916,7 +916,8 @@ class TranslationPipeline(QObject):
                 candidate = os.path.dirname(game_exe_path)
         
         self.project_path = candidate
-        self.target_language = target_language
+        reverse_lang_map = {v.lower(): k for k, v in RENPY_TO_API_LANG.items()}
+        self.target_language = reverse_lang_map.get((target_language or "").lower(), target_language)
         self.source_language = source_language
         self.engine = engine
         self.auto_unren = auto_unren
@@ -2116,7 +2117,7 @@ init python:
         renpy_lang = reverse_lang_map.get(target_iso, target_iso)
 
         # Konfigure et
-        self.target_language = target_iso
+        self.target_language = renpy_lang
         self.source_language = source_language
         self.engine = engine
         self.use_proxy = use_proxy

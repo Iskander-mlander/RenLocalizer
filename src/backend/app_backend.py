@@ -12,6 +12,7 @@ import os
 import sys
 import threading
 import asyncio
+import shutil
 import json
 import time
 import webbrowser
@@ -751,8 +752,9 @@ class AppBackend(QObject):
     @pyqtSlot(str)
     def setTargetLanguage(self, lang: str):
         """Hedef dili ayarla."""
-        self._target_language = lang
-        self.config.translation_settings.target_language = lang
+        normalized_lang = self.config.normalize_renpy_language_code(lang)
+        self._target_language = normalized_lang
+        self.config.translation_settings.target_language = normalized_lang
         self.config.save_config()
         # Reload cache for the new language (Async to avoid UI freeze)
         self._update_cache_path_async()
@@ -1663,6 +1665,273 @@ class AppBackend(QObject):
                 self.logMessage.emit("error", self.config.get_ui_text("tool_rpa_pack_error", "RPA packing failed: {error}").format(error=str(e)))
 
         threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot(str, str, str, str, bool)
+    def translateStructuredDataFile(self, folder_path: str, backup_root: str, target_language: str, engine_code: str, preserve_formatting: bool = True):
+        """Translate TXT/YAML files in-place with automatic backups."""
+        if self._is_busy:
+            self.warningMessage.emit(
+                self.config.get_ui_text("warning", "Warning"),
+                self.config.get_ui_text("app_busy", "Another operation is in progress...")
+            )
+            return
+
+        if folder_path.startswith("file:///"):
+            folder_path = folder_path[8:] if sys.platform == "win32" else folder_path[7:]
+        folder_path = folder_path.replace("/", os.sep)
+        root = Path(folder_path)
+        if not root.exists() or not root.is_dir():
+            self.logMessage.emit(
+                "error",
+                self.config.get_ui_text(
+                    "structured_data_invalid_folder",
+                    "Please select a valid folder containing TXT/YAML files."
+                )
+            )
+            return
+
+        if backup_root.startswith("file:///"):
+            backup_root = backup_root[8:] if sys.platform == "win32" else backup_root[7:]
+        backup_root = backup_root.replace("/", os.sep).strip()
+        if not backup_root:
+            backup_root = str(root.parent / "old-txt-yaml")
+        else:
+            try:
+                if Path(backup_root).resolve() == root.resolve():
+                    backup_root = str(root.parent / "old-txt-yaml")
+            except Exception:
+                pass
+
+        self._set_busy(True)
+        threading.Thread(
+            target=self._run_structured_data_translation,
+            args=(str(root), backup_root, target_language, engine_code, preserve_formatting),
+            daemon=True,
+        ).start()
+
+    def _path_is_inside(self, child: Path, parent: Path) -> bool:
+        try:
+            child_resolved = child.resolve()
+            parent_resolved = parent.resolve()
+            return child_resolved == parent_resolved or parent_resolved in child_resolved.parents
+        except Exception:
+            child_str = str(child).replace("\\", "/").lower()
+            parent_str = str(parent).replace("\\", "/").lower().rstrip("/") + "/"
+            return child_str.startswith(parent_str)
+
+    def _run_structured_data_translation(self, folder_path: str, backup_root: str, target_language: str, engine_code: str, preserve_formatting: bool):
+        try:
+            from src.utils.encoding import read_text_safely, save_text_safely
+            from src.core.syntax_guard import protect_renpy_syntax, restore_renpy_syntax
+            from src.core.parser import RenPyParser
+            from src.core.translator import TranslationRequest
+
+            import yaml
+
+            source_root = Path(folder_path)
+            backup_root_path = Path(backup_root)
+            if not source_root.exists() or not source_root.is_dir():
+                raise RuntimeError("Source folder not found")
+
+            text_filter = RenPyParser()
+
+            def should_translate_text(value: str) -> bool:
+                if not isinstance(value, str):
+                    return False
+                candidate = value.strip()
+                if len(candidate) < 2:
+                    return False
+                return text_filter.is_meaningful_text(candidate)
+
+            supported_suffixes = {".txt", ".yml", ".yaml"}
+            files = []
+            for path in source_root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if path.suffix.lower() not in supported_suffixes:
+                    continue
+                if self._path_is_inside(path, backup_root_path):
+                    continue
+                files.append(path)
+
+            if not files:
+                self.logMessage.emit(
+                    "warning",
+                    self.config.get_ui_text(
+                        "structured_data_no_files",
+                        "No TXT/YAML files were found in the selected folder."
+                    )
+                )
+                return
+
+            engine = self._get_engine_enum(engine_code)
+            renpy_to_api = self.config.get_renpy_to_api_map()
+            target_api = renpy_to_api.get(target_language.lower(), target_language)
+            source_api = "auto"
+
+            backup_root_path.mkdir(parents=True, exist_ok=True)
+
+            self.logMessage.emit(
+                "info",
+                self.config.get_ui_text(
+                    "structured_data_running",
+                    "Scanning {count} TXT/YAML file(s)..."
+                ).replace("{count}", str(len(files)))
+            )
+            self.logMessage.emit(
+                "info",
+                self.config.get_ui_text(
+                    "structured_data_backup_root",
+                    "Backup folder: {path}"
+                ).replace("{path}", str(backup_root_path))
+            )
+
+            def translate_texts(text_items):
+                if not text_items:
+                    return []
+
+                async def _translate():
+                    requests = []
+                    protected_payloads = []
+                    for original in text_items:
+                        protected, placeholders = protect_renpy_syntax(original) if preserve_formatting else (original, {})
+                        protected_payloads.append((original, protected, placeholders))
+                        requests.append(
+                            TranslationRequest(
+                                text=protected,
+                                source_lang=source_api,
+                                target_lang=target_api,
+                                engine=engine,
+                                metadata={"original_text": original, "structured_data": True},
+                            )
+                        )
+
+                    results = await self.translation_manager.translate_batch(requests)
+                    translated = []
+                    for (original, _, placeholders), result in zip(protected_payloads, results):
+                        if result.success and result.translated_text:
+                            translated.append(restore_renpy_syntax(result.translated_text, placeholders) if preserve_formatting else result.translated_text)
+                        else:
+                            translated.append(original)
+                    return translated
+
+                return asyncio.run(_translate())
+
+
+            processed = 0
+            backed_up = 0
+            skipped = 0
+            warnings = 0
+
+            for path in files:
+                rel = path.relative_to(source_root)
+                backup_path = backup_root_path / rel
+                backup_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, backup_path)
+                backed_up += 1
+
+                suffix = path.suffix.lower()
+                if suffix == ".txt":
+                    content = read_text_safely(path)
+                    if content is None:
+                        skipped += 1
+                        self.logMessage.emit("warning", f"TXT read failed, skipped: {path}")
+                        continue
+
+                    lines = content.splitlines(keepends=True)
+                    candidate_indices = []
+                    candidate_texts = []
+                    for idx, line in enumerate(lines):
+                        stripped = line.strip()
+                        if not stripped or stripped.startswith(("#", ";", "//")):
+                            continue
+                        lead = len(line) - len(line.lstrip())
+                        core = line[lead:].rstrip("\r\n")
+                        if not should_translate_text(core):
+                            continue
+                        candidate_indices.append(idx)
+                        candidate_texts.append(core)
+
+                    translated_texts = translate_texts(candidate_texts)
+                    for idx, translated in zip(candidate_indices, translated_texts):
+                        line = lines[idx]
+                        lead = len(line) - len(line.lstrip())
+                        newline = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+                        lines[idx] = (" " * lead) + translated + newline
+
+                    if not save_text_safely(path, "".join(lines), encoding="utf-8"):
+                        raise RuntimeError(f"Could not write translated TXT file: {path}")
+
+                else:
+                    data_text = read_text_safely(path)
+                    if data_text is None:
+                        skipped += 1
+                        self.logMessage.emit("warning", f"YAML read failed, skipped: {path}")
+                        continue
+
+                    try:
+                        data = yaml.safe_load(data_text)
+                    except Exception as e:
+                        skipped += 1
+                        warnings += 1
+                        self.logMessage.emit("warning", f"YAML parse failed, skipped: {path} — {e}")
+                        continue
+
+                    collected_strings = []
+
+                    def collect(obj):
+                        if isinstance(obj, str):
+                            if should_translate_text(obj):
+                                collected_strings.append(obj)
+                            return
+                        if isinstance(obj, list):
+                            for item in obj:
+                                collect(item)
+                        elif isinstance(obj, dict):
+                            for value in obj.values():
+                                collect(value)
+
+                    collect(data)
+                    translated_strings = translate_texts(collected_strings)
+                    translated_iter = iter(translated_strings)
+
+                    def rebuild(obj):
+                        if isinstance(obj, str):
+                            if not should_translate_text(obj):
+                                return obj
+                            return next(translated_iter, obj)
+                        if isinstance(obj, list):
+                            return [rebuild(item) for item in obj]
+                        if isinstance(obj, dict):
+                            return {key: rebuild(value) for key, value in obj.items()}
+                        return obj
+
+                    translated_data = rebuild(data)
+                    yaml_text = yaml.safe_dump(translated_data, sort_keys=False, allow_unicode=True, width=4096)
+                    if not save_text_safely(path, yaml_text, encoding="utf-8"):
+                        raise RuntimeError(f"Could not write translated YAML file: {path}")
+
+                processed += 1
+                self.logMessage.emit("info", f"[TXT/YAML] Updated: {rel}")
+
+            self.logMessage.emit(
+                "success",
+                self.config.get_ui_text(
+                    "structured_data_success",
+                    "Updated {count} file(s). Backups stored in {path}"
+                ).replace("{count}", str(processed)).replace("{path}", str(backup_root_path))
+            )
+            self.logMessage.emit(
+                "warning",
+                self.config.get_ui_text(
+                    "structured_data_warning",
+                    "Best-effort helper: YAML comments and custom formatting may change, and games may not always read these files through Ren'Py's TL flow."
+                )
+            )
+        except Exception as e:
+            self.logMessage.emit("error", f"Structured data translation failed: {e}")
+        finally:
+            self._set_busy(False)
 
     # ==================== EXTERNAL TM (v2.7.3) ====================
 

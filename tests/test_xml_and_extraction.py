@@ -79,6 +79,24 @@ transform my_anim:
         found = any(e['text'] == "Animated Text" for e in entries)
         self.assertTrue(found, "Failed to extract text from ATL transform block")
 
+    def test_dialogue_with_image_attributes_and_quoted_names(self):
+        content = """
+label start:
+    iside basics "The house is clean and nice."
+    "Mark" "Come here."
+    e happy @ vhappy "Really?"
+    window show "Loading"
+    show text "Loading"
+    textbutton "Start"
+"""
+        entries = extract_with_pyparsing(content, "test.rpy")
+        texts = [e['text'] for e in entries]
+        self.assertIn("The house is clean and nice.", texts)
+        self.assertIn("Come here.", texts)
+        self.assertIn("Really?", texts)
+        self.assertNotIn("Loading", texts)
+        self.assertNotIn("Start", texts)
+
     def test_f_string_extraction(self):
         extractor = MockExtractor()
         code = "msg = f\"Values: {x}, {y}\""

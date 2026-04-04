@@ -1,5 +1,5 @@
 """
-Src module for RenLocalizer V2
+Src module for RenLocalizer
 =============================
 
 Note: GUI modules are not imported at package level to avoid 

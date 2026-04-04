@@ -8,6 +8,11 @@ Rectangle {
     id: settingsPage
     color: Material.background
 
+    function stripLeadingGlyph(text) {
+        if (!text) return text
+        return text.replace(/^[^A-Za-z0-9\u00C0-\u024F\u0400-\u052F\u0600-\u06FF\u3040-\u30FF\u4E00-\u9FFF]+\s*/, "")
+    }
+
     ScrollView {
         anchors.fill: parent
         contentWidth: availableWidth
@@ -22,17 +27,55 @@ Rectangle {
             anchors.margins: 24
             spacing: 24
 
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                Label {
+                    text: "⚙️"
+                    font.pixelSize: 28
+                    font.family: root.iconFontFamily
+                    font.bold: true
+                    color: root.mainTextColor
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: (backend.uiTrigger, backend.getTextWithDefault("nav_settings", "Settings"))
+                    font.pixelSize: 28
+                    font.bold: true
+                    color: root.mainTextColor
+                    wrapMode: Text.WordWrap
+                    elide: Text.ElideRight
+                }
+            }
+
+            TabBar {
+                id: settingsTabs
+                Layout.fillWidth: true
+
+                TabButton { text: (backend.uiTrigger, backend.getTextWithDefault("settings_tab_general", "General")) }
+                TabButton { text: (backend.uiTrigger, backend.getTextWithDefault("settings_tab_engines", "Engines")) }
+                TabButton { text: (backend.uiTrigger, backend.getTextWithDefault("settings_tab_translation", "Translation")) }
+                TabButton { text: (backend.uiTrigger, backend.getTextWithDefault("settings_tab_network", "Network")) }
+                TabButton { text: (backend.uiTrigger, backend.getTextWithDefault("settings_tab_ai", "AI")) }
+                TabButton { text: (backend.uiTrigger, backend.getTextWithDefault("settings_tab_system", "System")) }
+            }
+
             Label {
-                text: "⚙️ " + (backend.uiTrigger, backend.getTextWithDefault("nav_settings", "Settings"))
-                font.pixelSize: 28
-                font.family: root.iconFontFamily
-                font.bold: true
-                color: root.mainTextColor
+                Layout.fillWidth: true
+                text: (backend.uiTrigger, backend.getTextWithDefault("settings_tabs_hint", "Use the tabs to move between settings groups without losing access to advanced options."))
+                color: root.secondaryTextColor
+                wrapMode: Text.WordWrap
+                font.pixelSize: 12
             }
 
             // ==================== GENEL AYARLAR ====================
             SettingsGroup {
-                title: "🌐 " + (backend.uiTrigger, backend.getTextWithDefault("settings_general", "General Settings"))
+                visible: settingsTabs.currentIndex === 0
+                icon: "🌐"
+                titleText: backend.getTextWithDefault("settings_general", "General Settings")
                 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -138,7 +181,9 @@ Rectangle {
 
             // ==================== API AYARLARI ====================
             SettingsGroup {
-                title: "🔌 " + (backend.uiTrigger, backend.getTextWithDefault("settings_engines_title", "Translation Engines & APIs"))
+                visible: settingsTabs.currentIndex === 1
+                icon: "🔌"
+                titleText: backend.getTextWithDefault("settings_engines_title", "Translation Engines & APIs")
                 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -181,7 +226,12 @@ Rectangle {
                     }
 
                     // OpenAI / OpenRouter Section
-                    Label { text: (backend.uiTrigger, backend.getTextWithDefault("openai_section_title", "🤖 OpenAI / OpenRouter / DeepSeek")); font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; Layout.topMargin: 10 }
+                    RowLayout {
+                        Layout.topMargin: 10
+                        spacing: 10
+                        Label { text: "🤖"; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor }
+                        Label { text: stripLeadingGlyph(backend.getTextWithDefault("openai_section_title", "OpenAI / OpenRouter / DeepSeek")); font.bold: true; color: root.mainTextColor; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    }
                     
                     // Preset ComboBox
                     RowLayout {
@@ -241,7 +291,12 @@ Rectangle {
                     }
 
                     // Gemini Section
-                    Label { text: (backend.uiTrigger, backend.getTextWithDefault("gemini_section_title", "✨ Google Gemini")); font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; Layout.topMargin: 10 }
+                    RowLayout {
+                        Layout.topMargin: 10
+                        spacing: 10
+                        Label { text: "✨"; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor }
+                        Label { text: stripLeadingGlyph(backend.getTextWithDefault("gemini_section_title", "Google Gemini")); font.bold: true; color: root.mainTextColor; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    }
                     ApiField { 
                         label: (backend.uiTrigger, backend.getTextWithDefault("gemini_api_key_label", "Gemini API Key")); 
                         text: settingsBackend.getGeminiApiKey(); 
@@ -282,7 +337,12 @@ Rectangle {
                     }
 
                     // Local LLM Section
-                    Label { text: "🖥️ " + (backend.uiTrigger, backend.getTextWithDefault("settings_local_llm_title", "Local LLM Settings")); font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; Layout.topMargin: 10 }
+                    RowLayout {
+                        Layout.topMargin: 10
+                        spacing: 10
+                        Label { text: "🖥️"; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor }
+                        Label { text: stripLeadingGlyph(backend.getTextWithDefault("settings_local_llm_title", "Local LLM Settings")); font.bold: true; color: root.mainTextColor; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    }
                     Label {
                         text: (backend.uiTrigger, backend.getTextWithDefault("settings_local_llm_desc", "Connect local AI apps (Ollama, LM Studio etc.) for context-aware, highly accurate translations that remember previous lines."))
                         color: "#999"
@@ -346,7 +406,12 @@ Rectangle {
                     Label { id: testResultLabel; Layout.fillWidth: true; color: text.includes("Success") ? "#6bcb77" : "#ff6b6b"; wrapMode: Text.Wrap }
 
                     // LibreTranslate Section
-                    Label { text: "🌐 " + (backend.uiTrigger, backend.getTextWithDefault("settings_libretranslate_title", "LibreTranslate (Local / Self-hosted)")); font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; Layout.topMargin: 10 }
+                    RowLayout {
+                        Layout.topMargin: 10
+                        spacing: 10
+                        Label { text: "🌐"; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor }
+                        Label { text: stripLeadingGlyph(backend.getTextWithDefault("settings_libretranslate_title", "LibreTranslate (Local / Self-hosted)")); font.bold: true; color: root.mainTextColor; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    }
                     Label {
                         text: (backend.uiTrigger, backend.getTextWithDefault("settings_libretranslate_desc", "Connect LibreTranslate, Apertium or any compatible local translation server for fully offline, privacy-friendly machine translations."))
                         color: "#999"
@@ -407,7 +472,12 @@ Rectangle {
 
 
                     // Yandex Translate Section
-                    Label { text: "🔵 " + (backend.uiTrigger, backend.getTextWithDefault("settings_yandex_title", "Yandex Translate (Free)")); font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor; Layout.topMargin: 10 }
+                    RowLayout {
+                        Layout.topMargin: 10
+                        spacing: 10
+                        Label { text: "🔵"; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor }
+                        Label { text: stripLeadingGlyph(backend.getTextWithDefault("settings_yandex_title", "Yandex Translate (Free)")); font.bold: true; color: root.mainTextColor; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    }
                     Label {
                         text: (backend.uiTrigger, backend.getTextWithDefault("settings_yandex_desc", "Zero configuration needed — works out of the box. No API key, no URL. Use the button below to verify Yandex servers are reachable from your network (useful behind firewalls or in regions where Yandex may be restricted)."))
                         color: "#999"
@@ -428,7 +498,9 @@ Rectangle {
 
             // ==================== ÇEVİRİ FİLTRELERİ ====================
             SettingsGroup {
-                title: "🔍 " + (backend.uiTrigger, backend.getTextWithDefault("translation_filters", "What to translate?"))
+                visible: settingsTabs.currentIndex === 2
+                icon: "🔍"
+                titleText: backend.getTextWithDefault("translation_filters", "What to translate?")
                 
                 GridLayout {
                     columns: 2
@@ -455,7 +527,9 @@ Rectangle {
 
             // ==================== PERFORMANS & TEKNİK ====================
             SettingsGroup {
-                title: "⚡ " + (backend.uiTrigger, backend.getTextWithDefault("settings_network_title", "Network & Performance"))
+                visible: settingsTabs.currentIndex === 3
+                icon: "⚡"
+                titleText: backend.getTextWithDefault("settings_network_title", "Network & Performance")
                 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -539,7 +613,12 @@ Rectangle {
                     }
 
                     // Proxy Settings section inside Network & Performance
-                    Label { text: (backend.uiTrigger, backend.getTextWithDefault("group_proxy", "🌐 Proxy Settings")); font.bold: true; color: root.mainTextColor; Layout.topMargin: 10 }
+                    RowLayout {
+                        Layout.topMargin: 10
+                        spacing: 10
+                        Label { text: "🌐"; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor }
+                        Label { text: stripLeadingGlyph(backend.getTextWithDefault("group_proxy", "Proxy Settings")); font.bold: true; color: root.mainTextColor; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    }
                     
                     DescriptiveCheck { 
                         label: (backend.uiTrigger, backend.getTextWithDefault("proxy_enabled", "Use Proxy"))
@@ -647,7 +726,9 @@ Rectangle {
 
             // ==================== AI MODEL PARAMETRELERİ ====================
             SettingsGroup {
-                title: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("settings_ai_tuning_title", "AI Tuning & Parameters"))
+                visible: settingsTabs.currentIndex === 4
+                icon: "🧠"
+                titleText: backend.getTextWithDefault("settings_ai_tuning_title", "AI Tuning & Parameters")
                 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -801,7 +882,9 @@ Rectangle {
 
             // ==================== SİSTEM & TEKNİK AYARLAR ====================
             SettingsGroup {
-                title: "🛠️ " + (backend.uiTrigger, backend.getTextWithDefault("settings_system_title", "System & Technical Settings"))
+                visible: settingsTabs.currentIndex === 5
+                icon: "🛠️"
+                titleText: backend.getTextWithDefault("settings_system_title", "System & Technical Settings")
                 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -964,7 +1047,8 @@ Rectangle {
 
     // Helper Components
     component SettingsGroup: Rectangle {
-        property string title: ""
+        property string icon: ""
+        property string titleText: ""
         default property alias content: innerLayout.children
         Layout.fillWidth: true
         implicitHeight: innerLayout.height + 40
@@ -973,15 +1057,29 @@ Rectangle {
         ColumnLayout {
             id: innerLayout
             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 20; spacing: 16
-            Label { text: title; font.pixelSize: 18; font.family: root.iconFontFamily; font.bold: true; color: Material.accent }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Label { text: icon; font.pixelSize: 18; font.family: root.iconFontFamily; font.bold: true; color: Material.accent; visible: icon.length > 0 }
+                Label { text: stripLeadingGlyph(titleText); font.pixelSize: 18; font.bold: true; color: Material.accent; Layout.fillWidth: true; wrapMode: Text.WordWrap; elide: Text.ElideRight }
+            }
             Rectangle { Layout.fillWidth: true; height: 1; color: root.separatorColor }
         }
     }
 
     component SettingsRow: RowLayout {
         property string label: ""
-        spacing: 20
-        Label { text: label; Layout.preferredWidth: 200; color: root.secondaryTextColor }
+        spacing: 16
+        Layout.fillWidth: true
+        Label {
+            text: label
+            Layout.preferredWidth: 180
+            Layout.minimumWidth: 140
+            Layout.maximumWidth: 220
+            color: root.secondaryTextColor
+            wrapMode: Text.WordWrap
+            elide: Text.ElideRight
+        }
     }
 
     component FilterCheck: CheckBox {
@@ -1007,7 +1105,7 @@ Rectangle {
             checked: parent.checked
             onCheckedChanged: parent.toggled(checked)
             Layout.alignment: Qt.AlignTop
-            Layout.topMargin: -8
+            Layout.topMargin: -6
         }
 
         ColumnLayout {
@@ -1019,6 +1117,7 @@ Rectangle {
                 font.bold: true
                 font.pixelSize: 14
                 wrapMode: Text.Wrap
+                lineHeight: 1.15
                 Layout.fillWidth: true
                 MouseArea {
                     anchors.fill: parent
@@ -1030,6 +1129,7 @@ Rectangle {
                 color: root.secondaryTextColor
                 font.pixelSize: 11
                 wrapMode: Text.Wrap
+                lineHeight: 1.2
                 Layout.fillWidth: true
                 opacity: 0.7
             }

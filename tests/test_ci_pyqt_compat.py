@@ -122,6 +122,17 @@ def test_tools_page_keeps_tm_entry_but_points_users_to_reuse_page() -> None:
     assert 'tmImportDialog' in cache_qml
 
 
+def test_tools_page_exposes_structured_data_helper() -> None:
+    qml = Path("src/gui/qml/pages/ToolsPage.qml").read_text(encoding="utf-8")
+
+    assert 'structured_data_title' in qml
+    assert 'structured_data_dialog_title' in qml
+    assert 'structured_data_auto_note' in qml
+    assert 'structured_data_backup_note' in qml
+    assert 'backend.translateStructuredDataFile(' in qml
+    assert 'old-txt-yaml' in qml
+
+
 def test_all_locales_include_batch_cap_messages() -> None:
     required = {
         "batch_size_engine_cap_note",
@@ -141,6 +152,26 @@ def test_all_locales_include_batch_cap_messages() -> None:
         "external_tm_manual_reuse_note",
         "use_external_tm_label",
         "tm_import_tools_note",
+        "structured_data_title",
+        "structured_data_desc",
+        "structured_data_dialog_title",
+        "structured_data_dialog_desc",
+        "structured_data_auto_note",
+        "structured_data_source_label",
+        "structured_data_folder_placeholder",
+        "structured_data_backup_label",
+        "structured_data_backup_placeholder",
+        "structured_data_backup_title",
+        "structured_data_preserve_label",
+        "structured_data_preserve_desc",
+        "structured_data_backup_note",
+        "structured_data_invalid_folder",
+        "structured_data_no_files",
+        "structured_data_invalid_file",
+        "structured_data_running",
+        "structured_data_backup_root",
+        "structured_data_success",
+        "structured_data_warning",
     }
 
     for path in Path("locales").glob("*.json"):

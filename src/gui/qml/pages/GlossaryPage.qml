@@ -47,13 +47,25 @@ Rectangle {
         // ==================== HEADER ====================
         RowLayout {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             
             Label {
-                text: "📚 " + (backend.uiTrigger, backend.getTextWithDefault("nav_glossary", "Glossary Management"))
-                font.pixelSize: 24
+                text: "📚"
+                font.pixelSize: 22
                 font.family: root.iconFontFamily
                 font.bold: true
                 color: root.mainTextColor
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: (backend.uiTrigger, backend.getTextWithDefault("nav_glossary", "Glossary Management"))
+                font.pixelSize: 22
+                font.bold: true
+                color: root.mainTextColor
+                wrapMode: Text.WordWrap
+                elide: Text.ElideRight
             }
             
             Item { Layout.fillWidth: true }
@@ -61,6 +73,8 @@ Rectangle {
             Button {
                 text: "✨ " + (backend.uiTrigger, backend.getTextWithDefault("glossary_extract_btn", "Auto Extract"))
                 font.family: root.iconFontFamily
+                font.pixelSize: 12
+                padding: 6
                 onClicked: {
                     var result = backend.extractGlossaryTerms()
                     // Sonuç zaten logMessage ile geliyor ama direkt de gösterebiliriz
@@ -74,19 +88,69 @@ Rectangle {
             Button {
                 text: "➕ " + (backend.uiTrigger, backend.getTextWithDefault("edit_add", "Add"))
                 font.family: root.iconFontFamily
+                font.pixelSize: 12
+                padding: 6
                 highlighted: true
                 onClicked: addDialog.open()
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: dashboardRow.implicitHeight + 28
+            radius: 12
+            color: root.inputBackground
+            border.color: root.borderColor
+            border.width: 1
+
+            RowLayout {
+                id: dashboardRow
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 14
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Label {
+                        text: (backend.uiTrigger, backend.getTextWithDefault("glossary_dashboard_desc", "Manage preferred terms, fill empty entries from source text, and keep frequently used translations consistent."))
+                        color: root.mainTextColor
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 13
+                        maximumLineCount: 2
+                    }
+                }
+
+                Rectangle { width: 1; Layout.fillHeight: true; color: root.borderColor }
+
+                ColumnLayout {
+                    spacing: 4
+                    Label {
+                        text: (backend.uiTrigger, backend.getTextWithDefault("glossary_dashboard_total", "Total Terms"))
+                        color: root.secondaryTextColor
+                        font.pixelSize: 11
+                        font.bold: true
+                    }
+                    Label {
+                        text: glossaryModel.count
+                        color: Material.accent
+                        font.pixelSize: 20
+                        font.bold: true
+                    }
+                }
             }
         }
         
         // ==================== TOOLBAR ====================
         RowLayout {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: 10
             
             Button {
                 text: "🔄 " + (backend.uiTrigger, backend.getTextWithDefault("btn_translate_empty", "Translate Empty"))
                 font.family: root.iconFontFamily
+                font.pixelSize: 12
+                padding: 6
                 onClicked: backend.translateEmptyGlossaryItems()
                 flat: true
             }
@@ -94,6 +158,8 @@ Rectangle {
             Button {
                 text: "📝 " + (backend.uiTrigger, backend.getTextWithDefault("btn_copy_source", "Copy Source"))
                 font.family: root.iconFontFamily
+                font.pixelSize: 12
+                padding: 6
                 onClicked: backend.fillEmptyGlossaryWithSource()
                 flat: true
             }
@@ -110,11 +176,13 @@ Rectangle {
         // ==================== EXPORT/IMPORT TOOLBAR ====================
         RowLayout {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: 10
             
             Button {
                 text: "📤 " + (backend.uiTrigger, backend.getTextWithDefault("btn_export_glossary", "Export"))
                 font.family: root.iconFontFamily
+                font.pixelSize: 12
+                padding: 6
                 flat: true
                 onClicked: exportDialog.open()
             }
@@ -122,6 +190,8 @@ Rectangle {
             Button {
                 text: "📥 " + (backend.uiTrigger, backend.getTextWithDefault("btn_import_glossary", "Import"))
                 font.family: root.iconFontFamily
+                font.pixelSize: 12
+                padding: 6
                 flat: true
                 onClicked: importDialog.open()
             }
@@ -138,9 +208,9 @@ Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
-                spacing: 10
-                
-                Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_source", "Source Text")); color: root.secondaryTextColor; font.bold: true; Layout.preferredWidth: 250 }
+                spacing: 8
+
+                Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_source", "Source Text")); color: root.secondaryTextColor; font.bold: true; Layout.preferredWidth: 220 }
                 Rectangle { width: 1; height: 20; color: root.separatorColor }
                 Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_target", "Translation")); color: root.secondaryTextColor; font.bold: true; Layout.fillWidth: true }
                 Rectangle { width: 1; height: 20; color: root.separatorColor }
@@ -159,15 +229,16 @@ Rectangle {
             
             delegate: Rectangle {
                 width: ListView.view.width
-                height: 50
+                height: Math.max(66, rowContent.implicitHeight + 18)
                 color: index % 2 === 0 ? root.inputBackground : root.cardBackground
-                radius: 6
+                radius: 8
                 border.width: 0
                 
                 RowLayout {
+                    id: rowContent
                     anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
                     spacing: 10
                     
                     // Source
@@ -175,11 +246,14 @@ Rectangle {
                         text: model.source
                         color: root.mainTextColor
                         font.bold: true
-                        Layout.preferredWidth: 250
+                        Layout.preferredWidth: 210
+                        Layout.alignment: Qt.AlignVCenter
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
                         elide: Text.ElideRight 
                     }
                     
-                    Rectangle { width: 1; height: 30; color: root.separatorColor }
+                    Rectangle { width: 1; Layout.fillHeight: true; color: root.separatorColor }
                     
                     // Target (Editable-like look but currently view-only in list, edit via delete/re-add for MVP)
                     Label { 
@@ -187,17 +261,21 @@ Rectangle {
                         color: model.target ? Material.accent : "#555"
                         font.italic: !model.target
                         Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
                         elide: Text.ElideRight 
                     }
                     
-                    Rectangle { width: 1; height: 30; color: root.separatorColor }
+                    Rectangle { width: 1; Layout.fillHeight: true; color: root.separatorColor }
                     
                     // Delete Button
                     Button {
                         text: "❌"
                         font.family: root.iconFontFamily
                         flat: true
-                        Layout.preferredWidth: 40
+                        Layout.preferredWidth: 34
+                        Layout.alignment: Qt.AlignVCenter
                         onClicked: {
                             backend.removeGlossaryItem(model.source)
                             glossaryModel.remove(index)
