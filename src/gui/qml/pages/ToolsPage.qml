@@ -391,8 +391,8 @@ Rectangle {
     FolderDialog {
         id: tlPathDialog
         title: (backend.uiTrigger, backend.getTextWithDefault("select_tl_folder_title", "Select TL Folder"))
-        currentFolder: "file:///" + backend.get_app_path()
-        onAccepted: tlPathField.text = selectedFolder.toString().replace("file:///", "")
+        currentFolder: backend.get_app_url()
+        onAccepted: tlPathField.text = backend.urlToPath(selectedFolder.toString())
     }
 
     Dialog {
@@ -532,9 +532,9 @@ Rectangle {
     FolderDialog {
         id: structuredDataFolderDialog
         title: (backend.uiTrigger, backend.getTextWithDefault("structured_data_dialog_title", "TXT/YAML Translator"))
-        currentFolder: "file:///" + backend.get_app_path()
+        currentFolder: backend.get_app_url()
         onAccepted: {
-            var folderPath = selectedFolder.toString().replace("file:///", "")
+            var folderPath = backend.urlToPath(selectedFolder.toString())
             structuredDataFolderField.text = folderPath
             if (!structuredDataBackupField.text || structuredDataBackupField.text === "" || structuredDataBackupField.text === structuredDataFolderField.text) {
                 var parts = folderPath.split(/[/\\]/)
@@ -549,8 +549,8 @@ Rectangle {
     FolderDialog {
         id: structuredDataBackupDialog
         title: (backend.uiTrigger, backend.getTextWithDefault("structured_data_backup_title", "Select Backup Folder"))
-        currentFolder: "file:///" + backend.get_app_path()
-        onAccepted: structuredDataBackupField.text = selectedFolder.toString().replace("file:///", "")
+        currentFolder: backend.get_app_url()
+        onAccepted: structuredDataBackupField.text = backend.urlToPath(selectedFolder.toString())
     }
 
     component ToolCard: Rectangle {

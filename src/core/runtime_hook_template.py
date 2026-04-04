@@ -664,6 +664,9 @@ init -999 python:
             renpy.notify("RenLocalizer: Failed to reload translations!")
         renpy.restart_interaction()
 
+screen _rl_runtime_hotkeys():
+    key "shift_K_l" action Function(_rl_force_language)
+
 init 999 python:
     # Install hooks late so game scripts (e.g., emoji filters) don't overwrite us.
     # We chain any existing handlers we find at this point.
@@ -679,4 +682,9 @@ init 999 python:
         config.all_character_callbacks = []
     if _rl_character_callback not in config.all_character_callbacks:
         config.all_character_callbacks.append(_rl_character_callback)
+
+    if not hasattr(config, 'overlay_screens'):
+        config.overlay_screens = []
+    if "_rl_runtime_hotkeys" not in config.overlay_screens:
+        config.overlay_screens.append("_rl_runtime_hotkeys")
 '''

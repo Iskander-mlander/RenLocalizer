@@ -311,11 +311,42 @@ class AppBackend(QObject):
         for code, name in self.config.get_target_languages_for_ui():
             languages.append({"code": code, "name": name})
         return languages
+
+    @pyqtSlot(result=str)
+    def get_app_url(self) -> str:
+        """Return the current app directory as a file URL for QML dialogs."""
+        return QUrl.fromLocalFile(os.getcwd()).toString()
+
+    @pyqtSlot(str, result=str)
+    def urlToPath(self, url: str) -> str:
+        """Convert a QML file:// URL to a local OS path."""
+        return self._normalize_path(url)
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        """Normalize a file:// URL or raw path into a local path."""
+        if not path:
+            return path
+
+        local = QUrl(path).toLocalFile()
+        if local:
+            return os.path.normpath(local)
+
+        # Already a plain path; still decode URL-encoded characters.
+        return os.path.normpath(urllib.parse.unquote(path))
     
     @pyqtSlot(str)
     def openUrl(self, url: str):
-        """Harici URL aç."""
-        QDesktopServices.openUrl(QUrl(url))
+        """Open external URLs; route local paths to the desktop shell."""
+        if not url:
+            return
+
+        parsed = QUrl(url)
+        if parsed.isLocalFile() or url.startswith("file://") or os.path.isabs(url):
+            self.openLocalPath(url)
+            return
+
+        QDesktopServices.openUrl(parsed)
 
     @pyqtSlot(str, result=bool)
     def openLocalPath(self, path: str) -> bool:
@@ -323,10 +354,11 @@ class AppBackend(QObject):
         if not path:
             return False
 
-        if path.startswith("file://"):
-            url = QUrl(path)
-        else:
-            url = QUrl.fromLocalFile(path)
+        local_path = self._normalize_path(path)
+        if not local_path:
+            return False
+
+        url = QUrl.fromLocalFile(local_path)
         return bool(QDesktopServices.openUrl(url))
 
     @pyqtSlot(str, result=bool)
@@ -340,12 +372,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def extractRPA(self, path: str) -> str:
         """RPA arşivlerini çıkar."""
-        if path.startswith("file:///"):
-            if sys.platform == "win32":
-                path = path[8:] # Remove file:///
-            else:
-                path = path[7:] # Remove file:// (keep leading / for Unix paths)
-                
+        path = self._normalize_path(path)
         try:
             from src.utils.unrpa_adapter import UnrpaAdapter
             adapter = UnrpaAdapter()
@@ -374,12 +401,7 @@ class AppBackend(QObject):
 
     def _run_cleanup_thread(self, path):
         try:
-            if path.startswith("file:///"):
-                if sys.platform == "win32":
-                    path = path[8:]
-                else:
-                    path = path[7:]
-            
+            path = self._normalize_path(path)
             project_dir = os.path.dirname(path) if os.path.isfile(path) else path
             game_dir = os.path.join(project_dir, 'game') if os.path.isdir(os.path.join(project_dir, 'game')) else project_dir
             
@@ -587,9 +609,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def healthCheck(self, path: str) -> str:
         """Oyun sağlığını kontrol et."""
-        if path.startswith("file:///"):
-            path = path[8:] if sys.platform == "win32" else path[7:]
-            
+        path = self._normalize_path(path)
         try:
             from src.tools.health_check import run_health_check
             report = run_health_check(path, verbose=False)
@@ -600,9 +620,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def fontCheck(self, path: str) -> str:
         """Font uyumluluğunu kontrol et."""
-        if path.startswith("file:///"):
-            path = path[8:] if sys.platform == "win32" else path[7:]
-            
+        path = self._normalize_path(path)
         try:
             from src.tools.font_helper import check_font_for_project
             summary = check_font_for_project(path, "tr", verbose=False)
@@ -622,17 +640,7 @@ class AppBackend(QObject):
     @pyqtSlot(str)
     def setProjectPath(self, path: str):
         """Proje klasörünü ayarla."""
-        # Unquote URL encoding (%20 -> space etc)
-        path = urllib.parse.unquote(path)
-        
-        if path.startswith("file:///"):
-            if sys.platform == "win32":
-                path = path[8:]
-            else:
-                path = path[7:]
-        
-        # Replace OS-specific separators
-        path = os.path.normpath(path)
+        path = self._normalize_path(path)
         
         self.config.app_settings.last_input_directory = path
         self._project_path = path  # Update internal state
@@ -1323,8 +1331,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, str, result=str)
     def exportGlossary(self, path: str, format_type: str) -> str:
         """Export glossary to file."""
-        if path.startswith("file:///"):
-            path = path[8:] if sys.platform == "win32" else path[7:]
+        path = self._normalize_path(path)
             
         try:
             # Ensure correct extension
@@ -1343,8 +1350,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def importGlossary(self, path: str) -> str:
         """Import glossary from file (merge with existing)."""
-        if path.startswith("file:///"):
-            path = path[8:] if sys.platform == "win32" else path[7:]
+        path = self._normalize_path(path)
             
         try:
             new_term_count = 0
@@ -1946,9 +1952,7 @@ class AppBackend(QObject):
             return
 
         # Normalize path
-        if tl_path.startswith("file:///"):
-            tl_path = tl_path[8:] if sys.platform == "win32" else tl_path[7:]
-        tl_path = tl_path.replace("/", os.sep)
+        tl_path = self._normalize_path(tl_path)
 
         if not source_name.strip():
             source_name = os.path.basename(os.path.dirname(tl_path)) or "Unknown"

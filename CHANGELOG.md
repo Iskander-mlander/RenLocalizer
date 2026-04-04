@@ -1,6 +1,6 @@
 # RenLocalizer Changelog
 
-### [2.8.0] - 2026-04-04
+### [2.8.0] - 2026-03-31
 
 ### UI Revision
 - **Navigation Shell Revamp:** Expanded the left navigation from icon-only shortcuts into a clearer workspace/help sidebar with labeled destinations, improving discoverability without removing any existing actions.
@@ -29,6 +29,7 @@
 
 ### Language Path Normalization
 - **Ren'Py Folder Keys:** Normalized target language handling so `tl/<lang>/` paths use Ren'Py folder keys consistently across all languages, while API codes remain only for translation requests and legacy configs are auto-mapped.
+- **Path/URL Centralization:** Standardized QUrl-based local path handling across dialogs and file operations so Home, Cache, Tools, glossary import/export, and external TM flows use the same platform-safe conversion path.
 
 ### Tools
 - **TXT/YAML Translator:** Added a standalone helper tool for `.txt` and `.yml/.yaml` files that scans folders recursively, creates sibling `old-txt-yaml` backups automatically, and replaces files in place with best-effort formatting preservation (Experimental).
