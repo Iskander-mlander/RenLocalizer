@@ -1,8 +1,8 @@
 # RenLocalizer Changelog
 
-### [2.8.0] - 2026-03-31
+### [2.8.0] - 2026-04-04
 
-### UI Revision
+### UI Revision 
 - **Navigation Shell Revamp:** Expanded the left navigation from icon-only shortcuts into a clearer workspace/help sidebar with labeled destinations, improving discoverability without removing any existing actions.
 - **Settings Reorganization:** Split the Settings page into tabbed sections so General, Engines, Translation, Network, AI, and System options stay fully available but are easier to scan and reach.
 - **Localization Expansion:** Added new UI strings for the revised navigation shell and settings tabs across all locale files.
