@@ -320,7 +320,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def urlToPath(self, url: str) -> str:
         """Convert a QML file:// URL to a local OS path."""
-        return self._normalize_path(url)
+        return AppBackend._normalize_path(url)
 
     @staticmethod
     def _normalize_path(path: str) -> str:
@@ -354,7 +354,7 @@ class AppBackend(QObject):
         if not path:
             return False
 
-        local_path = self._normalize_path(path)
+        local_path = AppBackend._normalize_path(path)
         if not local_path:
             return False
 
@@ -372,7 +372,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def extractRPA(self, path: str) -> str:
         """RPA arşivlerini çıkar."""
-        path = self._normalize_path(path)
+        path = AppBackend._normalize_path(path)
         try:
             from src.utils.unrpa_adapter import UnrpaAdapter
             adapter = UnrpaAdapter()
@@ -401,7 +401,7 @@ class AppBackend(QObject):
 
     def _run_cleanup_thread(self, path):
         try:
-            path = self._normalize_path(path)
+            path = AppBackend._normalize_path(path)
             project_dir = os.path.dirname(path) if os.path.isfile(path) else path
             game_dir = os.path.join(project_dir, 'game') if os.path.isdir(os.path.join(project_dir, 'game')) else project_dir
             
@@ -609,7 +609,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def healthCheck(self, path: str) -> str:
         """Oyun sağlığını kontrol et."""
-        path = self._normalize_path(path)
+        path = AppBackend._normalize_path(path)
         try:
             from src.tools.health_check import run_health_check
             report = run_health_check(path, verbose=False)
@@ -620,7 +620,7 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def fontCheck(self, path: str) -> str:
         """Font uyumluluğunu kontrol et."""
-        path = self._normalize_path(path)
+        path = AppBackend._normalize_path(path)
         try:
             from src.tools.font_helper import check_font_for_project
             summary = check_font_for_project(path, "tr", verbose=False)
@@ -640,7 +640,7 @@ class AppBackend(QObject):
     @pyqtSlot(str)
     def setProjectPath(self, path: str):
         """Proje klasörünü ayarla."""
-        path = self._normalize_path(path)
+        path = AppBackend._normalize_path(path)
         
         self.config.app_settings.last_input_directory = path
         self._project_path = path  # Update internal state
@@ -1952,7 +1952,7 @@ class AppBackend(QObject):
             return
 
         # Normalize path
-        tl_path = self._normalize_path(tl_path)
+        tl_path = AppBackend._normalize_path(tl_path)
 
         if not source_name.strip():
             source_name = os.path.basename(os.path.dirname(tl_path)) or "Unknown"
