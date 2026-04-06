@@ -328,6 +328,91 @@ def test_generate_strings_json_adds_plain_alias_for_angle_wrapped_strings(tmp_pa
     assert mapping[plain_key] == "Valkoran Akademisi'nde yeni bir uzay kıyafeti geliştirilmesi için bir zamanlar poz vermiştim."
 
 
+def test_visible_text_variants_are_synthesized() -> None:
+    pipeline = _make_pipeline()
+
+    additions = pipeline._synthesize_visible_text_variants(
+        {
+            "I won't say goodbye...": "Vedalaşmayacağım...",
+            "Wait - not yet": "Bekle - henüz değil",
+        }
+    )
+
+    assert additions["I won’t say goodbye..."] == "Vedalaşmayacağım..."
+    assert additions["I won't say goodbye…"] == "Vedalaşmayacağım..."
+    assert additions["Wait – not yet"] == "Bekle - henüz değil"
+
+
+def test_generate_strings_json_adds_visible_text_aliases(tmp_path: Path) -> None:
+    pipeline = _make_pipeline()
+    lang_dir = tmp_path / "tl" / "turkish"
+    lang_dir.mkdir(parents=True)
+
+    tl_file = TranslationFile(
+        file_path=str(lang_dir / "dialogue.rpy"),
+        language="turkish",
+        entries=[
+            TranslationEntry(
+                original_text="I won't say goodbye...",
+                translated_text="Vedalaşmayacağım...",
+                file_path=str(lang_dir / "dialogue.rpy"),
+                line_number=21,
+                entry_type="dialogue",
+            )
+        ],
+    )
+
+    pipeline._generate_strings_json([tl_file], str(lang_dir))
+
+    mapping = json.loads((lang_dir / "strings.json").read_text(encoding="utf-8"))
+    assert mapping["I won't say goodbye..."] == "Vedalaşmayacağım..."
+    assert mapping["I won’t say goodbye..."] == "Vedalaşmayacağım..."
+    assert mapping["I won't say goodbye…"] == "Vedalaşmayacağım..."
+
+
+def test_visible_fragment_variants_are_synthesized() -> None:
+    pipeline = _make_pipeline()
+
+    additions = pipeline._synthesize_visible_fragment_variants(
+        {
+            "The continuation of this story is being created right now. So I won't say goodbye. And if you want to know what happened next, you can find out elsewhere.": "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım. Sonra ne olduğunu başka bir yerde öğrenebilirsiniz.",
+        }
+    )
+
+    key = "The continuation of this story is being created right now. So I won't say goodbye."
+    and_key = "And the continuation of this story is being created right now. So I won't say goodbye."
+    assert additions[key] == "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
+    assert additions[and_key] == "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
+
+
+def test_generate_strings_json_adds_visible_fragment_aliases(tmp_path: Path) -> None:
+    pipeline = _make_pipeline()
+    lang_dir = tmp_path / "tl" / "turkish"
+    lang_dir.mkdir(parents=True)
+
+    tl_file = TranslationFile(
+        file_path=str(lang_dir / "dialogue.rpy"),
+        language="turkish",
+        entries=[
+            TranslationEntry(
+                original_text="The continuation of this story is being created right now. So I won't say goodbye. And if you want to know what happened next, you can find out elsewhere.",
+                translated_text="Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım. Sonra ne olduğunu başka bir yerde öğrenebilirsiniz.",
+                file_path=str(lang_dir / "dialogue.rpy"),
+                line_number=33,
+                entry_type="dialogue",
+            )
+        ],
+    )
+
+    pipeline._generate_strings_json([tl_file], str(lang_dir))
+
+    mapping = json.loads((lang_dir / "strings.json").read_text(encoding="utf-8"))
+    key = "The continuation of this story is being created right now. So I won't say goodbye."
+    and_key = "And the continuation of this story is being created right now. So I won't say goodbye."
+    assert mapping[key] == "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
+    assert mapping[and_key] == "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
+
+
 def test_generated_export_file_is_detected() -> None:
     pipeline = _make_pipeline()
 

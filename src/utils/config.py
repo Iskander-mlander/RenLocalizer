@@ -64,6 +64,12 @@ ENGINE_BATCH_SIZE_CAPS: dict[str, int] = {
     "yandex": 1000,
 }
 
+EXTRACTION_MODE_THRESHOLDS: dict[str, float] = {
+    "strict": 0.85,
+    "balanced": 0.58,
+    "aggressive": 0.35,
+}
+
 LEGACY_APP_SETTING_ALIASES: dict[str, str] = {
     "theme": "app_theme",
 }
@@ -206,6 +212,8 @@ class TranslationSettings:
     deep_extraction_tooltip_properties: bool = True  # tooltip property extraction
     deep_extraction_screen_arguments: bool = True  # call/show screen positional string args
     deep_extraction_displayable_calls: bool = True  # screen helper/displayable call args
+    extraction_mode: str = "balanced"  # strict | balanced | aggressive
+    minimum_extraction_confidence: float = 0.58  # Drop only low-confidence candidates
     # Delimiter-Aware Translation (v2.7.2): Split pipe-delimited variant text before translation
     # Handles patterns like <seg1|seg2|seg3> commonly used for random NPC dialogue
     enable_delimiter_aware_translation: bool = True
@@ -306,6 +314,11 @@ class TranslationSettings:
             self.deepl_formality = "default"
         if self.gemini_safety_settings not in ("BLOCK_NONE", "BLOCK_ONLY_HIGH", "STANDARD"):
             self.gemini_safety_settings = "BLOCK_NONE"
+        extraction_mode = str(self.extraction_mode).strip().lower() or "balanced"
+        if extraction_mode not in EXTRACTION_MODE_THRESHOLDS:
+            extraction_mode = "balanced"
+        self.extraction_mode = extraction_mode
+        self.minimum_extraction_confidence = EXTRACTION_MODE_THRESHOLDS[extraction_mode]
 
         # --- String sanitisation ---
         self.source_language = str(self.source_language).strip() or "auto"

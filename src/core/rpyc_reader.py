@@ -39,6 +39,9 @@ from src.core.deep_extraction import (
     DeepExtractionConfig,
     DeepVariableAnalyzer,
     FStringReconstructor,
+    confidence_band,
+    resolve_minimum_extraction_confidence,
+    score_extraction_confidence,
     _shared_analyzer as _deep_var_analyzer,
 )
 
@@ -1356,6 +1359,8 @@ class ExtractedText:
     placeholder_map: Dict[str, str] = None
     context_path: List[str] = None
     node_type: str = ""
+    confidence: float = 0.0
+    confidence_band: str = "candidate"
 
 
 class ASTTextExtractor:
@@ -1431,6 +1436,9 @@ class ASTTextExtractor:
         """Add extracted text if it's meaningful."""
         if not text or not text.strip():
             return
+
+        visible_text = self.parser._normalize_inline_text_candidate(text)
+        analysis_text = visible_text if visible_text else text
             
         # Detect NVL mode: check if character is nvl-related
         nvl_chars = {'narrator_nvl', 'nvl', 'side_nvl', 'nvl_narrator'}
@@ -1454,17 +1462,29 @@ class ASTTextExtractor:
                 return
         
         # Skip technical strings using the advanced parser logic
-        if not self.parser.is_meaningful_text(text):
+        if not self.parser.is_meaningful_text(analysis_text):
             return
         
         # Additional context-aware technical filtering
-        if self._is_technical_string(text, context):
+        if self._is_technical_string(analysis_text, context):
             return
         
         # Apply user-configurable text type filters (translate_dialogue, translate_ui, etc.)
         if not self.parser._should_translate_text(text, text_type):
             return
-        
+
+        confidence = score_extraction_confidence(
+            analysis_text,
+            text_type,
+            context,
+            [context] if context else [],
+            character=character,
+        )
+        minimum_confidence = resolve_minimum_extraction_confidence(self.config_manager, default=0.0)
+
+        if confidence < minimum_confidence:
+            return
+
         # store in seen_map
         context_path = []
         if context:
@@ -1478,7 +1498,9 @@ class ASTTextExtractor:
             context=context,
             placeholder_map=placeholder_map or {},
             context_path=context_path,
-            node_type=node_type or text_type
+            node_type=node_type or text_type,
+            confidence=confidence,
+            confidence_band=confidence_band(confidence),
         )
         self.extracted.append(self.seen_map[key])
         logger.info(f"[AST ENTRY] {self.current_file}:{line_number} [{node_type or text_type}] ctx={context_path} text={text}")
@@ -2604,6 +2626,8 @@ def extract_texts_from_rpyc(
             'source_file': r.source_file,
             'node_type': r.node_type,
             'is_rpyc': True,
+            'confidence': r.confidence,
+            'confidence_band': r.confidence_band,
         }
         for r in results
     ]

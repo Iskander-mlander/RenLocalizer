@@ -294,7 +294,7 @@ class FontInjector:
         
         new_block = f"""
 # --- CONFIG: {lang_code.upper()} ---
-# Runtime Font Hooking (Inspired by Zenpy / anonymousException)
+# Runtime Font Hooking
 
 init -999 python:
     # Font ayarlarını saklayacağımız global sözlük

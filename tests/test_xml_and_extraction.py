@@ -97,6 +97,28 @@ label start:
         self.assertNotIn("Loading", texts)
         self.assertNotIn("Start", texts)
 
+    def test_tagged_screen_text_is_preserved_by_pyparse(self):
+        content = """
+screen tease_screen():
+    text "{color=#5175ea}*giggle*{/w}"
+    textbutton "{color=#5175ea}*giggle*{/w}" action Return()
+"""
+        entries = extract_with_pyparsing(content, "test.rpy")
+        texts = [e['text'] for e in entries]
+        self.assertIn("{color=#5175ea}*giggle*{/w}", texts)
+        self.assertTrue(any(e.get('text_type') == 'textbutton' or e.get('text_type') == 'text' for e in entries))
+
+    def test_tag_only_screen_text_is_skipped_by_pyparse(self):
+        content = """
+screen empty_tag_screen():
+    text "{color=#5175ea}"
+    textbutton "{/w}" action Return()
+"""
+        entries = extract_with_pyparsing(content, "test.rpy")
+        texts = [e['text'] for e in entries]
+        self.assertNotIn("{color=#5175ea}", texts)
+        self.assertNotIn("{/w}", texts)
+
     def test_f_string_extraction(self):
         extractor = MockExtractor()
         code = "msg = f\"Values: {x}, {y}\""

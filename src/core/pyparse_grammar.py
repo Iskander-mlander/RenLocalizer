@@ -123,6 +123,61 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             text = text.replace(k, v)
         return text
 
+    def strip_markup_structurally(text: str) -> str:
+        """Remove Ren'Py markup tags and placeholders while keeping visible text."""
+        if not text:
+            return ""
+
+        output: List[str] = []
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch == '\\' and i + 1 < len(text):
+                output.append(text[i:i + 2])
+                i += 2
+                continue
+
+            if ch in ('{', '['):
+                close = '}' if ch == '{' else ']'
+                depth = 1
+                j = i + 1
+                in_single = False
+                in_double = False
+                while j < len(text):
+                    c = text[j]
+                    if c == '\\' and j + 1 < len(text):
+                        j += 2
+                        continue
+                    if c == "'" and not in_double:
+                        in_single = not in_single
+                    elif c == '"' and not in_single:
+                        in_double = not in_double
+                    elif not in_single and not in_double:
+                        if ch == '{' and c == '{':
+                            depth += 1
+                        elif ch == '[' and c == '[':
+                            depth += 1
+                        elif c == close:
+                            depth -= 1
+                            if depth == 0:
+                                break
+                    j += 1
+
+                if depth == 0:
+                    i = j + 1
+                    continue
+
+            output.append(ch)
+            i += 1
+
+        return ''.join(output).strip()
+
+    def normalize_visible_text(text: str) -> str:
+        stripped = strip_markup_structurally(text)
+        if stripped:
+            return stripped
+        return re.sub(r'\{/?[^}]*\}|\[[^\]]*\]', '', text or '').strip()
+
     # Satır devamı (\) ve parantez içi birleştirme
     logical_lines = []
     buffer = ""
@@ -238,6 +293,10 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
                     # Basic filters
                     if not text_content or len(text_content.strip()) < 2:
                         continue
+
+                    visible_text = normalize_visible_text(text_content)
+                    if not visible_text:
+                        continue
                         
                     if re.match(r'^[a-zA-Z0-9_/\\.-]+\.(png|jpg|mp3|ogg|rpy|rpyc|webp|gif)$', text_content, re.I):
                         continue
@@ -250,7 +309,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
                               continue
                     
                     # Meaningful alphabetic content check
-                    cleaned = re.sub(r'(\[[^\]]+\]|\{[^}]+\}|\\n)', '', text_content).strip()
+                    cleaned = normalize_visible_text(text_content).replace('\\n', ' ').strip()
                     if len(cleaned) < 2 and '{' not in text_content:
                         continue
                         
@@ -329,6 +388,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         m_menu = menu_choice_re.match(stripped)
         if m_menu:
             q = m_menu.group("quote")
+            visible_text = normalize_visible_text(q[1:-1])
+            if not visible_text:
+                continue
             protected, ph = protect_placeholders(q[1:-1])
             q_raw = m_menu.group("quote")
             entries.append(
@@ -348,6 +410,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         if context_stack and context_stack[-1][0].startswith(("screen", "transform")):
             for sm in screen_elem_re.finditer(stripped):
                 q = sm.group("quote")
+                visible_text = normalize_visible_text(q[1:-1])
+                if not visible_text:
+                    continue
                 protected, ph = protect_placeholders(q[1:-1])
                 q_raw = sm.group("quote")
                 entries.append(
@@ -367,6 +432,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             m_py = python_call_re.search(stripped)
             if m_py:
                 q = m_py.group("quote")
+                visible_text = normalize_visible_text(q[1:-1])
+                if not visible_text:
+                    continue
                 protected, ph = protect_placeholders(q[1:-1])
                 q_raw = m_py.group("quote")
                 entries.append(
@@ -385,6 +453,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             m_notify = notify_call_re.search(stripped)
             if m_notify:
                 q = m_notify.group("quote")
+                visible_text = normalize_visible_text(q[1:-1])
+                if not visible_text:
+                    continue
                 protected, ph = protect_placeholders(q[1:-1])
                 q_raw = m_notify.group("quote")
                 entries.append(
@@ -403,6 +474,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             m_input = input_call_re.search(stripped)
             if m_input:
                 q = m_input.group("quote")
+                visible_text = normalize_visible_text(q[1:-1])
+                if not visible_text:
+                    continue
                 protected, ph = protect_placeholders(q[1:-1])
                 q_raw = m_input.group("quote")
                 entries.append(
@@ -421,6 +495,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             m_text_disp = text_displayable_re.search(stripped)
             if m_text_disp:
                 q = m_text_disp.group("quote")
+                visible_text = normalize_visible_text(q[1:-1])
+                if not visible_text:
+                    continue
                 protected, ph = protect_placeholders(q[1:-1])
                 q_raw = m_text_disp.group("quote")
                 entries.append(
@@ -441,6 +518,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         m_dialog = dialog_re.match(stripped)
         if m_dialog:
             q = m_dialog.group("quote")
+            visible_text = normalize_visible_text(q[1:-1])
+            if not visible_text:
+                continue
             protected, ph = protect_placeholders(q[1:-1])
             q_raw = m_dialog.group("quote")
             character = m_dialog.group("char")
@@ -464,6 +544,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         m_narr = narrator_re.match(stripped)
         if m_narr:
             q = m_narr.group("quote")
+            visible_text = normalize_visible_text(q[1:-1])
+            if not visible_text:
+                continue
             protected, ph = protect_placeholders(q[1:-1])
             q_raw = m_narr.group("quote")
             entries.append(

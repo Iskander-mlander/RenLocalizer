@@ -27,7 +27,12 @@ from src.core.deep_extraction import (
     DeepVariableAnalyzer,
     FStringReconstructor,
     MultiLineStructureParser,
+    confidence_band,
+    resolve_minimum_extraction_confidence,
+    score_extraction_confidence,
 )
+from src.core.parser import RenPyParser
+from src.utils.config import TranslationSettings
 
 
 # =============================================================================
@@ -62,6 +67,52 @@ class TestDeepExtractionConfig(unittest.TestCase):
     def test_config_skip_vars(self):
         self.assertIn("config.version", DeepExtractionConfig.CONFIG_SKIP_VARS)
         self.assertIn("config.save_directory", DeepExtractionConfig.CONFIG_SKIP_VARS)
+
+
+class TestExtractionConfidence(unittest.TestCase):
+    def test_dialogue_scores_high(self):
+        score = score_extraction_confidence(
+            "Hello, world!",
+            text_type="dialogue",
+            context="say",
+            context_path=["label:start"],
+        )
+        self.assertGreaterEqual(score, 0.85)
+        self.assertEqual(confidence_band(score), "confirmed")
+
+    def test_technical_string_scores_low(self):
+        score = score_extraction_confidence(
+            "images/bg/forest.png",
+            text_type="string",
+            context="config",
+        )
+        self.assertLess(score, 0.2)
+        self.assertEqual(confidence_band(score), "candidate")
+
+    def test_mode_to_threshold_mapping(self):
+        self.assertAlmostEqual(
+            resolve_minimum_extraction_confidence(TranslationSettings()),
+            0.58,
+        )
+        self.assertAlmostEqual(
+            resolve_minimum_extraction_confidence(TranslationSettings(extraction_mode="strict")),
+            0.85,
+        )
+        self.assertAlmostEqual(
+            resolve_minimum_extraction_confidence(TranslationSettings(extraction_mode="balanced")),
+            0.58,
+        )
+        self.assertAlmostEqual(
+            resolve_minimum_extraction_confidence(TranslationSettings(extraction_mode="aggressive")),
+            0.35,
+        )
+
+
+class TestDeepScanStructure(unittest.TestCase):
+    def test_tagged_data_value_is_meaningful(self):
+        parser = RenPyParser()
+        self.assertTrue(parser._is_meaningful_data_value("{color=#5175ea}*giggle*{/w}", "title"))
+        self.assertTrue(parser._is_deep_scan_candidate("{color=#5175ea}*giggle*{/w}", True, "renpy.notify('x')"))
 
 
 # =============================================================================

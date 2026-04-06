@@ -4,7 +4,7 @@ RenLocalizer Health Check Module
 ================================
 
 Static analysis tool for detecting common localization issues before translation.
-Inspired by Ren'Py's lint and Unity/Unreal localization best practices.
+Designed around general localization linting practices.
 
 Checks:
 1. Unwrapped strings (text without _() wrapper)

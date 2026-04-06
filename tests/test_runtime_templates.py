@@ -32,7 +32,9 @@ def test_template_logic(tmp_path):
         "HP: %d": "SH: %d",
         "Just a test": "Sadece test",
         "Invalid [a] and [b]": "Gecersiz [a] [b]",
-        "S [x]": "S [x]"
+        "S [x]": "S [x]",
+        "I won't say goodbye.": "Vedalaşmayacağım.",
+        "The continuation of this story is being created right now. So I won't say goodbye.": "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
     }
     
     json_path = tmp_path / "strings.json"
@@ -88,7 +90,9 @@ def test_template_logic(tmp_path):
         assert ns["_rl_replace_text"]("Score: 1500") == "Skor: 1500"
         assert ns["_rl_replace_text"]("Hello Melih!") == "Merhaba Melih!"
         assert ns["_rl_replace_text"]("HP: 99") == "SH: 99"
-        
+        assert ns["_rl_replace_text"]("I won’t say goodbye.") == "Vedalaşmayacağım."
+        assert ns["_rl_replace_text"]("And the continuation of this story is being created right now. So I won't say goodbye.") == "And Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
+
         assert ns["_rl_replace_text"]("Invalid 1 and 2") == "Invalid 1 and 2"
     finally:
         ns["_rl_find_strings_json"] = old_finder

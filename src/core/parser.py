@@ -27,6 +27,9 @@ from src.core.deep_extraction import (
     DeepVariableAnalyzer,
     FStringReconstructor,
     MultiLineStructureParser,
+    confidence_band,
+    resolve_minimum_extraction_confidence,
+    score_extraction_confidence,
     _shared_analyzer as _module_deep_var_analyzer,
 )
 
@@ -1620,8 +1623,83 @@ class RenPyParser:
                 return collected[:end_idx + 1], line_idx
         return collected, len(lines) - 1
 
+    def _find_balanced_markup_end(self, text: str, start: int, close_char: str) -> int:
+        """Return the index of the matching closing markup delimiter.
+
+        This is a lightweight structural scan used for Ren'Py tags and
+        interpolation placeholders. It intentionally avoids regex as the
+        primary decision mechanism.
+        """
+        if start >= len(text):
+            return -1
+
+        depth = 1
+        in_single_quote = False
+        in_double_quote = False
+        i = start
+
+        while i < len(text):
+            char = text[i]
+            if char == '\\' and i + 1 < len(text):
+                i += 2
+                continue
+
+            if char == "'" and not in_double_quote:
+                in_single_quote = not in_single_quote
+            elif char == '"' and not in_single_quote:
+                in_double_quote = not in_double_quote
+            elif not in_single_quote and not in_double_quote:
+                if close_char == '}' and char == '{':
+                    depth += 1
+                elif close_char == ']' and char == '[':
+                    depth += 1
+                elif char == close_char:
+                    depth -= 1
+                    if depth == 0:
+                        return i
+
+            i += 1
+
+        return -1
+
+    def _strip_markup_structurally(self, text: str) -> str:
+        """Remove Ren'Py markup while preserving visible text.
+
+        Tags like ``{color=...}``, ``{/w}``, and interpolation placeholders like
+        ``[name]`` are stripped, but visible text between them is retained.
+        """
+        if not text:
+            return ""
+
+        output: List[str] = []
+        i = 0
+        while i < len(text):
+            char = text[i]
+
+            if char == '\\' and i + 1 < len(text):
+                output.append(text[i:i + 2])
+                i += 2
+                continue
+
+            if char in ('{', '['):
+                close_char = '}' if char == '{' else ']'
+                end_idx = self._find_balanced_markup_end(text, i + 1, close_char)
+                if end_idx != -1:
+                    candidate = text[i:end_idx + 1]
+                    # Disambiguation tags and placeholders are removed structurally.
+                    i = end_idx + 1
+                    continue
+
+            output.append(char)
+            i += 1
+
+        return ''.join(output).strip()
+
     def _normalize_inline_text_candidate(self, text: str) -> str:
-        """Strip Ren'Py tags/placeholders before lightweight UI-label heuristics."""
+        """Strip Ren'Py markup using structural scanning first."""
+        normalized = self._strip_markup_structurally(text or '')
+        if normalized:
+            return normalized
         return re.sub(r'\{/?[^}]*\}|\[[^\]]*\]', '', text or '').strip()
 
     def _looks_like_user_facing_label(self, text: str) -> bool:
@@ -2211,9 +2289,16 @@ class RenPyParser:
     ) -> Optional[Dict[str, Any]]:
         if not text:
             return None
+
+        visible_text = self._normalize_inline_text_candidate(text)
+        analysis_text = text
+        if visible_text and visible_text != text:
+            # Tag-heavy strings should be judged by the visible text first.
+            # Keep the original markup for output, but use the cleaned form for gating.
+            analysis_text = visible_text
         
         resolved_type = text_type or self.determine_text_type(
-            text,
+            analysis_text,
             context_line,
             context_path,
         )
@@ -2224,11 +2309,11 @@ class RenPyParser:
         self._current_context_line = context_line or ""
         
         if not self._is_force_translatable_text(
-            text=text,
+            text=analysis_text,
             resolved_type=resolved_type,
             context_line=context_line,
             context_path=context_path,
-        ) and not self.is_meaningful_text(text):
+        ) and not self.is_meaningful_text(analysis_text):
             return None
         
         # Skip text inside hidden labels (label xxx hide:)
@@ -2252,6 +2337,19 @@ class RenPyParser:
         if not self._should_translate_text(text, resolved_type):
             return None
 
+        confidence = score_extraction_confidence(
+            analysis_text,
+            resolved_type,
+            context_line,
+            context_path,
+            character=character,
+        )
+        minimum_confidence = resolve_minimum_extraction_confidence(self.config, default=0.0)
+
+        if confidence < minimum_confidence:
+            # Keep high-confidence translated strings, but drop ambiguous candidates.
+            return None
+
         # context_tag is handled by callers (e.g., deep scan) via context_path
         return {
             'text': text,
@@ -2264,6 +2362,8 @@ class RenPyParser:
             'processed_text': processed_text,
             'placeholder_map': placeholder_map,
             'file_path': file_path,
+            'confidence': confidence,
+            'confidence_band': confidence_band(confidence),
         }
 
     def _is_python_context(self, context_path: List[str]) -> bool:
@@ -2438,10 +2538,10 @@ class RenPyParser:
             return True
             
         # Crash Prevention: Reject file paths, URLs, and asset names immediately
-        # Using fast string checks before regex
-        # FIX v2.7.1: Strip Ren'Py display tags before path check so that
-        # closing tags like {/b}, {/color}, {/cps} don't trigger the '/' indicator.
-        _text_no_tags = re.sub(r'\{/?[^}]*\}', '', text) if '{' in text else text
+        # Using structural markup stripping before fallback regex checks.
+        _text_no_tags = self._strip_markup_structurally(text)
+        if not _text_no_tags:
+            _text_no_tags = re.sub(r'\{/?[^}]*\}', '', text) if '{' in text else text
         if any(ind in _text_no_tags for ind in self.path_indicators):
             return False
             
@@ -2721,41 +2821,6 @@ class RenPyParser:
 
         return any(ch.isalpha() for ch in text) and len(text.strip()) >= 2
 
-    def _is_meaningful_data_value(self, text: str, key: str = None) -> bool:
-        """Helper to filter data values (JSON/YAML/INI etc) with key context."""
-        if not text or not isinstance(text, str):
-            return False
-        
-        # Strip simple numbers or single chars
-        text_strip = text.strip()
-        if len(text_strip) < 2 and text_strip not in STANDARD_RENPY_STRINGS:
-            return False
-            
-        # Fast exit for path-like structures
-        if any(ind in text_strip for ind in self.path_indicators):
-            return False
-            
-        # Key heuristics
-        if key and isinstance(key, str):
-            key_lower = key.lower().strip()
-            
-            # 1. Whitest check highest priority
-            if any(key_lower == w or key_lower.endswith('_' + w) for w in DATA_KEY_WHITELIST):
-                return self.is_meaningful_text(text)
-                
-            # 2. Blacklist check
-            if any(key_lower == b or key_lower.endswith('_' + b) for b in DATA_KEY_BLACKLIST):
-                return False
-                
-            # 3. Check for obvious config names
-            if key_lower.startswith('config') or key_lower.endswith('config'):
-                return False
-        
-        # Fallback to main heuristic
-        return self.is_meaningful_text(text)
-
-
-
     def get_context_line(self) -> str:
         """Returns the current line being processed for context-aware filtering."""
         return self._current_context_line or ""
@@ -2957,9 +3022,11 @@ class RenPyParser:
         
         # Skip if it's just Ren'Py tags/variables with no actual text
         # e.g., "{font=something}[variable]{/font}" with no human-readable text
-        stripped_of_tags = re.sub(r'\{[^}]*\}', '', text_strip)  # Remove tags
-        stripped_of_vars = re.sub(r'\[[^\]]*\]', '', stripped_of_tags)  # Remove variables
-        if not stripped_of_vars.strip():
+        stripped_of_markup = self._strip_markup_structurally(text_strip)
+        if not stripped_of_markup:
+            stripped_of_markup = re.sub(r'\{[^}]*\}', '', text_strip)
+            stripped_of_markup = re.sub(r'\[[^\]]*\]', '', stripped_of_markup)
+        if not stripped_of_markup.strip():
             return False
 
         # =================================================================
@@ -3349,6 +3416,15 @@ class RenPyParser:
                     # Filter technical strings using DeepVariableAnalyzer
                     if self._deep_var_analyzer.is_technical_string(text):
                         return
+
+                    confidence = score_extraction_confidence(
+                        text,
+                        text_type,
+                        lines[min(block_start + lineno - 1, len(lines) - 1)] if lines else '',
+                        ['deep_scan_ast'],
+                    )
+                    if confidence < resolve_minimum_extraction_confidence(self.config, default=0.0):
+                        return
                     
                     # NOTE: preserve_placeholders() is NOT called here.
                     # The translation pipeline applies protect_renpy_syntax()
@@ -3362,6 +3438,8 @@ class RenPyParser:
                         'is_deep_scan': True,
                         'is_ast_scan': True,
                         'file_path': str(file_path),
+                        'confidence': confidence,
+                        'confidence_band': confidence_band(confidence),
                     })
                     seen_texts.add(text)
                 
@@ -3687,26 +3765,32 @@ class RenPyParser:
                 context_tag = 'deep_scan'
                 # 1. Try finding context in the current line
                 found_key = None
+                key_match = key_capture_re.search(line[:match.start()])
+                if key_match:
+                    found_key = key_match.group(1)
                 list_context_re = re.compile(r'([a-zA-Z_]\w*)\s*(?:=\s*[\[\(\{]|\+=\s*[\[\(]|\.(?:append|extend|insert)\s*\()')
                 list_match = list_context_re.search(line[:match.start()])
 
                 # 2. Look back at previous lines if not found
-                if not list_match and line_num > 1:
+                if not found_key and not list_match and line_num > 1:
                     start_idx = max(0, line_num - 10)
                     prev_context = "\n".join(lines[start_idx:line_num-1]) + "\n" + line[:match.start()]
+                    prev_key_matches = list(key_capture_re.finditer(prev_context))
+                    if prev_key_matches:
+                        found_key = prev_key_matches[-1].group(1)
                     matches = list(list_context_re.finditer(prev_context))
-                    if matches:
+                    if matches and not found_key:
                         list_match = matches[-1]  # Take the closest one
 
-                if list_match:
+                if not found_key and list_match:
                     found_key = list_match.group(1)
                 else:
                     # Try assignment var detection (same-line or lookback)
-                    assign_match = assignment_context_re.search(line[:match.start()])
+                    assign_match = assignment_context_re.search(line[:match.start()]) if not found_key else None
                     if not assign_match and line_num > 1:
                         prev_context = "\n".join(lines[max(0, line_num - 10):line_num-1]) + "\n" + line[:match.start()]
                         assign_matches = list(assignment_context_re.finditer(prev_context))
-                        if assign_matches:
+                        if assign_matches and not found_key:
                                 assign_match = assign_matches[-1]
                         if assign_match:
                             found_key = assign_match.group(1)
@@ -3815,17 +3899,20 @@ class RenPyParser:
             True if the string is a candidate for deep scanning, False otherwise.
         """
         # Example logic using in_python
-        if len(text) > 300 and in_python and context_line.strip().startswith('renpy.notify'):
+        visible_text = self._normalize_inline_text_candidate(text)
+        analysis_text = visible_text if visible_text else text
+
+        if len(analysis_text) > 300 and in_python and context_line.strip().startswith('renpy.notify'):
             return True
 
-        if not text or len(text.strip()) < 3:
+        if not analysis_text or len(analysis_text.strip()) < 3:
             return False
         
-        text_lower = text.lower().strip()
+        text_lower = analysis_text.lower().strip()
         context_lower = context_line.lower()
         
         # is_meaningful_text kontrolü (fix typo -> use is_meaningful_text)
-        if not self.is_meaningful_text(text):
+        if not self.is_meaningful_text(analysis_text):
             return False
         
         # Dosya yolları ve teknik terimler
@@ -3860,17 +3947,17 @@ class RenPyParser:
             return False
         
         # Sadece placeholder olan stringler
-        if re.fullmatch(r'\s*(\[[^\]]+\]|\{[^}]+\})+\s*', text):
+        if re.fullmatch(r'\s*(\[[^\]]+\]|\{[^}]+\})+\s*', analysis_text):
             return False
         
         # En az 1 harf ve en az 3 karakter içermeli (Unicode-aware)
-        if not any(ch.isalpha() for ch in text) or len(text.strip()) < 3:
+        if not any(ch.isalpha() for ch in analysis_text) or len(analysis_text.strip()) < 3:
             return False
         
         # If the text is too long and in a Python block, check for docstring patterns
-        if len(text) > 300 and context_line.strip().startswith('renpy.notify'):
+        if len(analysis_text) > 300 and context_line.strip().startswith('renpy.notify'):
             # If the text lacks game-specific tags, it is likely a docstring
-            if '{' not in text and '[' not in text:
+            if '{' not in analysis_text and '[' not in analysis_text:
                 return False  # Skip docstrings
         
         return True

@@ -103,6 +103,44 @@ class TestShouldTranslateText(unittest.TestCase):
         parser = RenPyParser(cfg)
         self.assertFalse(parser._should_translate_text("...continued text", "extend"))
 
+    def test_markup_only_visible_text_is_structurally_preserved(self):
+        cfg = _make_config(translate_dialogue=True)
+        parser = RenPyParser(cfg)
+        text = "{color=#5175ea}*giggle*{/w}"
+        self.assertEqual(parser._normalize_inline_text_candidate(text), "*giggle*")
+        self.assertTrue(parser.is_meaningful_text(text))
+        self.assertTrue(parser._should_translate_text(text, "dialogue"))
+
+    def test_screen_tagged_text_is_extracted_end_to_end(self):
+        cfg = _make_config(
+            translate_dialogue=False,
+            translate_menu=False,
+            translate_ui=True,
+            translate_buttons=True,
+        )
+        parser = RenPyParser(cfg)
+        content = '''\
+screen tease_screen():
+    text "{color=#5175ea}*giggle*{/w}"
+    textbutton "{color=#5175ea}*giggle*{/w}" action Return()
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rpy', delete=False, encoding='utf-8') as f:
+            f.write(content)
+            fname = f.name
+
+        try:
+            entries = parser.extract_text_entries(Path(fname))
+            texts = [e['text'] for e in entries]
+            self.assertTrue(any('{color=#5175ea}*giggle*{/w}' in t for t in texts), texts)
+            for entry in entries:
+                if '*giggle*' in entry.get('text', ''):
+                    self.assertGreaterEqual(entry.get('confidence', 0.0), 0.58)
+                    break
+            else:
+                self.fail(f"Tagged UI text not extracted. Got: {texts}")
+        finally:
+            os.unlink(fname)
+
 
 class TestDialogueOnlyFiltering(unittest.TestCase):
     """End-to-end test: 'dialogue only' — everything else should be filtered."""
@@ -202,6 +240,8 @@ menu:
             file_path='test.rpy',
         )
         self.assertIsNotNone(result, "_record_entry should allow dialogue text")
+        self.assertIn('confidence', result)
+        self.assertGreaterEqual(result['confidence'], 0.85)
 
 
 class TestRecordEntryTypeDetermination(unittest.TestCase):

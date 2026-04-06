@@ -51,6 +51,7 @@ jobs:
             tests/test_false_positive_filters.py \
             tests/test_text_type_filtering.py \
             tests/test_reliability_hardening.py \
+            tests/test_runtime_templates.py \
             tests/test_log_copy_feature.py \
             tests/test_runtime_hook_diagnostics.py \
             tests/test_v276_features.py \
@@ -138,6 +139,7 @@ jobs:
             tests/test_false_positive_filters.py \
             tests/test_text_type_filtering.py \
             tests/test_reliability_hardening.py \
+            tests/test_runtime_templates.py \
             tests/test_log_copy_feature.py \
             tests/test_runtime_hook_diagnostics.py \
             tests/test_v276_features.py \

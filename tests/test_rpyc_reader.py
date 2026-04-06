@@ -1,4 +1,4 @@
-import pytest
+import unittest
 
 from src.core import rpyc_reader as rr
 
@@ -42,7 +42,7 @@ def test_renpy_unpickler_blocks_malicious_reduce(tmp_path):
 
     payload = pickle.dumps(Evil())
 
-    with pytest.raises(pickle.UnpicklingError):
+    with unittest.TestCase().assertRaises(pickle.UnpicklingError):
         rr.RenpyUnpickler(io.BytesIO(payload)).load()
 
 
@@ -76,7 +76,9 @@ def test_default_extracts_strings_from_code():
 
     extractor._process_node(node)
 
-    assert any(entry.text == "Hello default" for entry in extractor.extracted)
+    match = next(entry for entry in extractor.extracted if entry.text == "Hello default")
+    assert match.confidence >= 0.85
+    assert match.confidence_band in {"confirmed", "probable"}
 
 
 def test_screen_keyword_unquoted_text_is_extracted():
@@ -89,4 +91,22 @@ def test_screen_keyword_unquoted_text_is_extracted():
 
     extractor._process_screen_node(node, "screen:main_menu")
 
-    assert any(entry.text == "Start" for entry in extractor.extracted)
+    match = next(entry for entry in extractor.extracted if entry.text == "Start")
+    assert match.confidence >= 0.6
+
+
+def test_tagged_ui_text_uses_visible_content():
+    extractor = rr.ASTTextExtractor()
+    extractor.current_file = "test.rpyc"
+
+    extractor._add_text(
+        "{color=#5175ea}*giggle*{/w}",
+        21,
+        "ui",
+        context="displayable",
+        node_type="SLDisplayable",
+    )
+
+    match = next(entry for entry in extractor.extracted if "*giggle*" in entry.text)
+    assert match.confidence >= 0.58
+    assert match.text_type == "ui"

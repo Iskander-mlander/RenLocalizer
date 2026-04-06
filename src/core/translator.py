@@ -389,7 +389,7 @@ class GoogleTranslator(BaseTranslator):
         protected_text, placeholders, request_use_html = self._prepare_request_protection(request)
 
         if request_use_html:
-            # HTML wrap protection (Zenpy style)
+            # HTML wrap protection for tag-preserving requests
             # Add format=html to preserve tags
             params = {
                 'client':'gtx',

@@ -501,8 +501,77 @@ Rectangle {
                 visible: settingsTabs.currentIndex === 2
                 icon: "🔍"
                 titleText: backend.getTextWithDefault("translation_filters", "What to translate?")
-                
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 14
+
+                    RowLayout {
+                        spacing: 10
+                        Label { text: "🔒"; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor }
+                        Label {
+                            text: stripLeadingGlyph(backend.getTextWithDefault("extraction_safety_title", "Extraction Safety"))
+                            font.bold: true
+                            color: root.mainTextColor
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: (backend.uiTrigger, backend.getTextWithDefault("extraction_safety_desc", "Controls how strict the text finder should be. Stricter modes keep false positives lower, while looser modes can surface more uncertain strings."))
+                        color: root.secondaryTextColor
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 12
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        Label {
+                            text: (backend.uiTrigger, backend.getTextWithDefault("extraction_mode_label", "Mode:"))
+                            color: root.secondaryTextColor
+                            Layout.preferredWidth: 100
+                        }
+
+                        ComboBox {
+                            id: extractionModeCombo
+                            Layout.fillWidth: true
+                            model: [
+                                {code: "strict", name: (backend.uiTrigger, backend.getTextWithDefault("extraction_mode_strict", "Strict")), description: (backend.uiTrigger, backend.getTextWithDefault("extraction_mode_strict_desc", "Only highly reliable strings are accepted."))},
+                                {code: "balanced", name: (backend.uiTrigger, backend.getTextWithDefault("extraction_mode_balanced", "Balanced")), description: (backend.uiTrigger, backend.getTextWithDefault("extraction_mode_balanced_desc", "Recommended. Adds more text while keeping false positives low."))},
+                                {code: "aggressive", name: (backend.uiTrigger, backend.getTextWithDefault("extraction_mode_aggressive", "Aggressive")), description: (backend.uiTrigger, backend.getTextWithDefault("extraction_mode_aggressive_desc", "Finds the most text, but may include uncertain candidates."))}
+                            ]
+                            textRole: "name"
+                            valueRole: "code"
+                            currentIndex: findIndex(model, settingsBackend ? settingsBackend.getExtractionMode() : "strict")
+                            onActivated: if (settingsBackend) settingsBackend.setExtractionMode(currentValue)
+
+                            function findIndex(model, value) {
+                                for (var i = 0; i < model.length; i++) if (model[i].code === value) return i;
+                                return 0;
+                            }
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        color: root.secondaryTextColor
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 12
+                        text: {
+                            var idx = extractionModeCombo.currentIndex
+                            if (idx < 0 || idx >= extractionModeCombo.model.length)
+                                return ""
+                            return extractionModeCombo.model[idx].description
+                        }
+                    }
+                }
+                 
                 GridLayout {
+                    Layout.topMargin: 18
                     columns: 2
                     Layout.fillWidth: true
                     rowSpacing: 10
@@ -891,7 +960,7 @@ Rectangle {
                     spacing: 16
                     
                     CheckBox { 
-                        text: (backend.uiTrigger, backend.getTextWithDefault("settings_use_html_protection", "HTML Wrap Protection (Zenpy-Style)"))
+                        text: (backend.uiTrigger, backend.getTextWithDefault("settings_use_html_protection", "HTML Wrap Protection"))
                         checked: settingsBackend.getUseHtmlProtection() 
                         enabled: backend.selectedEngine !== "google"
                         onCheckedChanged: if (enabled) settingsBackend.setUseHtmlProtection(checked)

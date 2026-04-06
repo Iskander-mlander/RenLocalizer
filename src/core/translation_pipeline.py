@@ -120,6 +120,10 @@ SEPARATOR_REMNANTS = ("|||", "RNLSEP", "SEP777", "TXTSEP")
 HOTKEY_SOURCE_RE = re.compile(r"^(?P<label>.+?)\s*/\s*(?P<hotkey>[A-Za-z])$")
 HOTKEY_VISIBLE_RE = re.compile(r"^(?P<label>.+?)\s*\[(?P<hotkey>[A-Za-z])\]$")
 ANGLE_WRAPPED_SINGLE_RE = re.compile(r"^<(?P<label>[^<>|]+)>$")
+VISIBLE_TEXT_APOSTROPHES = ("'", "’", "‘", "ʼ")
+VISIBLE_TEXT_DASHES = (" - ", " – ", " — ")
+VISIBLE_TEXT_SENTENCE_RE = re.compile(r"[^.!?…]+(?:[.!?…]+|$)")
+VISIBLE_TEXT_BRIDGE_PREFIXES = ("And", "But", "So", "Or", "Then")
 PLACEHOLDER_BRACKET_RE = re.compile(r"\[[^\]]+\]")
 RENPY_TAG_RE = re.compile(r"\{/?[^}]+\}")
 HTML_LEAK_RE = re.compile(r"</?(?:span|div)\b", re.IGNORECASE)
@@ -597,6 +601,128 @@ class TranslationPipeline(QObject):
             ):
                 continue
             additions[inner_original] = inner_translated
+        return additions
+
+    def _generate_visible_text_aliases(self, text: str) -> List[str]:
+        stripped = (text or '').strip()
+        if not stripped:
+            return []
+
+        variants: set[str] = set()
+
+        if any(ch in stripped for ch in VISIBLE_TEXT_APOSTROPHES):
+            for apostrophe in VISIBLE_TEXT_APOSTROPHES:
+                candidate = stripped
+                for current in VISIBLE_TEXT_APOSTROPHES:
+                    candidate = candidate.replace(current, apostrophe)
+                if candidate != stripped:
+                    variants.add(candidate)
+
+        if "..." in stripped:
+            variants.add(stripped.replace("...", "…"))
+        if "…" in stripped:
+            variants.add(stripped.replace("…", "..."))
+
+        for dash in VISIBLE_TEXT_DASHES:
+            if dash in stripped:
+                for replacement in VISIBLE_TEXT_DASHES:
+                    if replacement != dash:
+                        variants.add(stripped.replace(dash, replacement))
+
+        normalized_space = re.sub(r"\s+", " ", stripped.replace("\u00a0", " ")).strip()
+        if normalized_space != stripped:
+            variants.add(normalized_space)
+
+        return sorted(v for v in variants if v and v != stripped)
+
+    def _synthesize_visible_text_variants(self, mapping: Dict[str, str]) -> Dict[str, str]:
+        additions: Dict[str, str] = {}
+        blocked: set[str] = set()
+
+        for original, translated in list(mapping.items()):
+            translated_stripped = (translated or '').strip()
+            if not translated_stripped:
+                continue
+
+            for alias in self._generate_visible_text_aliases(original):
+                if alias in blocked:
+                    continue
+                if alias in mapping:
+                    blocked.add(alias)
+                    additions.pop(alias, None)
+                    continue
+                existing = additions.get(alias)
+                if existing is not None and existing != translated_stripped:
+                    blocked.add(alias)
+                    additions.pop(alias, None)
+                    continue
+                additions[alias] = translated_stripped
+
+        return additions
+
+    def _split_visible_sentences(self, text: str) -> List[str]:
+        stripped = (text or '').strip()
+        if not stripped:
+            return []
+        parts = [match.group(0).strip() for match in VISIBLE_TEXT_SENTENCE_RE.finditer(stripped)]
+        return [part for part in parts if part]
+
+    def _build_bridge_prefixed_variant(self, text: str, prefix: str) -> Optional[str]:
+        stripped = (text or '').strip()
+        if not stripped:
+            return None
+        if stripped.lower().startswith(prefix.lower() + ' '):
+            return None
+        if stripped[0].isalpha():
+            stripped = stripped[0].lower() + stripped[1:]
+        return f"{prefix} {stripped}"
+
+    def _synthesize_visible_fragment_variants(self, mapping: Dict[str, str]) -> Dict[str, str]:
+        additions: Dict[str, str] = {}
+        blocked: set[str] = set()
+
+        for original, translated in list(mapping.items()):
+            source = (original or '').strip()
+            target = (translated or '').strip()
+            if not source or not target:
+                continue
+            if len(source) < 80:
+                continue
+            if any(token in source for token in ('[', ']', '{', '}')):
+                continue
+
+            source_sentences = self._split_visible_sentences(source)
+            target_sentences = self._split_visible_sentences(target)
+            if len(source_sentences) < 3 or len(target_sentences) < 2:
+                continue
+
+            max_count = min(2, len(source_sentences) - 1, len(target_sentences))
+            for count in range(1, max_count + 1):
+                source_fragment = ' '.join(source_sentences[:count]).strip()
+                target_fragment = ' '.join(target_sentences[:count]).strip()
+                if len(source_fragment) < 48 or source_fragment.count(' ') < 7:
+                    continue
+
+                candidate_keys = [source_fragment]
+                for prefix in VISIBLE_TEXT_BRIDGE_PREFIXES:
+                    prefixed = self._build_bridge_prefixed_variant(source_fragment, prefix)
+                    if prefixed:
+                        candidate_keys.append(prefixed)
+
+                for candidate in candidate_keys:
+                    if candidate in blocked:
+                        continue
+                    if candidate in mapping:
+                        blocked.add(candidate)
+                        additions.pop(candidate, None)
+                        continue
+                    existing = additions.get(candidate)
+                    if existing is not None and existing != target_fragment:
+                        blocked.add(candidate)
+                        additions.pop(candidate, None)
+                        continue
+                    additions[candidate] = target_fragment
+
         return additions
 
     def _reopen_stale_tl_entries(self, tl_files: List[TranslationFile]) -> Dict[str, int]:
@@ -1863,6 +1989,70 @@ class TranslationPipeline(QObject):
                     )
             except Exception as e:
                 self.logger.debug(f"strings.json angle-wrapper synthesis skipped: {e}")
+
+            try:
+                visible_additions = self._synthesize_visible_text_variants(mapping)
+                if visible_additions:
+                    for alias_key, alias_value in visible_additions.items():
+                        if alias_key in mapping:
+                            continue
+                        mapping[alias_key] = alias_value
+                        self._record_translation_guard_event(
+                            category='recovered_by_synthesized_variant',
+                            file_path='strings.json',
+                            translation_id=alias_key,
+                            original_text=alias_key,
+                            translated_text=alias_value,
+                            detail='visible_text_variant',
+                        )
+                        try:
+                            self.diagnostic_report.mark_recovered(
+                                'strings.json',
+                                alias_key,
+                                'synthesized_variant',
+                                original_text=alias_key,
+                                translated_text=alias_value,
+                            )
+                        except Exception:
+                            pass
+                    self.logger.info(
+                        "strings.json: %s visible-text aliases synthesized for runtime exact-match coverage",
+                        len(visible_additions),
+                    )
+            except Exception as e:
+                self.logger.debug(f"strings.json visible-text synthesis skipped: {e}")
+
+            try:
+                fragment_additions = self._synthesize_visible_fragment_variants(mapping)
+                if fragment_additions:
+                    for alias_key, alias_value in fragment_additions.items():
+                        if alias_key in mapping:
+                            continue
+                        mapping[alias_key] = alias_value
+                        self._record_translation_guard_event(
+                            category='recovered_by_synthesized_variant',
+                            file_path='strings.json',
+                            translation_id=alias_key,
+                            original_text=alias_key,
+                            translated_text=alias_value,
+                            detail='visible_fragment_variant',
+                        )
+                        try:
+                            self.diagnostic_report.mark_recovered(
+                                'strings.json',
+                                alias_key,
+                                'synthesized_variant',
+                                original_text=alias_key,
+                                translated_text=alias_value,
+                            )
+                        except Exception:
+                            pass
+                    self.logger.info(
+                        "strings.json: %s visible-fragment aliases synthesized for runtime exact-match coverage",
+                        len(fragment_additions),
+                    )
+            except Exception as e:
+                self.logger.debug(f"strings.json visible-fragment synthesis skipped: {e}")
             
             if skipped_corrupt > 0:
                 self.logger.warning(f"strings.json: Skipped {skipped_corrupt} potentially corrupted translation(s)")
@@ -2691,12 +2881,30 @@ init python:
             # Kaynak dosyaları parse et
             from src.core.parser import RenPyParser
             parser = RenPyParser(self.config)
-            
+
+            # Resolve feature flags once so they can be reused for source/common scanning
+            use_deep = getattr(self, 'include_deep_scan', False)
+            use_rpyc = getattr(self, 'include_rpyc', False)
+
+            if self.config and hasattr(self.config, 'translation_settings'):
+                settings = self.config.translation_settings
+                # If explicit override wasn't set (or False), fallback to config
+                if not use_deep:
+                    use_deep = getattr(settings, 'enable_deep_scan', getattr(settings, 'use_deep_scan', True))
+
+                # USER REQUEST: Force enable RPYC scanning to ensure maximum coverage
+                # We always scan RPYC files to catch strings missing from decompiled RPYs
+                use_rpyc = True
+
             # 1. Parse 'game' directory
             # Parse 'game' directory and flatten results
             self.log_message.emit("info", "Scanning source .rpy files...")
-            parse_results = parser.parse_directory(
+            parse_results = parser.extract_combined(
                 game_dir,
+                include_rpy=True,
+                include_rpyc=use_rpyc,
+                include_deep_scan=use_deep,
+                recursive=True,
                 progress_callback=lambda current, total, file_path: self._emit_scan_progress(
                     "Source scan progress",
                     current,
@@ -2715,20 +2923,6 @@ init python:
                 if i % 50 == 0:
                     time.sleep(0.001)
             self.log_message.emit("info", f"Source scan completed. {len(parse_results)} files processed.")
-
-            # Resolve feature flags once so they can be reused for engine/common scanning
-            use_deep = getattr(self, 'include_deep_scan', False)
-            use_rpyc = getattr(self, 'include_rpyc', False)
-            
-            if self.config and hasattr(self.config, 'translation_settings'):
-                settings = self.config.translation_settings
-                # If explicit override wasn't set (or False), fallback to config
-                if not use_deep:
-                    use_deep = getattr(settings, 'enable_deep_scan', getattr(settings, 'use_deep_scan', True))
-                
-                # USER REQUEST: Force enable RPYC scanning to ensure maximum coverage
-                # We always scan RPYC files to catch strings missing from decompiled RPYs
-                use_rpyc = True 
 
             # Remove any entries that originate from game/renpy/common — we'll re-parse them with
             # a temporary parser that forces UI scanning for engine common strings.

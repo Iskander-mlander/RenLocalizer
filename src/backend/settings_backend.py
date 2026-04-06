@@ -300,6 +300,23 @@ class SettingsBackend(QObject):
         self.config.translation_settings.aggressive_retry_translation = enabled
         self.config.save_config()
 
+    @pyqtSlot(result=str)
+    def getExtractionMode(self) -> str:
+        return getattr(self.config.translation_settings, 'extraction_mode', 'balanced') or 'balanced'
+
+    @pyqtSlot(str)
+    def setExtractionMode(self, value: str):
+        mode = (value or 'strict').strip().lower()
+        if mode not in ('strict', 'balanced', 'aggressive'):
+            mode = 'strict'
+        self.config.translation_settings.extraction_mode = mode
+        self.config.translation_settings.minimum_extraction_confidence = {
+            'strict': 0.85,
+            'balanced': 0.58,
+            'aggressive': 0.35,
+        }[mode]
+        self.config.save_config()
+
     @pyqtSlot(result=bool)
     def getForceRuntime(self) -> bool:
         return self.config.translation_settings.force_runtime_translation

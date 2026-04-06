@@ -1341,7 +1341,7 @@ def rejoin_delimited_text(
 
 
 # =============================================================================
-# HTML WRAP PROTECTION (Zenpy-style)
+# HTML WRAP PROTECTION
 # =============================================================================
 # Google Translate <span class="notranslate"> içindeki metni çevirmiyor.
 # Bu yöntem placeholder değiştirmeden çok daha güvenilir.

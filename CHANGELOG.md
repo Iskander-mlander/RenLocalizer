@@ -1,5 +1,24 @@
 # RenLocalizer Changelog
 
+### [2.8.1] - 2026-04-05
+
+### Extraction Safety
+- **Mode-Based Precision Control:** Added a new extraction safety selector with `Strict`, `Balanced`, and `Aggressive` modes so users can choose how much risk to take when discovering Ren'Py text.
+- **Balanced Default:** Set `Balanced` as the default mode to prioritize higher text coverage while still keeping false positives under control.
+- **Markup-Aware Text Parsing:** Began shifting the parser toward structure-first markup handling so tag-heavy Ren'Py strings are evaluated by visible text content instead of relying on regex-only stripping.
+- **Screen UI Coverage:** Applied the same visible-text rule to screen/textbutton style entries so tag-heavy UI labels are less likely to be dropped as technical markup.
+- **RPYC Visible-Text Gating:** Applied the same visible-text rule inside the RPYC AST reader so tagged displayable strings are judged by their readable content before confidence filtering.
+- **Deep Scan Alignment:** Extended the same visible-text rule to deep-scan data value checks so tag-heavy JSON/YAML/inline candidates are filtered by their readable content instead of markup alone.
+- **Combined Source Scan:** Switched the main game source scan to `extract_combined()` so deep-scan-only strings from nested dict/list structures now enter the translation pipeline instead of remaining in a separate discovery pass.
+- **Runtime Normalized Fallback:** Added a conservative runtime lookup fallback that normalizes Unicode punctuation and whitespace, helping exact-match translation survive curly quotes, long dashes, ellipsis, and similar visible-form variants.
+- **Visible-Form Alias Synthesis:** `strings.json` generation now synthesizes safe visible-text aliases for common punctuation variants such as apostrophes, ellipsis, and spaced dash forms, improving runtime exact-match coverage without enabling substring replacement.
+- **Visible Fragment Aliases:** Long multi-sentence strings now also synthesize guarded prefix/visible-fragment aliases for runtime exact-match coverage, helping screen-driven text that renders shortened visible portions of a larger source string.
+- **Guarded Long-Phrase Runtime Fallback:** Added a tightly scoped runtime fallback for long visible phrases so larger screen-driven fragments can still recover a translation when the rendered text contains a single unambiguous long source phrase inside a bigger display string.
+- **Grammar Alignment:** Updated the SDK-free pyparse grammar to use visible-text gating while still preserving original Ren'Py markup in extracted output.
+- **Runtime Verification:** Validated the new extraction safety pipeline on several large real-world Ren'Py projects, confirming the visible-text gating and mode thresholds behave consistently across parser, RPYC, deep scan, and grammar paths, while still leaving room for edge-case tuning on unusual project layouts.
+- **False-Positive Guardrails:** The new mode system maps to confidence thresholds under the hood, keeping the default path conservative while still allowing broader coverage when needed.
+- **Localized Guidance:** Added explanatory UI text for the new extraction controls in all supported locale files so the setting is understandable without relying on English-only labels.
+
 ### [2.8.0] - 2026-04-04
 
 ### UI Revision 
@@ -801,7 +820,7 @@ If raw response had no `RLPH`, retry + Lingva fallback were usually wasted.
 **Fix:** Added a three-layer hook inside the v2.7 runtime translation feature so we can:
 
 - **Layer 1 – `config.say_menu_text_filter`**: runs before Ren'Py's translation/substitution, gets the complete string with tags, applies word-boundary-aware FlashText matching, protects `[variables]`/`{tags}`, and chains any previous filter.
-- **Layer 2 – `config.replace_text`**: operates on the tag-split fragments (UI strings, text fragments) using aggressive substring matching with smart case/whitespace handling, while preserving and chaining existing handlers like Zenpy's `__next_replace__`.
+ - **Layer 2 – `config.replace_text`**: operates on the tag-split fragments (UI strings, text fragments) using aggressive substring matching with smart case/whitespace handling, while preserving and chaining existing handlers.
 - **Layer 3 – `config.all_character_callbacks`**: optional debug hook that logs every `what` text before processing and helps verify coverage in complex dialogue.
 
 - Added `_RL_KeywordProcessor` (word-boundary) + `_RL_SubstringProcessor` (fragment) for dual-processing, Shift+R hotkey for reload, Ren'Py searchpath discovery, Turkish/European character support, and `[SAY_FILTER]/[REPLACE]/[DIALOGUE]` debug log prefixes.
@@ -846,7 +865,7 @@ This patch stays within the [2.7.0] entry because it represents a runtime-hook r
 - **Startup & Shutdown Stability:** (FIX) Corrected invalid imports in `app_backend.py` and added missing `asyncio`/`multiprocessing` imports in `run.py` to prevent crashes and ensure clean application shutdown.
 
 ### 🚀 Dictionary-Based Runtime Translation Hook (Major Enhancement)
-- **New Translation System:** Completely rewrote runtime translation hook inspired by ZenPy's approach
+- **New Translation System:** Completely rewrote the runtime translation hook with a structure-first, tag-preserving approach
   - **Problem Solved:** Ren'Py's `translate_string()` only works for strings marked with `_()` function, leaving most dialogue untranslated
   - **Solution:** Hook now loads translations from `strings.rpy` into a dictionary and performs direct key-value lookup
   

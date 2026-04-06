@@ -343,6 +343,149 @@ class DeepVariableAnalyzer:
         return False
 
 
+def confidence_band(score: float) -> str:
+    """Map a numeric extraction score to a coarse confidence band."""
+    if score >= 0.85:
+        return "confirmed"
+    if score >= 0.60:
+        return "probable"
+    return "candidate"
+
+
+def resolve_minimum_extraction_confidence(config_manager=None, default: float = 0.0) -> float:
+    """Safely read the configured extraction threshold.
+
+    MagicMock values should fall back to `default` instead of being coerced
+    into an arbitrary numeric value.
+    """
+    if config_manager is None:
+        return default
+
+    ts = getattr(config_manager, "translation_settings", None)
+    if ts is None:
+        ts = config_manager
+
+    raw = getattr(ts, "minimum_extraction_confidence", default)
+    if isinstance(raw, (int, float)):
+        return max(0.0, min(1.0, float(raw)))
+    if isinstance(raw, str):
+        try:
+            return max(0.0, min(1.0, float(raw.strip())))
+        except (TypeError, ValueError):
+            return default
+    return default
+
+
+def score_extraction_confidence(
+    text: str,
+    text_type: str = "",
+    context: str = "",
+    context_path: Optional[List[str]] = None,
+    character: str = "",
+    var_name: str = "",
+) -> float:
+    """Score how safe a candidate is to treat as user-facing text.
+
+    The score is intentionally conservative. Stable dialogue/UI patterns get
+    a high score, while generic strings, technical identifiers, and code-like
+    fragments get downweighted.
+    """
+    text = (text or "").strip()
+    if not text:
+        return 0.0
+
+    analyzer = _shared_analyzer
+    if analyzer.is_technical_string(text):
+        return 0.0
+
+    lowered_text = text.lower()
+    lowered_context = (context or "").lower()
+    lowered_path = " / ".join((p or "" for p in (context_path or []))).lower()
+    combined_context = f"{lowered_context} {lowered_path} {character or ''} {var_name or ''}".lower()
+
+    base_scores = {
+        "translatable_string": 0.99,
+        "immediate_translation": 0.99,
+        "python_translatable": 0.99,
+        "dialogue": 0.94,
+        "narration": 0.94,
+        "nvl_dialogue": 0.92,
+        "monologue": 0.92,
+        "menu": 0.90,
+        "menu_choice": 0.90,
+        "ui_action": 0.92,
+        "notify": 0.93,
+        "confirm": 0.93,
+        "input": 0.91,
+        "screen_text": 0.82,
+        "screen": 0.82,
+        "textbutton": 0.84,
+        "imagebutton": 0.82,
+        "label": 0.80,
+        "text_displayable": 0.84,
+        "show_text": 0.82,
+        "ui": 0.80,
+        "button": 0.78,
+        "character_name": 0.70,
+        "define_text": 0.68,
+        "config_text": 0.66,
+        "string": 0.55,
+        "data_string": 0.45,
+        "python_ast": 0.50,
+        "call_arg": 0.52,
+        "python_list": 0.48,
+        "python_dict": 0.48,
+        "list_item": 0.55,
+    }
+    score = base_scores.get((text_type or "").lower(), 0.58)
+
+    if any(token in combined_context for token in ("python/_", "python/__", "python/___", "translate:", "translate_string")):
+        score += 0.20
+    if any(token in combined_context for token in ("define ", "default ")):
+        score += 0.12
+    if any(token in combined_context for token in ("say", "menu", "confirm", "notify", "tooltip", "display_menu", "textbutton", "text_displayable")):
+        score += 0.10
+    if any(token in combined_context for token in ("screen:", "screen ", "screen_")):
+        score += 0.08
+    if any(token in combined_context for token in ("action", "caption", "title", "prompt")):
+        score += 0.06
+
+    if var_name:
+        score = (score * 0.72) + (_shared_analyzer.score_var_name(var_name) * 0.28)
+
+    if character and character.strip():
+        score += 0.03
+
+    words = [part for part in re.split(r"\s+", text) if part]
+    alpha_words = [part for part in words if any(ch.isalpha() for ch in part)]
+    if len(alpha_words) >= 2:
+        score += 0.04
+    elif len(alpha_words) == 1 and len(text) > 12:
+        score += 0.02
+    if (text_type or "").lower() in {"string", "data_string", "define_text", "config_text"}:
+        if len(alpha_words) >= 2 and any(word[:1].isupper() for word in alpha_words):
+            score += 0.05
+
+    # Gentle penalties for code-like / identifier-like strings.
+    if re.search(r'^(?:https?://|ftp://|mailto:|file://|www\.)', lowered_text):
+        score -= 0.45
+    if re.search(r'^[#\d]', text):
+        score -= 0.15
+    if re.search(r'^[A-Za-z_][A-Za-z0-9_]*$', text) and " " not in text:
+        score -= 0.18
+    if re.search(r'^[A-Z][A-Z0-9_]+$', text):
+        score -= 0.12
+    if "/" in text and " " not in text:
+        score -= 0.20
+    if "=" in text and len(text) < 60:
+        score -= 0.10
+    if "{" in text or "[" in text:
+        # Preserve tagged dialogue, but do not over-trust it unless other cues exist.
+        score -= 0.03
+
+    return max(0.0, min(1.0, score))
+
+
 # Module-level shared analyzer instance (avoids re-compiling 15 regex patterns per call)
 _shared_analyzer = DeepVariableAnalyzer()
 
