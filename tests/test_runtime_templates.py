@@ -55,8 +55,10 @@ def test_template_logic(tmp_path):
         if in_python_block:
             if line.startswith("    "):
                 body_lines.append(line[4:])
+            elif line.strip() == "":
+                body_lines.append("")
             else:
-                body_lines.append(line)
+                break
     
     body = "\n".join(body_lines)
     
