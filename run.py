@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 sys.setrecursionlimit(5000)
 
 # Default version fallback
-VERSION = "2.8.0"
+VERSION = "2.8.1"
 
 try:
     from src.version import VERSION as _v
