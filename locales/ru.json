@@ -239,6 +239,8 @@
     "font_check_results": "Результаты проверки шрифтов",
     "font_check_select_dir": "Выберите папку игры для проверки шрифтов",
     "font_check_summary": "Всего: {total}\nОк: {comp}\nОшибка: {incomp}",
+    "font_check_risk_summary": "Точки риска пользовательских шрифтов: {count}",
+    "font_check_risk_none": "Явных рисков жёстко заданных шрифтов не найдено.",
     "font_check_title": "Совместимость шрифтов",
     "font_err_download_fail": "Не удалось загрузить шрифт: {error}.",
     "font_err_invalid_zip": "Загруженный файл не является действительным ZIP-архивом.",

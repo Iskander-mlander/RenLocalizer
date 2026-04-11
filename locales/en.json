@@ -239,6 +239,8 @@
     "font_check_results": "Font Compatibility Results",
     "font_check_select_dir": "Select Game Directory for Font Check",
     "font_check_summary": "Fonts checked: {total}\nCompatible: {comp}\nIncompatible: {incomp}",
+    "font_check_risk_summary": "Custom font risk points: {count}",
+    "font_check_risk_none": "No obvious hardcoded font risks found.",
     "font_check_title": "Font Compatibility",
     "font_err_download_fail": "Could not download font: {error}",
     "font_err_invalid_zip": "Downloaded file is not a valid ZIP archive.",

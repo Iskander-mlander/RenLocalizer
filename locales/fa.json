@@ -239,6 +239,8 @@
     "font_check_results": "نتایج بررسی فونت",
     "font_check_select_dir": "پوشه بازی را برای بررسی فونت انتخاب کنید",
     "font_check_summary": "کل: {total}\nموفق: {comp}\nناموفق: {incomp}",
+    "font_check_risk_summary": "نقاط ریسک فونت سفارشی: {count}",
+    "font_check_risk_none": "ریسک واضحی از فونت های هاردکد شده یافت نشد.",
     "font_check_title": "بررسی فونت",
     "font_err_download_fail": "فونت دانلود نشد: {error}",
     "font_err_invalid_zip": "فایل دانلود شده یک بایگانی ZIP معتبر نیست.",

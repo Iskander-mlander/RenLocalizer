@@ -239,6 +239,8 @@
     "font_check_results": "字体兼容性结果",
     "font_check_select_dir": "选择要进行字体检查的游戏目录",
     "font_check_summary": "检查字体：{total}\n兼容：{comp}\n不兼容：{incomp}",
+    "font_check_risk_summary": "自定义字体风险点：{count}",
+    "font_check_risk_none": "未发现明显的硬编码字体风险。",
     "font_check_title": "字体兼容性",
     "font_err_download_fail": "无法下载字体：{error}",
     "font_err_invalid_zip": "下载的文件不是有效的 ZIP 存档。",

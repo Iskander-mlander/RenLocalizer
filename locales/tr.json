@@ -239,6 +239,8 @@
     "font_check_results": "Font Uyumluluk Sonuçları",
     "font_check_select_dir": "Font Kontrolü için Oyun Klasörü Seçin",
     "font_check_summary": "Kontrol edilen font: {total}\nUyumlu: {comp}\nUyumsuz: {incomp}",
+    "font_check_risk_summary": "Ozel font risk noktasi: {count}",
+    "font_check_risk_none": "Belirgin bir hardcoded font riski bulunamadi.",
     "font_check_title": "Font Uyumluluğu",
     "font_err_download_fail": "Font indirilemedi: {error}",
     "font_err_invalid_zip": "Google Fonts'tan gelen dosya bozuk veya geçersiz ZIP.",

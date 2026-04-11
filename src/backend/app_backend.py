@@ -623,12 +623,25 @@ class AppBackend(QObject):
         path = AppBackend._normalize_path(path)
         try:
             from src.tools.font_helper import check_font_for_project
-            summary = check_font_for_project(path, "tr", verbose=False)
-            return self.config.get_ui_text("font_check_summary", "Checked: {total}\nOK: {comp}\nIssue: {incomp}").format(
+            target_lang = self.config.translation_settings.target_language or "turkish"
+            summary = check_font_for_project(path, target_lang, verbose=False)
+            result = self.config.get_ui_text("font_check_summary", "Checked: {total}\nOK: {comp}\nIssue: {incomp}").format(
                 total=summary['fonts_checked'],
                 comp=summary['compatible_fonts'],
                 incomp=summary['incompatible_fonts']
             )
+            risk_count = summary.get('risk_report', {}).get('total_findings', 0)
+            if risk_count > 0:
+                result += "\n" + self.config.get_ui_text(
+                    "font_check_risk_summary",
+                    "Custom font risk points: {count}",
+                ).format(count=risk_count)
+            else:
+                result += "\n" + self.config.get_ui_text(
+                    "font_check_risk_none",
+                    "No obvious hardcoded font risks found.",
+                )
+            return result
         except Exception as e:
             return f"{self.config.get_ui_text('error', 'Error')}: {str(e)}"
     

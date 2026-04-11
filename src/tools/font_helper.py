@@ -19,7 +19,7 @@ import re
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set, Tuple
+from typing import List, Dict, Optional, Set, Tuple, Any
 
 # Try to import fontTools (optional dependency)
 try:
@@ -48,6 +48,16 @@ class FontCheckResult:
             f"Coverage: {self.coverage_percent:.1f}%\n"
             f"Missing: {len(self.missing_chars)} characters"
         )
+
+
+@dataclass
+class FontRiskFinding:
+    """Static analysis result for custom/hardcoded font usage."""
+    category: str
+    label: str
+    file_path: str
+    line_number: int
+    line_preview: str
 
 
 # Character sets for different languages
@@ -137,6 +147,31 @@ LANGUAGE_CHAR_SETS: Dict[str, Tuple[str, str]] = {
         "ÀàÈèÉéÌìÍíÎîÒòÓóÙùÚú",
         "Ciao! Come stai? Grazie mille."
     ),
+}
+
+
+FONT_RISK_PATTERNS: Dict[str, re.Pattern[str]] = {
+    "text_font_arg": re.compile(r"\bText\s*\([^\n#]*\bfont\s*=", re.IGNORECASE),
+    "what_font": re.compile(r"\bwhat_font\s*=", re.IGNORECASE),
+    "who_font": re.compile(r"\bwho_font\s*=", re.IGNORECASE),
+    "style_font": re.compile(r"\bstyle\s+\w+[^\n#]*\bfont\b", re.IGNORECASE),
+    "font_tag": re.compile(r"\{font=[^}]+\}", re.IGNORECASE),
+    "font_group": re.compile(r"\bFontGroup\s*\(", re.IGNORECASE),
+    "font_name_map": re.compile(r"\bconfig\.font_name_map\b", re.IGNORECASE),
+    "font_replacement_map": re.compile(r"\bconfig\.font_replacement_map\b", re.IGNORECASE),
+    "image_font": re.compile(r"\brenpy\.register_(?:bmfont|mudgefont|sfont)\b", re.IGNORECASE),
+}
+
+RISK_LABELS: Dict[str, str] = {
+    "text_font_arg": "Text(..., font=...)",
+    "what_font": "what_font=",
+    "who_font": "who_font=",
+    "style_font": "style ... font",
+    "font_tag": "{font=...}",
+    "font_group": "FontGroup()",
+    "font_name_map": "config.font_name_map",
+    "font_replacement_map": "config.font_replacement_map",
+    "image_font": "image-based font registration",
 }
 
 
@@ -454,6 +489,52 @@ label font_test_label:
         
         return FONT_SUGGESTIONS.get(language, default_fonts)
 
+    def analyze_font_risks(self, game_dir: str) -> Dict[str, Any]:
+        """Scan project scripts for hardcoded/custom font usage.
+
+        This helps estimate whether the automatic font fixer may only provide
+        partial coverage on a project.
+        """
+        root = Path(game_dir)
+        if (root / "game").exists():
+            root = root / "game"
+
+        findings: List[FontRiskFinding] = []
+        counts = {key: 0 for key in FONT_RISK_PATTERNS}
+
+        for path in root.rglob("*.rpy"):
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                try:
+                    lines = path.read_text(encoding="latin-1").splitlines()
+                except Exception:
+                    continue
+            except Exception:
+                continue
+
+            for line_number, line in enumerate(lines, 1):
+                for category, pattern in FONT_RISK_PATTERNS.items():
+                    if not pattern.search(line):
+                        continue
+                    counts[category] += 1
+                    findings.append(
+                        FontRiskFinding(
+                            category=category,
+                            label=RISK_LABELS[category],
+                            file_path=str(path),
+                            line_number=line_number,
+                            line_preview=line.strip()[:220],
+                        )
+                    )
+
+        findings.sort(key=lambda item: (item.category, item.file_path, item.line_number))
+        return {
+            "total_findings": len(findings),
+            "counts": counts,
+            "findings": findings,
+        }
+
 
 def check_font_for_project(
     game_dir: str,
@@ -473,6 +554,7 @@ def check_font_for_project(
     """
     helper = FontHelper()
     results = helper.check_all_fonts(game_dir, target_language)
+    risk_report = helper.analyze_font_risks(game_dir)
     
     summary = {
         'fonts_checked': len(results),
@@ -480,6 +562,7 @@ def check_font_for_project(
         'incompatible_fonts': sum(1 for r in results if not r.supported),
         'results': results,
         'suggestions': helper.suggest_fonts(target_language),
+        'risk_report': risk_report,
     }
     
     if verbose:
@@ -496,5 +579,7 @@ def check_font_for_project(
         print(f"\nSuggested fonts for {target_language}:")
         for font in summary['suggestions']:
             print(f"  - {font}")
+
+        print(f"\nFont override risk findings: {risk_report['total_findings']}")
     
     return summary

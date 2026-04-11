@@ -42,6 +42,7 @@ from src.core.translator import (
 from src.core.ai_translator import OpenAITranslator, GeminiTranslator, LocalLLMTranslator, DeepSeekTranslator
 from src.core.output_formatter import RenPyOutputFormatter
 from src.core.diagnostics import DiagnosticReport
+from src.core.runtime_coverage import load_runtime_miss_log, score_runtime_miss_entries, summarize_runtime_miss_scores
 
 
 # Ren'Py dil kodları -> API dil kodları dönüşümü
@@ -667,6 +668,16 @@ class TranslationPipeline(QObject):
         parts = [match.group(0).strip() for match in VISIBLE_TEXT_SENTENCE_RE.finditer(stripped)]
         return [part for part in parts if part]
 
+    def _get_extraction_mode(self) -> str:
+        ts = getattr(self.config, 'translation_settings', None)
+        mode = str(getattr(ts, 'extraction_mode', 'balanced') or 'balanced').strip().lower()
+        if mode not in ('strict', 'balanced', 'aggressive'):
+            return 'balanced'
+        return mode
+
+    def _is_aggressive_extraction_mode(self) -> bool:
+        return self._get_extraction_mode() == 'aggressive'
+
     def _build_bridge_prefixed_variant(self, text: str, prefix: str) -> Optional[str]:
         stripped = (text or '').strip()
         if not stripped:
@@ -680,27 +691,34 @@ class TranslationPipeline(QObject):
     def _synthesize_visible_fragment_variants(self, mapping: Dict[str, str]) -> Dict[str, str]:
         additions: Dict[str, str] = {}
         blocked: set[str] = set()
+        is_aggressive = self._is_aggressive_extraction_mode()
+        min_source_length = 64 if is_aggressive else 80
+        min_source_sentences = 2 if is_aggressive else 3
+        min_target_sentences = 1 if is_aggressive else 2
+        max_count_limit = 3 if is_aggressive else 2
+        min_fragment_length = 36 if is_aggressive else 48
+        min_fragment_words = 5 if is_aggressive else 7
 
         for original, translated in list(mapping.items()):
             source = (original or '').strip()
             target = (translated or '').strip()
             if not source or not target:
                 continue
-            if len(source) < 80:
+            if len(source) < min_source_length:
                 continue
             if any(token in source for token in ('[', ']', '{', '}')):
                 continue
 
             source_sentences = self._split_visible_sentences(source)
             target_sentences = self._split_visible_sentences(target)
-            if len(source_sentences) < 3 or len(target_sentences) < 2:
+            if len(source_sentences) < min_source_sentences or len(target_sentences) < min_target_sentences:
                 continue
 
-            max_count = min(2, len(source_sentences) - 1, len(target_sentences))
+            max_count = min(max_count_limit, len(source_sentences) - 1, len(target_sentences))
             for count in range(1, max_count + 1):
                 source_fragment = ' '.join(source_sentences[:count]).strip()
                 target_fragment = ' '.join(target_sentences[:count]).strip()
-                if len(source_fragment) < 48 or source_fragment.count(' ') < 7:
+                if len(source_fragment) < min_fragment_length or source_fragment.count(' ') < min_fragment_words:
                     continue
 
                 candidate_keys = [source_fragment]
@@ -722,6 +740,113 @@ class TranslationPipeline(QObject):
                         additions.pop(candidate, None)
                         continue
                     additions[candidate] = target_fragment
+
+        return additions
+
+    def _normalize_runtime_alias_text(self, text: str) -> str:
+        normalized = (text or '').strip()
+        if not normalized:
+            return ''
+        for current in VISIBLE_TEXT_APOSTROPHES:
+            normalized = normalized.replace(current, "'")
+        normalized = normalized.replace('…', '...')
+        normalized = normalized.replace('–', '-').replace('—', '-').replace('−', '-')
+        normalized = re.sub(r'\s+', ' ', normalized.replace('\u00a0', ' ')).strip()
+        return normalized.casefold()
+
+    def _find_runtime_alias_match_index(self, container_text: str, source_text: str) -> int:
+        lowered_container = container_text.casefold()
+        lowered_source = source_text.casefold()
+        start = lowered_container.find(lowered_source)
+        if start < 0:
+            return -1
+        end = start + len(source_text)
+        before = container_text[start - 1] if start > 0 else ''
+        after = container_text[end] if end < len(container_text) else ''
+        if before and before.isalnum():
+            return -1
+        if after and after.isalnum():
+            return -1
+        return start
+
+    def _build_runtime_observed_alias(self, observed_text: str, source_text: str, translated_text: str) -> Optional[str]:
+        observed = (observed_text or '').strip()
+        source = (source_text or '').strip()
+        translated = (translated_text or '').strip()
+        if not observed or not source or not translated:
+            return None
+
+        if self._normalize_runtime_alias_text(observed) == self._normalize_runtime_alias_text(source):
+            return translated
+
+        start = self._find_runtime_alias_match_index(observed, source)
+        if start < 0:
+            return None
+        end = start + len(source)
+        return observed[:start] + translated + observed[end:]
+
+    def _synthesize_runtime_observed_variants(self, mapping: Dict[str, str], lang_dir: str) -> Dict[str, str]:
+        log_path = Path(lang_dir) / 'diagnostics' / 'runtime_missed_strings.jsonl'
+        if not log_path.is_file():
+            return {}
+
+        analysis = self.analyze_runtime_miss_log(str(log_path))
+        additions: Dict[str, str] = {}
+        blocked: set[str] = set()
+        is_aggressive = self._is_aggressive_extraction_mode()
+        accepted_actions = {'promote_alias', 'review_candidate'} if is_aggressive else {'promote_alias'}
+        min_source_length = 24 if is_aggressive else 32
+        min_source_words = 3 if is_aggressive else 4
+        normalized_mapping = {
+            self._normalize_runtime_alias_text(source): (source, target)
+            for source, target in mapping.items()
+            if source and target
+        }
+
+        for candidate in analysis.get('top_candidates', []):
+            if candidate.get('suggested_action') not in accepted_actions:
+                continue
+            observed_text = (candidate.get('text') or '').strip()
+            if not observed_text or observed_text in mapping or observed_text in blocked:
+                continue
+
+            matched_pairs: list[tuple[str, str]] = []
+            normalized_observed = self._normalize_runtime_alias_text(observed_text)
+            exact_pair = normalized_mapping.get(normalized_observed)
+            if exact_pair is not None:
+                matched_pairs.append(exact_pair)
+            else:
+                for source_text, translated_text in mapping.items():
+                    source_clean = (source_text or '').strip()
+                    translated_clean = (translated_text or '').strip()
+                    if not source_clean or not translated_clean:
+                        continue
+                    if len(source_clean) < min_source_length or source_clean.count(' ') < min_source_words:
+                        continue
+                    if any(token in source_clean for token in ('[', ']', '{', '}')):
+                        continue
+                    if self._find_runtime_alias_match_index(observed_text, source_clean) >= 0:
+                        matched_pairs.append((source_clean, translated_clean))
+                    if len(matched_pairs) > 1:
+                        break
+
+            if len(matched_pairs) != 1:
+                if len(matched_pairs) > 1:
+                    blocked.add(observed_text)
+                    additions.pop(observed_text, None)
+                continue
+
+            source_text, translated_text = matched_pairs[0]
+            alias_value = self._build_runtime_observed_alias(observed_text, source_text, translated_text)
+            if not alias_value or alias_value == observed_text:
+                continue
+
+            existing = additions.get(observed_text)
+            if existing is not None and existing != alias_value:
+                blocked.add(observed_text)
+                additions.pop(observed_text, None)
+                continue
+            additions[observed_text] = alias_value
 
         return additions
 
@@ -930,6 +1055,31 @@ class TranslationPipeline(QObject):
             'code': 'dynamic_ui_runtime',
             'count': count,
             'samples': samples,
+        }
+
+    def analyze_runtime_miss_log(self, log_path: str) -> Dict[str, Any]:
+        """Score runtime miss diagnostics for future alias promotion.
+
+        This is intentionally read-only for now. It helps inspect missed
+        runtime strings without changing translation outputs during gameplay.
+        """
+        entries = load_runtime_miss_log(log_path)
+        scored = score_runtime_miss_entries(entries)
+        summary = summarize_runtime_miss_scores(entries)
+        return {
+            'summary': summary,
+            'top_candidates': [
+                {
+                    'text': item.text,
+                    'score': item.score,
+                    'confidence': item.confidence,
+                    'suggested_action': item.suggested_action,
+                    'risk': item.risk,
+                    'reasons': item.reasons,
+                    'entry': item.entry,
+                }
+                for item in scored[:50]
+            ],
         }
 
     def _collect_coverage_warnings(self, game_dir: str) -> List[Dict[str, Any]]:
@@ -2053,6 +2203,38 @@ class TranslationPipeline(QObject):
                     )
             except Exception as e:
                 self.logger.debug(f"strings.json visible-fragment synthesis skipped: {e}")
+
+            try:
+                runtime_observed_additions = self._synthesize_runtime_observed_variants(mapping, lang_dir)
+                if runtime_observed_additions:
+                    for alias_key, alias_value in runtime_observed_additions.items():
+                        if alias_key in mapping:
+                            continue
+                        mapping[alias_key] = alias_value
+                        self._record_translation_guard_event(
+                            category='recovered_by_synthesized_variant',
+                            file_path='strings.json',
+                            translation_id=alias_key,
+                            original_text=alias_key,
+                            translated_text=alias_value,
+                            detail='runtime_observed_variant',
+                        )
+                        try:
+                            self.diagnostic_report.mark_recovered(
+                                'strings.json',
+                                alias_key,
+                                'synthesized_variant',
+                                original_text=alias_key,
+                                translated_text=alias_value,
+                            )
+                        except Exception:
+                            pass
+                    self.logger.info(
+                        "strings.json: %s runtime-observed aliases synthesized from missed-string diagnostics",
+                        len(runtime_observed_additions),
+                    )
+            except Exception as e:
+                self.logger.debug(f"strings.json runtime-observed synthesis skipped: {e}")
             
             if skipped_corrupt > 0:
                 self.logger.warning(f"strings.json: Skipped {skipped_corrupt} potentially corrupted translation(s)")

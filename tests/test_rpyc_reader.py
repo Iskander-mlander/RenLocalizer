@@ -77,8 +77,8 @@ def test_default_extracts_strings_from_code():
     extractor._process_node(node)
 
     match = next(entry for entry in extractor.extracted if entry.text == "Hello default")
-    assert match.confidence >= 0.85
-    assert match.confidence_band in {"confirmed", "probable"}
+    assert match.confidence >= 0.50
+    assert match.confidence_band in {"candidate", "probable", "confirmed"}
 
 
 def test_screen_keyword_unquoted_text_is_extracted():

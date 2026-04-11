@@ -239,6 +239,8 @@
     "font_check_results": "Ergebnisse der Schriftkompatibilität",
     "font_check_select_dir": "Spielverzeichnis für Schriftprüfung auswählen",
     "font_check_summary": "Schriften geprüft: {total}\nKompatibel: {comp}\nInkompatibel: {incomp}",
+    "font_check_risk_summary": "Benutzerdefinierte Font-Risikopunkte: {count}",
+    "font_check_risk_none": "Keine offensichtlichen hartcodierten Font-Risiken gefunden.",
     "font_check_title": "Schriftart-Kompatibilität",
     "font_err_download_fail": "Schriftart konnte nicht heruntergeladen werden: {error}",
     "font_err_invalid_zip": "Heruntergeladene Datei ist kein gültiges ZIP-Archiv.",

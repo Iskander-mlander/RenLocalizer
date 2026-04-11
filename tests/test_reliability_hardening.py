@@ -413,6 +413,135 @@ def test_generate_strings_json_adds_visible_fragment_aliases(tmp_path: Path) -> 
     assert mapping[and_key] == "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
 
 
+def test_runtime_observed_variants_are_synthesized_from_miss_log(tmp_path: Path) -> None:
+    pipeline = _make_pipeline()
+    lang_dir = tmp_path / "tl" / "turkish"
+    diag_dir = lang_dir / "diagnostics"
+    diag_dir.mkdir(parents=True)
+
+    runtime_log = diag_dir / "runtime_missed_strings.jsonl"
+    runtime_log.write_text(
+        json.dumps(
+            {
+                "reason": "screen_bypass_miss",
+                "source_kind": "dialogue",
+                "text": "And the continuation of this story is being created right now. So I won't say goodbye.",
+                "stripped": "And the continuation of this story is being created right now. So I won't say goodbye.",
+                "length": 85,
+                "word_count": 14,
+                "sentence_count": 2,
+                "alnum_count": 67,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    additions = pipeline._synthesize_runtime_observed_variants(
+        {
+            "The continuation of this story is being created right now. So I won't say goodbye.": "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım.",
+        },
+        str(lang_dir),
+    )
+
+    assert additions["And the continuation of this story is being created right now. So I won't say goodbye."] == "And Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
+
+
+def test_generate_strings_json_adds_runtime_observed_aliases(tmp_path: Path) -> None:
+    pipeline = _make_pipeline()
+    lang_dir = tmp_path / "tl" / "turkish"
+    diag_dir = lang_dir / "diagnostics"
+    diag_dir.mkdir(parents=True)
+
+    runtime_log = diag_dir / "runtime_missed_strings.jsonl"
+    runtime_log.write_text(
+        json.dumps(
+            {
+                "reason": "screen_bypass_miss",
+                "source_kind": "dialogue",
+                "text": "And the continuation of this story is being created right now. So I won't say goodbye.",
+                "stripped": "And the continuation of this story is being created right now. So I won't say goodbye.",
+                "length": 85,
+                "word_count": 14,
+                "sentence_count": 2,
+                "alnum_count": 67,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    tl_file = TranslationFile(
+        file_path=str(lang_dir / "dialogue.rpy"),
+        language="turkish",
+        entries=[
+            TranslationEntry(
+                original_text="The continuation of this story is being created right now. So I won't say goodbye.",
+                translated_text="Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım.",
+                file_path=str(lang_dir / "dialogue.rpy"),
+                line_number=41,
+                entry_type="dialogue",
+            )
+        ],
+    )
+
+    pipeline._generate_strings_json([tl_file], str(lang_dir))
+
+    mapping = json.loads((lang_dir / "strings.json").read_text(encoding="utf-8"))
+    observed_key = "And the continuation of this story is being created right now. So I won't say goodbye."
+    assert mapping[observed_key] == "And Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
+
+
+def test_runtime_observed_review_candidates_wait_for_aggressive_mode(tmp_path: Path) -> None:
+    lang_dir = tmp_path / "tl" / "turkish"
+    diag_dir = lang_dir / "diagnostics"
+    diag_dir.mkdir(parents=True)
+
+    runtime_log = diag_dir / "runtime_missed_strings.jsonl"
+    runtime_log.write_text(
+        json.dumps(
+            {
+                "reason": "screen_scope_observed",
+                "source_kind": "screen_scope",
+                "text": "And the story continues here in a visible form.",
+                "stripped": "And the story continues here in a visible form.",
+                "length": 46,
+                "word_count": 9,
+                "sentence_count": 1,
+                "alnum_count": 36,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    source_mapping = {
+        "The story continues here in a visible form.": "Hikaye burada gorunur bir bicimde devam ediyor.",
+    }
+
+    balanced_pipeline = _make_pipeline(extraction_mode="balanced")
+    aggressive_pipeline = _make_pipeline(extraction_mode="aggressive")
+
+    balanced_additions = balanced_pipeline._synthesize_runtime_observed_variants(source_mapping, str(lang_dir))
+    aggressive_additions = aggressive_pipeline._synthesize_runtime_observed_variants(source_mapping, str(lang_dir))
+
+    observed_key = "And the story continues here in a visible form."
+    assert observed_key not in balanced_additions
+    assert aggressive_additions[observed_key] == "And Hikaye burada gorunur bir bicimde devam ediyor."
+
+
+def test_aggressive_mode_relaxes_visible_fragment_thresholds() -> None:
+    source = "The story continues here in a visible form. And more details arrive later."
+    target = "Hikaye burada gorunur bir bicimde devam ediyor. Ve daha sonra daha fazla ayrinti geliyor."
+
+    balanced_pipeline = _make_pipeline(extraction_mode="balanced")
+    aggressive_pipeline = _make_pipeline(extraction_mode="aggressive")
+
+    balanced_additions = balanced_pipeline._synthesize_visible_fragment_variants({source: target})
+    aggressive_additions = aggressive_pipeline._synthesize_visible_fragment_variants({source: target})
+
+    key = "The story continues here in a visible form."
+    assert key not in balanced_additions
+    assert aggressive_additions[key] == "Hikaye burada gorunur bir bicimde devam ediyor."
+
+
 def test_generated_export_file_is_detected() -> None:
     pipeline = _make_pipeline()
 

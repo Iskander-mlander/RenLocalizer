@@ -1,7 +1,7 @@
 # AGENTS.md — RenLocalizer Proje Kılavuzu (AI Agent Bağlamı)
 
 > Bu dosya, AI kodlama asistanlarının (GitHub Copilot, Cursor, Claude vb.) projeyi hızla anlaması için hazırlanmıştır.
-> Son güncelleme: 2026-03-29 | Versiyon: 2.7.8
+> Son güncelleme: 2026-04-06 | Versiyon: 2.8.2
 
 ---
 
@@ -31,7 +31,7 @@ RenLocalizer/
 ├── RenLocalizer.spec       # PyInstaller build spec
 │
 ├── src/
-│   ├── version.py          # VERSION = "2.7.8"
+│   ├── version.py          # VERSION = "2.8.2"
 │   ├── cli_main.py         # CLI ana modülü (argparse + QCoreApplication)
 │   │
 │   ├── core/               # ★ Ana çeviri motoru (17 modül, ~17K satır)
@@ -48,7 +48,8 @@ RenLocalizer/
 │   │   ├── tl_parser.py             # tl/ çeviri dosyası parser'ı
 │   │   ├── output_formatter.py      # Çıktı biçimlendirici + false positive filtre
 │   │   ├── exporter.py              # JSON → RPY dönüştürücü
-│   │   ├── runtime_hook_template.py # Oyun içi çeviri hook şablonu (v4.1.0)
+│   │   ├── runtime_hook_template.py # Oyun içi çeviri hook şablonu (v4.1.1+)
+│   │   ├── runtime_coverage.py      # Runtime miss scoring + alias promotion yardımcıları
 │   │   ├── proxy_manager.py         # Proxy rotasyon yöneticisi
 │   │   ├── constants.py             # Google mirror'ları, Lingva instance'ları, timeout'lar
 │   │   ├── diagnostics.py           # Tanılama raporu üretici
@@ -170,8 +171,8 @@ TranslationPipeline.run()
   ├─ 6. SAVING       → Çıktı üretme:
   │     ├── output_formatter   (glossary + false-positive filtre)
   │     ├── tl/<dil>/*.rpy     (dosya-bazlı çeviri blokları)
-  │     ├── strings.json       (runtime hook için)
-  │     └── runtime hook       (oyun içi _rl_hook.rpy)
+  │     ├── strings.json       (runtime hook için; visible-form + runtime-observed alias synthesis içerir)
+  │     └── runtime hook       (oyun içi _rl_hook.rpy; normalized exact + guarded phrase fallback + screen-scope harvesting diagnostics)
   └─ 7. COMPLETED    → Tanılama raporu
 ```
 
@@ -218,17 +219,26 @@ TranslationPipeline.run()
 - **Özel:** Custom function params (kullanıcı tanımlı, `config.json` → `custom_function_params`)
 
 ### 5.4 Runtime Hook (Oyun İçi Çeviri)
-- **Dosya:** `src/core/runtime_hook_template.py` (v4.1.1)
+- **Dosya:** `src/core/runtime_hook_template.py` (v4.1.1+)
 - **Mekanizma:** `init -999 python:` bloğu ile `strings.json` yüklenir; exact-match odaklı runtime çeviri yapılır
 - **Katman 1:** `config.say_menu_text_filter` — pre-interpolation exact dict lookup
-- **Katman 2:** `config.replace_text` — post-interpolation exact + case-insensitive + sınırlı template-aware eşleme
-- **Ek:** Runtime miss diagnostics (`runtime_missed_strings.jsonl`) ve dil değişiminde yeniden yükleme senkronu
-- **Güvenlik:** Trie/substring replacement kullanılmaz; kısmi replacement yapılmaz (`[GAME.ship.name]` bozulma riski)
+- **Katman 2:** `config.replace_text` — post-interpolation exact + case-insensitive + normalized exact + sınırlı template-aware eşleme
+- **Ek:** Runtime miss diagnostics (`runtime_missed_strings.jsonl`), visible-form alias synthesis, runtime-observed alias promotion, screen-scope harvesting, RTL yön desteği ve dil değişiminde yeniden yükleme senkronu
+- **Mod Davranışı:** `balanced` yalnızca yüksek güvenli exact/alias kurtarmalarına izin verir; `aggressive` orta güvenli runtime/screen adaylarını da exact alias üretimine dahil eder
+- **Performans:** Template/phrase fallback adayları indexlenir; `replace_text` ve normalize lookup sonuçları bounded cache ile saklanır. Screen harvesting interaction-start tarafında tutulur, restart-heavy akışlarda tekrar tekrar çalışmaz. Bu özellikle büyük `strings.json` ve sandbox/custom-screen ağırlıklı oyunlarda rollback/UI gecikmesini azaltmayı hedefler.
+- **Güvenlik:** Trie/substring replacement kullanılmaz; kısmi replacement yapılmaz (`[GAME.ship.name]` bozulma riski). Uzun phrase fallback yalnızca tek ve çakışmasız adaylarda çalışır. Screen harvesting yalnızca gözlem amaçlıdır; gameplay metnini değiştirmez.
 
 ### 5.5 Delimiter-Aware Translation
 - **Pattern'ler:** `<A|B|C>` (angle-pipe) ve `A|B|C` (bare pipe)
 - **Akış:** `split_angle_pipe_groups()` → her segment bağımsız çevrilir → `rejoin_angle_pipe_groups()`
 - **Atomik Segment Kaydı:** Her segment strings.json'a ayrı ayrı yazılır (Ren'Py `vary()` uyumlu)
+
+### 5.6 Font Injection
+- **Dosya:** `src/utils/font_injector.py`
+- **Mekanizma:** Google Fonts tabanlı font indirip `game/zzz_renlocalizer_font.rpy` üretir; hedef dil aktifken runtime font yükleyicisini kancalayarak istenen fontu öne geçirir
+- **Ek:** `translate <lang> python:` bloğu ile temel `gui.*_font` alanlarını günceller ve `style.rebuild()` çağırır
+- **Risk Alanı:** Oyunların custom stil/font akışları çok değişken olduğu için bu araç özellikle hardcoded custom displayable/font cache kullanan projelerde ek doğrulama gerektirebilir
+- **Yardımcı Tarama:** `src/tools/font_helper.py` içindeki statik risk taraması `what_font=`, `Text(..., font=...)`, `{font=...}`, `FontGroup()`, `config.font_name_map`, `config.font_replacement_map` ve image-font registration gibi kör noktaları raporlayabilir
 
 ---
 
@@ -266,7 +276,7 @@ TranslationPipeline.run()
   - Google batch metadata, HTML mode guard
   - DeepL/AI preprotected flow
   - Çeviri ID hesaplama, robustness
-  - Runtime hook diagnostics, cache/TM akışı, PyQt6 CI/workflow doğrulamaları
+  - Runtime hook diagnostics, visible-form/runtime-observed alias synthesis, mode-aware runtime promotion, cache/TM akışı, PyQt6 CI/workflow doğrulamaları
 
 ---
 
@@ -292,6 +302,7 @@ TranslationPipeline.run()
 - Pre-compiled regex'ler modül seviyesinde (performans)
 - Dataclass tabanlı veri modelleri
 - QML tarafında Material 3 tarzı, custom tema sistemi
+- Masaüstü tamamlanma bildirimi Qt system tray desteği varsa native notification olarak da gösterilebilir; destek yoksa mevcut QML completion dialog fallback olarak kalır
 
 ### Sık Düzenlenen Dosyalar (Hotspot'lar)
 | Dosya | Satır | Neden sık değişir |

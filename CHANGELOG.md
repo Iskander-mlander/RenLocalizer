@@ -1,5 +1,29 @@
 # RenLocalizer Changelog
 
+### [2.8.2] - 2026-04-06
+
+### Runtime Coverage Learning
+- **Miss Metadata Enrichment:** Runtime missed-string diagnostics now record source kind, active language, active screen, statement name, normalized visible text, and additional text-shape metadata so edge-case misses can be classified without guessing from raw output alone.
+- **Runtime Candidate Scoring:** Added a runtime coverage scoring layer that ranks missed strings by promotion value, helping the pipeline distinguish long meaningful dialogue and screen text from noisy stats, placeholders, and technical fragments.
+- **Runtime-Observed Alias Synthesis:** `strings.json` generation now synthesizes guarded exact-match aliases from previously observed runtime misses, allowing future builds to recover stable visible forms without resorting to global substring replacement.
+- **Screen Scope Harvesting:** Added a low-risk screen observer that harvests string-like values from active screen scope variables during interaction-start callbacks and records them as diagnostics only; it does not modify gameplay text at runtime.
+- **Mode-Aware Coverage Expansion:** `Aggressive` mode now accepts a wider set of medium-confidence runtime and screen-derived alias candidates and relaxes visible-fragment thresholds, while `Balanced` keeps promotion limited to higher-confidence exact-match recoveries.
+- **Runtime Hot-Path Optimization:** Indexed template and long-phrase runtime candidates so `replace_text` no longer linearly scans every template or phrase entry on large projects, reducing UI lag risk on translation-heavy sandbox-style games.
+- **Runtime Memoization:** Added bounded memoization for post-interpolation `replace_text` results and normalized lookup keys so repeated UI fragments no longer pay the full runtime matching cost on every interaction.
+- **General RTL Runtime Support:** The runtime hook now also applies RTL-aware direction settings for supported languages such as Persian, Arabic, and Hebrew, reducing reversed or incorrectly ordered text even when the separate font-fixer tool is not used.
+- **User-Invisible Automation:** The new runtime coverage learning path works behind the scenes. Users can still follow the same simple flow: select a project, translate, and play.
+
+### Desktop UX
+- **Native Completion Notifications:** Translation completion now also attempts a native desktop notification through Qt system tray integration on supported Windows, Linux, and macOS environments, while keeping the existing in-app completion dialog as the fallback path.
+
+### Font Injection
+- **Broader Font Override Coverage:** The automatic font fixer now updates both the runtime font hook and common `gui.*_font` / `style.*.font` targets, then rebuilds styles and restarts interaction so newly injected fonts apply more consistently in modern/custom Ren'Py projects.
+- **Cache Refresh Safety:** The generated font override script now attempts to clear Ren'Py font caches before rebuilding styles, reducing cases where a newly injected font exists on disk but stale cached font objects keep old glyph coverage active.
+- **Target-Language Font Checks:** The font compatibility check tool now validates fonts against the currently selected target language instead of always checking Turkish, making diagnostics accurate for languages like Vietnamese and other non-default targets.
+- **Static Font Risk Scan:** The font check tool now also scans project scripts for hardcoded/custom font usage such as `what_font=`, `Text(..., font=...)`, `{font=...}` tags, `FontGroup()`, and font mapping APIs, helping identify projects where automatic font replacement may only be partial.
+- **Language-Aware Font Fallbacks:** Automatic font injection now uses ordered language-specific fallback candidates instead of a single hardcoded font choice, improving the odds of selecting a better default family for languages like Vietnamese and other script-sensitive targets.
+- **RTL Reading Support:** Generated font override scripts now also enable RTL-aware text settings for languages like Persian, Arabic, and Hebrew by applying `config.rtl` plus weak RTL reading-order hints on common text styles, reducing reversed or incorrectly ordered text after font injection.
+
 ### [2.8.1] - 2026-04-05
 
 ### Extraction Safety

@@ -239,6 +239,8 @@
     "font_check_results": "Resultados de compatibilidad de fuentes",
     "font_check_select_dir": "Seleccionar directorio del juego para comprobar fuentes",
     "font_check_summary": "Fuentes comprobadas: {total}\nCompatible: {comp}\nIncompatible: {incomp}",
+    "font_check_risk_summary": "Puntos de riesgo de fuentes personalizadas: {count}",
+    "font_check_risk_none": "No se encontraron riesgos obvios de fuentes codificadas.",
     "font_check_title": "Compatibilidad de fuentes",
     "font_err_download_fail": "No se pudo descargar la fuente: {error}",
     "font_err_invalid_zip": "El archivo descargado no es un ZIP válido.",

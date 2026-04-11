@@ -94,10 +94,18 @@ init -999 python:
     _rl_translations_ci = {{}}     # Case-insensitive: lower_key -> value (v4.1.0)
     _rl_translations_norm = {{}}   # Normalized exact lookup: punctuation/space variants
     _rl_phrase_variants = []       # Long phrase fallback candidates
+    _rl_phrase_index = {{}}        # Anchor-word -> long phrase candidates
+    _rl_replace_cache = {{}}       # text -> local replace_text result
+    _rl_replace_cache_limit = 12000
+    _rl_normalized_lookup_cache = {{}}
+    _rl_normalized_lookup_cache_limit = 8000
     _rl_ci_conflicts_global = set() # Track ambiguous lower-case keys for diagnostics
     _rl_norm_conflicts_global = set() # Track ambiguous normalized keys for diagnostics
     _rl_runtime_template_matching = True # Experimental: Feature flag for template-aware runtime
     _rl_template_map = [] # Store exact template shapes extracted from strings.json
+    _rl_template_prefix_index = {{}}
+    _rl_template_suffix_index = {{}}
+    _rl_template_general = []
     _rl_loaded = False
     _rl_loaded_language = None
     _rl_prev_say_menu_filter = None
@@ -125,6 +133,25 @@ init -999 python:
         ord("\u200d"): "",
         ord("\ufeff"): "",
     }}
+    _rl_phrase_word_re = _rl_re.compile(r"[A-Za-z0-9\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF']+")
+    _rl_phrase_stopwords = set((
+        'a', 'an', 'and', 'as', 'at', 'but', 'for', 'from', 'if', 'in', 'into',
+        'is', 'it', 'of', 'on', 'or', 'so', 'the', 'then', 'to', 'with'
+    ))
+_rl_rtl_languages = set((
+        'arabic', 'farsi', 'persian', 'hebrew', 'urdu', 'pashto', 'sindhi'
+    ))
+    _rl_rtl_style_names = (
+        'default',
+        'say_dialogue',
+        'say_label',
+        'input',
+        'button_text',
+        'choice_button_text',
+        'history_text',
+        'namebox',
+        'notify_text',
+    )
 
     # Punct spacing regex — used ONLY in Layer 2 (post-interpolation)
     # so no bracket/tag protection is needed.
@@ -163,12 +190,56 @@ init -999 python:
         """Normalize visible text for conservative fallback lookup."""
         if not text:
             return ""
+        cached = _rl_normalized_lookup_cache.get(text)
+        if cached is not None:
+            return cached
         try:
             normalized = text.translate(_rl_normalize_translation_key_map)
         except Exception:
             normalized = text
         normalized = _rl_re.sub(r"\s+", " ", normalized).strip()
-        return normalized.casefold()
+        normalized = normalized.casefold()
+        if len(_rl_normalized_lookup_cache) >= _rl_normalized_lookup_cache_limit:
+            _rl_normalized_lookup_cache.clear()
+        _rl_normalized_lookup_cache[text] = normalized
+        return normalized
+
+    def _rl_cache_local_replace(text, result):
+        if text is None:
+            return result
+        if len(_rl_replace_cache) >= _rl_replace_cache_limit:
+            _rl_replace_cache.clear()
+        _rl_replace_cache[text] = result
+        return result
+
+def _rl_apply_runtime_language_direction(active_lang):
+        if not active_lang:
+            return
+        try:
+            if active_lang in _rl_rtl_languages:
+                try:
+                    if hasattr(config, 'rtl'):
+                        config.rtl = True
+                except Exception:
+                    pass
+                for _style_name in _rl_rtl_style_names:
+                    try:
+                        _style = getattr(style, _style_name, None)
+                        if _style is not None:
+                            if hasattr(_style, 'language'):
+                                _style.language = 'unicode'
+                            if hasattr(_style, 'reading_order'):
+                                _style.reading_order = 'wrtl'
+                    except Exception:
+                        pass
+            else:
+                try:
+                    if hasattr(config, 'rtl'):
+                        config.rtl = False
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _rl_is_phrase_candidate(text):
         """Allow only long visible phrases for substring fallback."""
@@ -185,14 +256,59 @@ init -999 python:
             return False
         return True
 
+    def _rl_get_phrase_anchor_keys(text):
+        if not text:
+            return []
+        words = [w.casefold() for w in _rl_phrase_word_re.findall(text)]
+        anchors = []
+        for word in words[:6]:
+            if len(word) < 4:
+                continue
+            if word in _rl_phrase_stopwords:
+                continue
+            if word not in anchors:
+                anchors.append(word)
+            if len(anchors) >= 3:
+                break
+        if anchors:
+            return anchors
+        return [w.casefold() for w in words[:2] if len(w) >= 4]
+
+    def _rl_get_template_prefix_key(prefix):
+        prefix = (prefix or '').casefold()
+        if len(prefix) < 2:
+            return None
+        return prefix[:4]
+
+    def _rl_get_template_suffix_key(suffix):
+        suffix = (suffix or '').casefold()
+        if len(suffix) < 2:
+            return None
+        return suffix[-4:]
+
     def _rl_try_phrase_fallback(text):
         """Replace exactly one long source phrase inside a larger visible fragment."""
         if not text or not _rl_phrase_variants:
             return None
+        if len(text.strip()) < 32 or text.count(" ") < 4:
+            return None
 
         matches = []
         lowered_text = text.lower()
-        for source_phrase, target_phrase in _rl_phrase_variants:
+        candidates = []
+        seen_candidates = set()
+        for anchor in _rl_get_phrase_anchor_keys(text):
+            for candidate in _rl_phrase_index.get(anchor, []):
+                key = candidate[0]
+                if key in seen_candidates:
+                    continue
+                seen_candidates.add(key)
+                candidates.append(candidate)
+
+        if not candidates:
+            return None
+
+        for source_phrase, target_phrase in candidates:
             start = lowered_text.find(source_phrase.lower())
             if start < 0:
                 continue
@@ -221,6 +337,142 @@ init -999 python:
         if stripped in _rl_translated_values:
             return False
         return any(ch.isalnum() for ch in stripped)
+
+    def _rl_get_statement_name_safe():
+        try:
+            if hasattr(renpy, 'get_statement_name'):
+                return renpy.get_statement_name()
+        except Exception:
+            pass
+        return None
+
+    def _rl_get_active_screen_name_safe():
+        try:
+            if hasattr(renpy, 'current_screen'):
+                current = renpy.current_screen()
+                if current is not None and hasattr(current, 'name') and current.name:
+                    return current.name
+        except Exception:
+            pass
+
+        try:
+            if hasattr(renpy, 'get_screen'):
+                for screen_name in (
+                    'say',
+                    'choice',
+                    'nvl',
+                    'notify',
+                    'main_menu',
+                    'game_menu',
+                    'preferences',
+                    'history',
+                ):
+                    screen = renpy.get_screen(screen_name)
+                    if screen is not None:
+                        return screen_name
+        except Exception:
+            pass
+        return None
+
+    def _rl_iter_visible_string_values(value, depth=0):
+        if depth > 2 or value is None:
+            return
+        if isinstance(value, str):
+            yield value
+            return
+        if isinstance(value, dict):
+            count = 0
+            for item in value.values():
+                for candidate in _rl_iter_visible_string_values(item, depth + 1):
+                    yield candidate
+                    count += 1
+                    if count >= 20:
+                        return
+            return
+        if isinstance(value, (list, tuple, set)):
+            count = 0
+            for item in value:
+                for candidate in _rl_iter_visible_string_values(item, depth + 1):
+                    yield candidate
+                    count += 1
+                    if count >= 20:
+                        return
+
+    def _rl_should_harvest_visible_text(text):
+        if not _rl_should_log_miss(text):
+            return False
+        stripped = text.strip()
+        if len(stripped) < 12:
+            return False
+        if len([part for part in _rl_re.split(r"\s+", stripped) if part]) < 3:
+            return False
+        if _rl_placeholder_template_re.search(stripped):
+            return False
+        if "{" in stripped or "}" in stripped or "[" in stripped or "]" in stripped:
+            return False
+        if stripped.isupper() and len(stripped) <= 24:
+            return False
+        return True
+
+    def _rl_get_screen_scope_strings(screen_name):
+        try:
+            if not hasattr(renpy, 'get_screen'):
+                return []
+            screen = renpy.get_screen(screen_name)
+            if screen is None:
+                return []
+            scope = getattr(screen, 'scope', None)
+            if not isinstance(scope, dict):
+                return []
+            collected = []
+            for key, value in scope.items():
+                key_lower = str(key).lower()
+                if key_lower in ('_scope', '_name', '_args', '_kwargs'):
+                    continue
+                if not any(hint in key_lower for hint in ('text', 'message', 'title', 'prompt', 'caption', 'tooltip', 'label', 'body')):
+                    if not isinstance(value, (str, list, tuple, dict, set)):
+                        continue
+                for candidate in _rl_iter_visible_string_values(value):
+                    if _rl_should_harvest_visible_text(candidate):
+                        collected.append(candidate)
+                        if len(collected) >= 20:
+                            return collected
+            return collected
+        except Exception:
+            return []
+
+    def _rl_guess_runtime_source_kind(layer, text, reason, statement_name, active_screen):
+        stripped = (text or '').strip()
+        lower_reason = (reason or '').lower()
+        lower_statement = (statement_name or '').lower()
+        lower_screen = (active_screen or '').lower()
+
+        if layer == 'screen_observer':
+            return 'screen_scope'
+
+        if layer == 'say_menu_text_filter':
+            if 'menu' in lower_statement:
+                return 'menu'
+            return 'say_or_menu'
+
+        if lower_screen in ('say', 'nvl') or lower_statement.startswith('say'):
+            return 'dialogue'
+        if lower_screen == 'choice' or lower_statement.startswith('menu'):
+            return 'menu'
+        if 'screen_bypass' in lower_reason or lower_screen:
+            return 'screen_text'
+        if 'dynamic_ui' in lower_reason:
+            return 'dynamic_ui'
+        if 'template' in lower_reason:
+            return 'template_text'
+        if '|' in stripped:
+            return 'pipe_or_composite'
+        return 'unknown'
+
+    def _rl_count_sentences(text):
+        if not text:
+            return 0
+        return len([part for part in _rl_re.split(r'[.!?…]+', text) if part.strip()])
 
     def _rl_get_runtime_miss_path():
         global _rl_runtime_miss_path
@@ -267,7 +519,10 @@ init -999 python:
             
         if default_reason == "quote_lookup_miss":
             return default_reason
-            
+
+        if default_reason == "screen_scope_observed":
+            return default_reason
+
         if default_reason == "no_exact_match_post_interpolation":
             # Heuristic for screen_bypass_miss or dynamic_ui_runtime
             # since it arrived at replace_text without matching in say_menu
@@ -298,17 +553,33 @@ init -999 python:
 
         _rl_runtime_miss_logged.add(miss_key)
         normalized_reason = _rl_classify_runtime_miss_reason(text, reason)
+        normalized_text = _rl_normalize_lookup_text(stripped)
+        active_language = _rl_get_active_language()
+        statement_name = _rl_get_statement_name_safe()
+        active_screen = _rl_get_active_screen_name_safe()
+        source_kind = _rl_guess_runtime_source_kind(layer, text, normalized_reason, statement_name, active_screen)
         payload = {{
             "ts": int(_rl_time.time()),
             "layer": layer,
             "reason": normalized_reason,
+            "source_kind": source_kind,
+            "active_language": active_language,
+            "statement_name": statement_name,
+            "active_screen": active_screen,
             "text": text,
             "stripped": stripped,
+            "normalized": normalized_text,
             "length": len(stripped),
+            "word_count": len([part for part in _rl_re.split(r"\s+", stripped) if part]),
+            "sentence_count": _rl_count_sentences(stripped),
+            "alnum_count": sum(1 for ch in stripped if ch.isalnum()),
             "quoted": len(stripped) >= 2 and stripped[0] == '"' and stripped[-1] == '"',
+            "has_digits": any(ch.isdigit() for ch in stripped),
             "has_square_brackets": "[" in stripped and "]" in stripped,
             "has_text_tags": "{{" in text and "}}" in text,
             "has_pipe": "|" in stripped,
+            "has_ellipsis": "..." in stripped or "…" in stripped,
+            "has_curly_quotes": any(ch in stripped for ch in ('“', '”', '‘', '’')),
             "looks_like_hotkey_visible_form": bool(_rl_hotkey_visible_re.match(stripped)),
             "looks_like_placeholder_remnant": bool("⟦" in stripped or "⟧" in stripped or _rl_placeholder_remnant_re.search(stripped)),
         }}
@@ -375,7 +646,7 @@ init -999 python:
         return lang
 
     def _rl_load_translations():
-        global _rl_translations, _rl_translations_ci, _rl_translations_norm, _rl_phrase_variants, _rl_loaded, _rl_translated_values, _rl_loaded_language, _rl_ci_conflicts_global, _rl_norm_conflicts_global, _rl_template_map
+        global _rl_translations, _rl_translations_ci, _rl_translations_norm, _rl_phrase_variants, _rl_phrase_index, _rl_replace_cache, _rl_normalized_lookup_cache, _rl_loaded, _rl_translated_values, _rl_loaded_language, _rl_ci_conflicts_global, _rl_norm_conflicts_global, _rl_template_map, _rl_template_prefix_index, _rl_template_suffix_index, _rl_template_general
 
         json_path = _rl_find_strings_json()
         if not json_path:
@@ -406,10 +677,16 @@ init -999 python:
             _rl_translations_ci = {{}}
             _rl_translations_norm = {{}}
             _rl_phrase_variants = []
+            _rl_phrase_index = {{}}
+            _rl_replace_cache = {{}}
+            _rl_normalized_lookup_cache = {{}}
             _rl_translated_values = set()
             _rl_ci_conflicts_global = set()  # Track ambiguous lower-case keys
             _rl_norm_conflicts_global = set() # Track ambiguous normalized keys
             _rl_template_map = []
+            _rl_template_prefix_index = {{}}
+            _rl_template_suffix_index = {{}}
+            _rl_template_general = []
 
             for k, v in _rl_translations.items():
                 if k and v and k.strip() and v.strip() and k.strip() != v.strip():
@@ -442,6 +719,12 @@ init -999 python:
 
                     if _rl_is_phrase_candidate(clean_k):
                         _rl_phrase_variants.append((clean_k, clean_v))
+                        for anchor in _rl_get_phrase_anchor_keys(clean_k):
+                            bucket = _rl_phrase_index.get(anchor)
+                            if bucket is None:
+                                bucket = []
+                                _rl_phrase_index[anchor] = bucket
+                            bucket.append((clean_k, clean_v))
 
                 if _rl_runtime_template_matching:
                     k_ph = _rl_placeholder_template_re.findall(k)
@@ -455,29 +738,48 @@ init -999 python:
                                 v_pre, v_suf = v_parts
                                 sig = k_pre + k_suf
                                 if sum(1 for c in sig if c.isalnum()) >= 2:
-                                    _rl_template_map.append((k_pre, k_suf, v_pre, v_suf))
+                                    template_entry = (k_pre, k_suf, v_pre, v_suf)
+                                    _rl_template_map.append(template_entry)
+                                    prefix_key = _rl_get_template_prefix_key(k_pre)
+                                    suffix_key = _rl_get_template_suffix_key(k_suf)
+                                    if prefix_key:
+                                        _rl_template_prefix_index.setdefault(prefix_key, []).append(template_entry)
+                                    elif suffix_key:
+                                        _rl_template_suffix_index.setdefault(suffix_key, []).append(template_entry)
+                                    else:
+                                        _rl_template_general.append(template_entry)
 
             if _rl_runtime_template_matching:
                 _rl_template_map.sort(key=lambda x: len(x[0]) + len(x[1]), reverse=True)
+                for bucket in _rl_template_prefix_index.values():
+                    bucket.sort(key=lambda x: len(x[0]) + len(x[1]), reverse=True)
+                for bucket in _rl_template_suffix_index.values():
+                    bucket.sort(key=lambda x: len(x[0]) + len(x[1]), reverse=True)
+                _rl_template_general.sort(key=lambda x: len(x[0]) + len(x[1]), reverse=True)
             if _rl_phrase_variants:
                 _rl_phrase_variants.sort(key=lambda item: len(item[0]), reverse=True)
+                for bucket in _rl_phrase_index.values():
+                    bucket.sort(key=lambda item: len(item[0]), reverse=True)
 
             # del _rl_ci_conflicts_global  # Removed to keep it global
 
             _rl_loaded = True
             _rl_loaded_language = _rl_get_active_language()
+            _rl_apply_runtime_language_direction(_rl_loaded_language)
             return True
         except Exception:
             return False
 
     def _rl_ensure_language_sync():
-        global _rl_runtime_miss_path, _rl_runtime_miss_logged
+        global _rl_runtime_miss_path, _rl_runtime_miss_logged, _rl_replace_cache, _rl_normalized_lookup_cache
         try:
             active_lang = _rl_get_active_language()
             if _rl_loaded and _rl_loaded_language == active_lang:
                 return
             _rl_runtime_miss_path = None
             _rl_runtime_miss_logged = set()
+            _rl_replace_cache = {{}}
+            _rl_normalized_lookup_cache = {{}}
             _rl_load_translations()
         except Exception:
             pass
@@ -590,8 +892,25 @@ init -999 python:
     def _rl_template_match(text):
         if not text or not _rl_template_map:
             return None
+        candidates = []
+        seen = set()
+        prefix_key = _rl_get_template_prefix_key(text)
+        suffix_key = _rl_get_template_suffix_key(text)
+        for bucket in (
+            _rl_template_prefix_index.get(prefix_key, []) if prefix_key else [],
+            _rl_template_suffix_index.get(suffix_key, []) if suffix_key else [],
+            _rl_template_general,
+        ):
+            for item in bucket:
+                key = item[0] + u"\x1f" + item[1]
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(item)
+        if not candidates:
+            return None
         t_len = len(text)
-        for k_pre, k_suf, v_pre, v_suf in _rl_template_map:
+        for k_pre, k_suf, v_pre, v_suf in candidates:
             if t_len < len(k_pre) + len(k_suf):
                 continue
             if k_pre and not text.startswith(k_pre):
@@ -618,12 +937,18 @@ init -999 python:
                     return _rl_prev_replace_text(text)
                 return text
 
+            cached_local = _rl_replace_cache.get(text)
+            if cached_local is not None:
+                if _rl_prev_replace_text:
+                    return _rl_prev_replace_text(cached_local)
+                return cached_local
+
             result = text
             _stripped = text.strip()
 
             # 0. Skip already-translated text (performance + safety)
             if _stripped and _stripped in _rl_translated_values:
-                result = _rl_fix_punct_spacing(text)
+                result = _rl_cache_local_replace(text, _rl_fix_punct_spacing(text))
                 if _rl_prev_replace_text:
                     result = _rl_prev_replace_text(result)
                 return result
@@ -710,6 +1035,7 @@ init -999 python:
 
             # 3. Punctuation spacing (safe — no brackets/tags in fragments)
             result = _rl_fix_punct_spacing(result)
+            result = _rl_cache_local_replace(text, result)
 
             if _renlocalizer_debug and result != text:
                 try:
@@ -747,6 +1073,25 @@ init -999 python:
         try:
             with _rl_io.open(_rl_os.path.join(config.gamedir, "renlocalizer_debug.log"), "a", encoding="utf-8") as f:
                 f.write(u"[L3_DIALOGUE] event={{}} what={{}}\n".format(event, repr(what)))
+        except Exception:
+            pass
+
+    def _rl_interact_callback():
+        """Harvest visible string-like screen scope values without modifying text."""
+        if not _rl_runtime_string_diagnostics:
+            return
+        try:
+            candidate_screens = []
+            active_screen = _rl_get_active_screen_name_safe()
+            if active_screen:
+                candidate_screens.append(active_screen)
+            for screen_name in ('say', 'choice', 'nvl', 'notify'):
+                if screen_name not in candidate_screens:
+                    candidate_screens.append(screen_name)
+
+            for screen_name in candidate_screens:
+                for candidate in _rl_get_screen_scope_strings(screen_name):
+                    _rl_log_runtime_miss('screen_observer', candidate, 'screen_scope_observed')
         except Exception:
             pass
 
@@ -789,6 +1134,11 @@ init 999 python:
         config.all_character_callbacks = []
     if _rl_character_callback not in config.all_character_callbacks:
         config.all_character_callbacks.append(_rl_character_callback)
+
+    if not hasattr(config, 'start_interact_callbacks'):
+        config.start_interact_callbacks = []
+    if _rl_interact_callback not in config.start_interact_callbacks:
+        config.start_interact_callbacks.append(_rl_interact_callback)
 
     if not hasattr(config, 'overlay_screens'):
         config.overlay_screens = []

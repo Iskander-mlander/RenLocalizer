@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 sys.setrecursionlimit(5000)
 
 # Default version fallback
-VERSION = "2.8.1"
+VERSION = "2.8.2"
 
 try:
     from src.version import VERSION as _v
@@ -426,6 +426,47 @@ def _wire_qml_shutdown_order(
     app.aboutToQuit.connect(_schedule_engine_teardown)
 
 
+def _setup_completion_notification_tray(app, backend, app_icon):
+    """Install an optional native desktop notification path.
+
+    Uses Qt's system tray support when available and silently falls back to the
+    existing in-app completion dialog on platforms/desktops without tray support.
+    """
+    try:
+        from PyQt6.QtWidgets import QSystemTrayIcon
+    except Exception:
+        return None
+
+    try:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return None
+
+        tray_icon = QSystemTrayIcon(app_icon, app)
+        tray_icon.setToolTip("RenLocalizer")
+        tray_icon.show()
+
+        def _show_completion_notification(title, message, output_path, diagnostic_path, review_note_count):
+            try:
+                lines = [message]
+                if review_note_count:
+                    lines.append(f"Review notes: {review_note_count}")
+                if output_path:
+                    lines.append(Path(output_path).name)
+                tray_icon.showMessage(
+                    title,
+                    "\n".join(line for line in lines if line),
+                    QSystemTrayIcon.MessageIcon.Information,
+                    8000,
+                )
+            except Exception:
+                pass
+
+        backend.completionSummary.connect(_show_completion_notification)
+        return tray_icon
+    except Exception:
+        return None
+
+
 def _attempt_qt_safe_relaunch(
     logger: logging.Logger,
     stage: str,
@@ -657,6 +698,10 @@ def main() -> int:
         # Link backends for signal propagation (Localization refresh)
         settings_backend.languageChanged.connect(backend.refreshUI)
         settings_backend.themeChanged.connect(backend.refreshUI)
+
+        # Optional native desktop notification path for completion events.
+        # Falls back to the existing in-app dialog on desktops without tray support.
+        _completion_tray = _setup_completion_notification_tray(app, backend, app_icon)
 
         # Create QML Engine
         engine = QQmlApplicationEngine(app)

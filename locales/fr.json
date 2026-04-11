@@ -239,6 +239,8 @@
     "font_check_results": "Résultats de la compatibilité des polices",
     "font_check_select_dir": "Sélectionner le répertoire du jeu pour vérifier les polices",
     "font_check_summary": "Polices vérifiées : {total}\nCompatible : {comp}\nIncompatible : {incomp}",
+    "font_check_risk_summary": "Points de risque de police personnalisée : {count}",
+    "font_check_risk_none": "Aucun risque évident de police codée en dur trouvé.",
     "font_check_title": "Compatibilité des polices",
     "font_err_download_fail": "Impossible de télécharger la police : {error}",
     "font_err_invalid_zip": "Le fichier téléchargé n'est pas une archive ZIP valide.",

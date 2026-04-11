@@ -21,20 +21,20 @@ class FontInjector:
     Downloads and configures compatible fonts for Ren'Py games using Google Fonts.
     """
     
-    # Mapping: Language Code -> (Google Font Family Name, Is RTL?)
-    FONT_MAP: Dict[str, Tuple[str, bool]] = {
-        "fa": ("Vazirmatn", True),           # Persian
-        "ar": ("Noto Sans Arabic", True),    # Arabic
-        "he": ("Noto Sans Hebrew", True),    # Hebrew
-        "ja": ("Noto Sans JP", False),       # Japanese
-        "zh": ("Noto Sans SC", False),       # Chinese Simplified
-        "zh_tw": ("Noto Sans TC", False),    # Chinese Traditional
-        "ko": ("Noto Sans KR", False),       # Korean
-        "ru": ("Noto Sans", False),          # Russian
-        "th": ("Noto Sans Thai", False),     # Thai
-        "tr": ("Noto Sans", False),          # Turkish
-        "uk": ("Noto Sans", False),          # Ukrainian
-        "vi": ("Noto Sans", False),          # Vietnamese
+    # Mapping: Language Code -> ordered fallback candidates (Font Family, Is RTL?)
+    FONT_CANDIDATES: Dict[str, Tuple[Tuple[str, bool], ...]] = {
+        "fa": (("Vazirmatn", True), ("Noto Sans Arabic", True)),
+        "ar": (("Noto Sans Arabic", True), ("Cairo", True), ("Tajawal", True)),
+        "he": (("Noto Sans Hebrew", True), ("Rubik", True), ("Heebo", True)),
+        "ja": (("Noto Sans JP", False), ("M PLUS 1p", False), ("Kosugi Maru", False)),
+        "zh": (("Noto Sans SC", False),),
+        "zh_tw": (("Noto Sans TC", False),),
+        "ko": (("Noto Sans KR", False), ("Nanum Gothic", False)),
+        "ru": (("Noto Sans", False), ("PT Sans", False), ("Ubuntu", False)),
+        "th": (("Noto Sans Thai", False), ("Sarabun", False), ("Prompt", False)),
+        "tr": (("Noto Sans", False), ("Inter", False), ("Open Sans", False)),
+        "uk": (("Noto Sans", False), ("PT Sans", False), ("Ubuntu", False)),
+        "vi": (("Be Vietnam Pro", False), ("Noto Sans", False), ("Inter", False)),
     }
 
     # Mapping: Ren'Py Lang Name -> ISO Code
@@ -65,9 +65,52 @@ class FontInjector:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
+    GUI_FONT_FIELDS: Tuple[str, ...] = (
+        "text_font",
+        "name_text_font",
+        "interface_text_font",
+        "button_text_font",
+        "choice_button_text_font",
+        "system_font",
+        "glyph_font",
+    )
+
+    STYLE_FONT_NAMES: Tuple[str, ...] = (
+        "default",
+        "say_dialogue",
+        "say_label",
+        "input",
+        "button_text",
+        "choice_button_text",
+        "namebox",
+        "notify_text",
+        "history_text",
+        "confirm_prompt_text",
+        "navigation_button_text",
+        "quick_button_text",
+    )
+
+    RTL_STYLE_NAMES: Tuple[str, ...] = (
+        "default",
+        "say_dialogue",
+        "say_label",
+        "input",
+        "button_text",
+        "choice_button_text",
+        "history_text",
+        "namebox",
+        "notify_text",
+    )
+
     def get_font_map_list(self) -> List[Dict[str, str]]:
         """Returns a list of default mapped fonts for UI."""
-        return [{"lang": k, "font": v[0], "rtl": v[1]} for k, v in self.FONT_MAP.items()]
+        result: List[Dict[str, str]] = []
+        for lang, candidates in self.FONT_CANDIDATES.items():
+            if not candidates:
+                continue
+            primary_font, rtl = candidates[0]
+            result.append({"lang": lang, "font": primary_font, "rtl": rtl})
+        return result
 
     def inject_font(self, game_dir: str, lang_code: str, force_font_family: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -81,20 +124,19 @@ class FontInjector:
             # Try to guess RTL/Config from lang_code, but user overrides font
             base_lang = self._normalize_lang_code(lang_code)
             # Default to LTR unless map says otherwise for this lang
-            is_rtl = self.FONT_MAP.get(base_lang, ("", False))[1] 
+            is_rtl = self.FONT_CANDIDATES.get(base_lang, (("", False),))[0][1]
         else:
             # Auto Mode
             base_lang = self._normalize_lang_code(lang_code)
             
-            if base_lang not in self.FONT_MAP:
+            if base_lang not in self.FONT_CANDIDATES:
                 return {
                     "success": False,
                     "message": f"No auto mapping for '{lang_code}' (norm: {base_lang})",
                     "ui_key": "font_err_no_mapping",
                     "ui_args": {"lang": lang_code}
                 }
-            
-            font_family, is_rtl = self.FONT_MAP[base_lang]
+            candidates = self.FONT_CANDIDATES[base_lang]
         
         try:
             # 2. Setup Directories
@@ -106,12 +148,36 @@ class FontInjector:
             fonts_dir.mkdir(parents=True, exist_ok=True)
             
             # 3. Download & Extract
-            download_success, result_data = self._download_and_extract_google_font(font_family, fonts_dir)
-            
-            if not download_success:
-                return result_data
+            if force_font_family:
+                download_success, result_data = self._download_and_extract_google_font(font_family, fonts_dir)
+                if not download_success:
+                    return result_data
+                font_filename = result_data
+            else:
+                download_success = False
+                font_filename = ""
+                last_error: Any = None
+                font_family = candidates[0][0]
+                is_rtl = candidates[0][1]
 
-            font_filename = result_data 
+                for candidate_font, candidate_is_rtl in candidates:
+                    download_success, result_data = self._download_and_extract_google_font(candidate_font, fonts_dir)
+                    if download_success:
+                        font_family = candidate_font
+                        is_rtl = candidate_is_rtl
+                        font_filename = result_data
+                        break
+                    last_error = result_data
+
+                if not download_success:
+                    if isinstance(last_error, dict):
+                        return last_error
+                    return {
+                        "success": False,
+                        "message": "Could not download any fallback font candidate.",
+                        "ui_key": "font_err_download_fail",
+                        "ui_args": {"error": "all fallback candidates failed"},
+                    }
 
             # 4. Generate RPY Script
             # We use the ORIGINAL lang_code (e.g. 'turkish') for the Ren'Py translate block
@@ -292,6 +358,10 @@ class FontInjector:
         # oyun "Arial.ttf ver" dediğinde biz "Al sana NotoSans.ttf" deriz.
         # Bu sayede stil hataları (AttributeError) riskine girmeden font değişir.
         
+        gui_font_fields_repr = repr(self.GUI_FONT_FIELDS)
+        style_font_names_repr = repr(self.STYLE_FONT_NAMES)
+        rtl_style_names_repr = repr(self.RTL_STYLE_NAMES)
+
         new_block = f"""
 # --- CONFIG: {lang_code.upper()} ---
 # Runtime Font Hooking
@@ -307,25 +377,28 @@ init -999 python:
             renpy.store.orig_get_font = renpy.text.font.get_font
             
             # KANCA (HOOK) FONKSİYONU
-            def renlocalizer_get_font_hook(*args):
+            def renlocalizer_get_font_hook(*args, **kwargs):
                 # args[0] normalde istenen font dosyasıdır
                 # Eğer şu anki dil bizim hedef dilimizse devreye gir
-                
+
+                if not args:
+                    return renpy.store.orig_get_font(*args, **kwargs)
+
                 current_lang = _preferences.language
                 font_store = renpy.store.renlocalizer_fonts
-                
+
                 # Eğer o dil için bir font tanımlamışsak
                 if current_lang in font_store and "Default" in font_store[current_lang]:
                     target_font = font_store[current_lang]["Default"]
-                    
+
                     # Sonsuz döngü koruması: Zaten bizim font isteniyorsa dokunma
                     if args[0] != target_font:
                         # Argümanları değiştir: (EskiFont, Boyut, ...) -> (YeniFont, Boyut, ...)
                         # Tuple olduğu için yeniden oluşturuyoruz
                         args = (target_font,) + args[1:]
-                        
+
                 # Orijinal (veya modifiye edilmiş) çağrıyı yap
-                return renpy.store.orig_get_font(*args)
+                return renpy.store.orig_get_font(*args, **kwargs)
                 
             # Ren'Py'ın font yükleyicisini değiştir
             renpy.text.font.get_font = renlocalizer_get_font_hook
@@ -338,45 +411,74 @@ translate {lang_code} python:
     # 1. Fontumuzu Hook sistemine kaydet
     if not hasattr(renpy.store, "renlocalizer_fonts"):
         renpy.store.renlocalizer_fonts = {{}}
-        
+
     renpy.store.renlocalizer_fonts["{lang_code}"] = {{
         "Default": "{font_path}"
     }}
 
-    # 2. Standart GUI değişkenlerini de güncelle (Ekstra güvenlik)
-    gui.text_font = "{font_path}"
-    gui.name_text_font = "{font_path}"
-    gui.interface_text_font = "{font_path}"
-    gui.button_text_font = "{font_path}"
-    gui.choice_button_text_font = "{font_path}"
-    
-    # 3. Stilleri yeniden oluştur
+    # 2. Standart GUI font alanlarini guncelle
+    for _gui_field in {gui_font_fields_repr}:
+        try:
+            if hasattr(gui, _gui_field):
+                setattr(gui, _gui_field, "{font_path}")
+        except Exception:
+            pass
+
+    # 3. Sık kullanılan stillere de doğrudan font uygula
+    for _style_name in {style_font_names_repr}:
+        try:
+            _style = getattr(style, _style_name, None)
+            if _style is not None:
+                _style.font = "{font_path}"
+        except Exception:
+            pass
+
+    # 4. RTL dillere gerekli yön ayarlarini yap
+    if {is_rtl!r}:
+        try:
+            gui.language = "unicode"
+        except Exception:
+            pass
+
+        try:
+            config.rtl = True
+        except Exception:
+            pass
+
+        for _rtl_style_name in {rtl_style_names_repr}:
+            try:
+                _rtl_style = getattr(style, _rtl_style_name, None)
+                if _rtl_style is not None:
+                    _rtl_style.language = "unicode"
+                    _rtl_style.reading_order = "wrtl"
+            except Exception:
+                pass
+
+    # 5. Font cache'lerini mümkün oldugunca temizle
+    try:
+        if hasattr(renpy.text, "font") and hasattr(renpy.text.font, "font_cache"):
+            renpy.text.font.font_cache.clear()
+    except Exception:
+        pass
+
+    try:
+        if hasattr(renpy.text, "font") and hasattr(renpy.text.font, "font_names"):
+            renpy.text.font.font_names.clear()
+    except Exception:
+        pass
+
+    # 6. Stilleri yeniden oluştur ve interaction'ı yenile
     style.rebuild()
+    try:
+        renpy.restart_interaction()
+    except Exception:
+        pass
 """
         # Dosyayı SIFIRDAN oluştur (Eski hatalı kodları temizle)
         with open(rpy_path, 'w', encoding='utf-8') as f:
             f.write(new_block)
             
         return False
-
-    def _normalize_lang_code(self, lang_code: str) -> str:
-        """Converts 'turkish' -> 'tr', 'zh-CN' -> 'zh', etc."""
-        lower_code = lang_code.lower().strip()
-        
-        # Check name mapping first (turkish -> tr)
-        if lower_code in self.LANG_NAME_TO_CODE:
-            return self.LANG_NAME_TO_CODE[lower_code]
-            
-        # Standard normalization
-        base = lower_code.split('-')[0]
-        
-        # Special cases
-        if lower_code in ["zh-cn", "zh_cn", "zh-hans", "schinese"]:
-            return "zh"
-        elif lower_code in ["zh-tw", "zh_tw", "zh-hant", "tchinese"]:
-            return "zh_tw"
-            
-        return base
 
     def get_available_fonts(self) -> List[str]:
         """Returns a list of popular Google Fonts for manual selection."""
