@@ -120,8 +120,8 @@ def test_runtime_hook_caching(tmp_path):
     """Test runtime caching for performance."""
     hook = rht.render_runtime_hook("tr", runtime_string_diagnostics=False)
 
-    assert "_rl_replace_cache" in hook
-    assert "_rl_normalized_lookup_cache" in hook
+    assert "_rl_sys._rl_caches['replace']" in hook
+    assert "_rl_sys._rl_caches['normalized']" in hook
     assert "_rl_replace_cache_limit" in hook
 
 

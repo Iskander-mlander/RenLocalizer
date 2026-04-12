@@ -1,5 +1,35 @@
 # RenLocalizer Changelog
 
+### [2.8.3] - 2026-04-11
+
+### Pipeline Safety
+- **Critical Fix — Resume Crash:** Fixed a `NameError` crash in `_translate_entries` that occurred when all entries were filtered out (e.g. already translated via cache) before the cache file path was defined. This primarily affected the "Resume Translation" workflow where previously cached translations left no new entries to process.
+- **Gemini Fallback Fix:** Fixed Google Translator fallback initialization for the Gemini engine where positional arguments caused `config_manager` to be silently ignored, resulting in suboptimal fallback behavior (default batch size, no Lingva fallback, incorrect proxy routing). The same issue existed in the GUI backend and CLI entry points and has been fixed across all three code paths.
+
+### CLI Overhaul
+- **Modern Terminal UI:** Rebuilt the CLI interface with [Rich](https://github.com/Textualize/rich) for a premium terminal experience: gradient ASCII banner, styled panels, colored log output with severity icons, and formatted summary tables.
+- **Rich Progress Bars:** Replaced raw `\r` progress output with Rich progress bars featuring spinners, completion bars, ETA counters, and task descriptions that update in real time.
+- **Full Engine Support:** The interactive mode now exposes all 9 translation engines (Google, DeepL, OpenAI, Gemini, DeepSeek, Local LLM, LibreTranslate, Yandex, Pseudo) with descriptions, whereas the old menu only showed Google and DeepL.
+- **13 Languages Shortlist:** Expanded the interactive language picker from 9 to 13 common languages with flag icons.
+- **Engine Selection in Wizard:** Added an engine selection step to both "Full Translation" and "TL Folder" interactive workflows so the engine choice no longer requires a separate Settings detour.
+- **Styled Help Panel:** Help text now renders inside a Rich panel with colored command examples and mode descriptions.
+- **Completion Summary Panel:** Translation results are displayed in bordered panels with duration tracking, item counts, and color-coded success/failure indicators.
+- **Graceful Fallback:** When the `rich` library is not installed, the CLI gracefully falls back to plain `print()` output without crashing.
+- **DeepSeek CLI Support:** Added DeepSeek engine initialization in the CLI engine setup, which was previously missing.
+
+### Runtime Hook
+- **RTL Indentation Fix:** Fixed a generated runtime hook indentation mismatch that could break Ren'Py script parsing on some projects.
+
+### Runtime Hook Performance (Rollback Optimization)
+- **Native Dict Rollback Bypass (Core Fix):** Migrated all dynamically mutating dictionaries (`_rl_replace_cache`, `_rl_normalized_lookup_cache`, `_rl_runtime_miss_logged`) out of Ren'Py's store into standard native python `dict` allocations bound to the external `sys` module (`sys._rl_caches`). This entirely circumvents Ren'Py's `RevertableDict` tracking mechanism. By stopping the engine from logging 20,000+ cached string interactions into the traceback history, the huge lag and memory bloat associated with clicking the `Rollback` (mouse wheel up) feature in heavy translation operations is entirely eliminated!
+- **LRU-Like Cache Eviction:** Replaced cliff-edge `cache.clear()` with half-eviction (FIFO) for caches. Previously, when either cache reached its limit, the entire cache was destroyed at once — causing a cold-cache thundering-herd effect where lookups miss. Now only the oldest half is evicted, keeping recent translations warm.
+- **Language Sync Throttle:** `_rl_ensure_language_sync()` now checks `_preferences.language` at most once every 2 seconds instead of on every `replace_text` call. During a typical rollback burst (15-100+ `replace_text` invocations in <0.5s), this eliminates ~99% of redundant `hasattr` + property access overhead.
+- **Increased Cache Limits:** `_rl_replace_cache_limit` raised from 12,000 to 20,000 and `_rl_normalized_lookup_cache_limit` from 8,000 to 12,000. 
+- **Soft-Reload (Shift+R) Resilience:** Added cache clearing hooks to the `sys` module initialization block. This ensures that when a developer or user uses hot-reloading (Shift+R), the decoupled memory caches are properly flushed, preventing stale or ghost translations from persisting across reloads.
+
+### Locales
+- **Locale Sync:** Synchronized missing dashboard and deepseek string keys across `de`, `es`, `fa`, `fr`, `ru`, `tr`, and `zh-CN` loc files, falling back to English strings safely where previously missing.
+
 ### [2.8.2] - 2026-04-06
 
 ### Runtime Coverage Learning

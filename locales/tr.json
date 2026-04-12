@@ -841,7 +841,6 @@
     "tm_export_desc": "Bu TM kaynağını yedek olarak dışa aktarmak için bir konum seçin:",
     "tm_export_select_location": "Dışa Aktarma Konumu Seç",
     "btn_rename": "Yeniden Adlandır",
-    "btn_export": "Dışa Aktar",
     "btn_delete": "Sil",
     "btn_options": "Seçenekler",
     "placeholder_new_name": "Yeni ad...",
@@ -1082,5 +1081,6 @@
     "external_tm_manual_reuse_note": "Harici TM'yi, eski oyun sürümlerinden veya diğer projelerden manuel olarak iyileştirilmiş çevirileri tekrar kullanmak için kullanın.",
     "use_external_tm_label": "Harici TM Kullan",
     "tm_import_tools_note": "İçe aktarılan TM kaynaklarını Çeviri Tekrar Kullanımı sayfasından da yönetebilirsiniz.",
-    "placeholder_deepseek_base_url": "DeepSeek API Adresi (örn. https://api.deepseek.com)"
+    "placeholder_deepseek_base_url": "DeepSeek API Adresi (örn. https://api.deepseek.com)",
+    "translation_engines.deepseek": "DeepSeek API"
 }

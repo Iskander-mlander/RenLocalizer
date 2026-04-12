@@ -3642,10 +3642,7 @@ init python:
             if hasattr(translator, 'should_stop_callback'):
                 translator.should_stop_callback = lambda: self.should_stop
         if total == 0:
-            # Final Cache Kaydı
-            self.translation_manager.save_cache(cache_file)
-            self.log_message.emit("info", self.config.get_log_text('log_cache_saved', path=cache_file, count=len(translations)))
-
+            # cache_file henüz tanımlanmadı — boş sonuç döndür
             return translations
 
         # Batch çeviri için hazırla
@@ -3834,7 +3831,10 @@ init python:
                 max_tokens=self.config.translation_settings.ai_max_tokens
             )
             # Add fallback to Google
-            fallback = GoogleTranslator(getattr(self.translation_manager, "proxy_manager", None), self.config)
+            fallback = GoogleTranslator(
+                proxy_manager=getattr(self.translation_manager, "proxy_manager", None),
+                config_manager=self.config
+            )
             fallback.status_callback = self.log_message.emit
             t.set_fallback_translator(fallback)
             t.status_callback = self.log_message.emit

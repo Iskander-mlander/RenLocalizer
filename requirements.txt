@@ -34,10 +34,10 @@ PyYAML>=6.0
 
 # Tools Support
 fonttools>=4.40.0  # Required for Font Compatibility tool
+rich>=13.0.0  # Modern CLI terminal interface
 
 # Optional/Platform Specific
 uvloop>=0.17.0; sys_platform != "win32"
 Pillow>=10.0.0  # Required for PyInstaller icon processing
 
 # Offline AI support removed in v2.7.8
-

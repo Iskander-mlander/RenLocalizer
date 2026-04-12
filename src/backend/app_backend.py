@@ -1143,7 +1143,7 @@ class AppBackend(QObject):
                 timeout=ts.ai_timeout,
                 max_tokens=ts.ai_max_tokens
             )
-            fallback = GoogleTranslator(self.proxy_manager, self.config)
+            fallback = GoogleTranslator(proxy_manager=self.proxy_manager, config_manager=self.config)
             gemini_translator.set_fallback_translator(fallback)
             self.translation_manager.add_translator(TranslationEngine.GEMINI, gemini_translator)
 

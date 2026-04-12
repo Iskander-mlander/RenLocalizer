@@ -839,7 +839,6 @@
     "tm_export_desc": "选择位置以将此 TM 来源导出为备份：",
     "tm_export_select_location": "选择导出位置",
     "btn_rename": "重命名",
-    "btn_export": "导出",
     "btn_delete": "删除",
     "btn_options": "选项",
     "placeholder_new_name": "新名称...",
@@ -1074,5 +1073,14 @@
     "tm_import_tools_note": "你也可以在“翻译复用”页面中管理已导入的 TM 来源。",
     "translation_engines.deepseek": "🐳 DeepSeek (OpenAI API)",
     "translation_engines.libretranslate": "🌐 LibreTranslate (本地)",
-    "placeholder_deepseek_base_url": "DeepSeek 基础 URL"
+    "placeholder_deepseek_base_url": "DeepSeek 基础 URL",
+    "cache_dashboard_desc": "Reuse previous translations through the automatic cache or imported translation memory sources.",
+    "cache_dashboard_entries": "Cached Entries",
+    "glossary_dashboard_desc": "Manage preferred terms, fill empty entries from source text, and keep frequently used translations consistent.",
+    "glossary_dashboard_total": "Total Terms",
+    "structured_data_experimental_tag": "Experimental",
+    "tools_dashboard_desc": "Use these tools to inspect projects, fix fonts, validate translation output, and package results.",
+    "tools_section_automation": "Automation & Packaging",
+    "tools_section_core": "Core Utilities",
+    "tools_section_quality": "Font and Validation"
 }

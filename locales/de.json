@@ -839,7 +839,6 @@
     "tm_export_desc": "Wählen Sie einen Speicherort für den Export dieser TM-Quelle als Backup:",
     "tm_export_select_location": "Export-Speicherort auswählen",
     "btn_rename": "Umbenennen",
-    "btn_export": "Exportieren",
     "btn_delete": "Löschen",
     "btn_options": "Optionen",
     "placeholder_new_name": "Neuer Name...",
@@ -1074,5 +1073,14 @@
     "tm_import_tools_note": "Importierte TM-Quellen können auch auf der Seite zur Wiederverwendung von Übersetzungen verwaltet werden.",
     "translation_engines.deepseek": "🐳 DeepSeek (OpenAI API)",
     "translation_engines.libretranslate": "🌐 LibreTranslate (Lokale)",
-    "placeholder_deepseek_base_url": "DeepSeek API-Basis-URL (z. B. https://api.deepseek.com)"
+    "placeholder_deepseek_base_url": "DeepSeek API-Basis-URL (z. B. https://api.deepseek.com)",
+    "cache_dashboard_desc": "Reuse previous translations through the automatic cache or imported translation memory sources.",
+    "cache_dashboard_entries": "Cached Entries",
+    "glossary_dashboard_desc": "Manage preferred terms, fill empty entries from source text, and keep frequently used translations consistent.",
+    "glossary_dashboard_total": "Total Terms",
+    "structured_data_experimental_tag": "Experimental",
+    "tools_dashboard_desc": "Use these tools to inspect projects, fix fonts, validate translation output, and package results.",
+    "tools_section_automation": "Automation & Packaging",
+    "tools_section_core": "Core Utilities",
+    "tools_section_quality": "Font and Validation"
 }

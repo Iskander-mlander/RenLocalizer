@@ -80,25 +80,40 @@ init -999 python:
     import re as _rl_re
     import time as _rl_time
     import json as _rl_json
+    import sys as _rl_sys
+
+    # v2.8.3 PERF FIX: Store runtime mutating caches in the sys module using native dicts.
+    # This completely bypasses Ren'Py's store and RevertableDict tracking mechanism!
+    # Without this, tracking 20,000+ cache mutations bloats the rollback history
+    # and causes massive lag/stutter during rollback operations.
+    if not hasattr(_rl_sys, '_rl_caches'):
+        _rl_native_dict = type(_rl_sys.modules)
+        _rl_sys._rl_caches = _rl_native_dict()
+        _rl_sys._rl_caches['replace'] = _rl_native_dict()
+        _rl_sys._rl_caches['normalized'] = _rl_native_dict()
+        _rl_sys._rl_caches['missed'] = _rl_native_dict()
+        _rl_sys._rl_caches['translated'] = _rl_native_dict()
+    else:
+        # Soft-reload (Shift+R) recovery: flush caches to avoid stale translations
+        _rl_sys._rl_caches['replace'].clear()
+        _rl_sys._rl_caches['normalized'].clear()
+        _rl_sys._rl_caches['missed'].clear()
+        _rl_sys._rl_caches['translated'].clear()
 
     # =========================================================================
     # INITIALIZATION (v4.1.1 — DIRECT COMPARISON + MISSED DIAGNOSTICS)
     # =========================================================================
-    _rl_translated_values = set()
     _renlocalizer_debug = False
     _rl_runtime_string_diagnostics = {runtime_string_diagnostics}
     _rl_runtime_miss_limit = {runtime_miss_limit}
-    _rl_runtime_miss_logged = set()
     _rl_runtime_miss_path = None
     _rl_translations = {{}}
     _rl_translations_ci = {{}}     # Case-insensitive: lower_key -> value (v4.1.0)
     _rl_translations_norm = {{}}   # Normalized exact lookup: punctuation/space variants
     _rl_phrase_variants = []       # Long phrase fallback candidates
     _rl_phrase_index = {{}}        # Anchor-word -> long phrase candidates
-    _rl_replace_cache = {{}}       # text -> local replace_text result
-    _rl_replace_cache_limit = 12000
-    _rl_normalized_lookup_cache = {{}}
-    _rl_normalized_lookup_cache_limit = 8000
+    _rl_replace_cache_limit = 20000  # v2.8.3: increased from 12K for large games
+    _rl_normalized_lookup_cache_limit = 12000  # v2.8.3: increased from 8K
     _rl_ci_conflicts_global = set() # Track ambiguous lower-case keys for diagnostics
     _rl_norm_conflicts_global = set() # Track ambiguous normalized keys for diagnostics
     _rl_runtime_template_matching = True # Experimental: Feature flag for template-aware runtime
@@ -106,6 +121,8 @@ init -999 python:
     _rl_template_prefix_index = {{}}
     _rl_template_suffix_index = {{}}
     _rl_template_general = []
+    _rl_lang_sync_last_check = 0.0  # v2.8.3: throttle language sync checks
+    _rl_lang_sync_interval = 2.0    # seconds between _preferences.language polls
     _rl_loaded = False
     _rl_loaded_language = None
     _rl_prev_say_menu_filter = None
@@ -138,7 +155,7 @@ init -999 python:
         'a', 'an', 'and', 'as', 'at', 'but', 'for', 'from', 'if', 'in', 'into',
         'is', 'it', 'of', 'on', 'or', 'so', 'the', 'then', 'to', 'with'
     ))
-_rl_rtl_languages = set((
+    _rl_rtl_languages = set((
         'arabic', 'farsi', 'persian', 'hebrew', 'urdu', 'pashto', 'sindhi'
     ))
     _rl_rtl_style_names = (
@@ -186,11 +203,29 @@ _rl_rtl_languages = set((
                 return replacement[0].lower() + replacement[1:]
         return replacement
 
+    def _rl_evict_cache_half(cache_dict):
+        """Evict oldest ~half of a dict cache (FIFO by insertion order).
+
+        v2.8.3 PERF FIX: Replaces .clear() cliff-edge eviction that caused
+        periodic cold-cache spikes during rollback. Python 3.7+ dicts
+        maintain insertion order, so we drop the first half (oldest entries)
+        and keep the second half (most recently used). This avoids the
+        thundering-herd effect where rollback re-processes 5-20 statements
+        and every lookup misses a freshly cleared cache.
+        """
+        half = len(cache_dict) // 2
+        if half < 1:
+            cache_dict.clear()
+            return
+        keys_to_remove = list(cache_dict.keys())[:half]
+        for k in keys_to_remove:
+            del cache_dict[k]
+
     def _rl_normalize_lookup_text(text):
         """Normalize visible text for conservative fallback lookup."""
         if not text:
             return ""
-        cached = _rl_normalized_lookup_cache.get(text)
+        cached = _rl_sys._rl_caches['normalized'].get(text)
         if cached is not None:
             return cached
         try:
@@ -199,20 +234,20 @@ _rl_rtl_languages = set((
             normalized = text
         normalized = _rl_re.sub(r"\s+", " ", normalized).strip()
         normalized = normalized.casefold()
-        if len(_rl_normalized_lookup_cache) >= _rl_normalized_lookup_cache_limit:
-            _rl_normalized_lookup_cache.clear()
-        _rl_normalized_lookup_cache[text] = normalized
+        if len(_rl_sys._rl_caches['normalized']) >= _rl_normalized_lookup_cache_limit:
+            _rl_evict_cache_half(_rl_sys._rl_caches['normalized'])
+        _rl_sys._rl_caches['normalized'][text] = normalized
         return normalized
 
     def _rl_cache_local_replace(text, result):
         if text is None:
             return result
-        if len(_rl_replace_cache) >= _rl_replace_cache_limit:
-            _rl_replace_cache.clear()
-        _rl_replace_cache[text] = result
+        if len(_rl_sys._rl_caches['replace']) >= _rl_replace_cache_limit:
+            _rl_evict_cache_half(_rl_sys._rl_caches['replace'])
+        _rl_sys._rl_caches['replace'][text] = result
         return result
 
-def _rl_apply_runtime_language_direction(active_lang):
+    def _rl_apply_runtime_language_direction(active_lang):
         if not active_lang:
             return
         try:
@@ -334,7 +369,7 @@ def _rl_apply_runtime_language_direction(active_lang):
         stripped = text.strip()
         if len(stripped) < 2:
             return False
-        if stripped in _rl_translated_values:
+        if stripped in _rl_sys._rl_caches['translated']:
             return False
         return any(ch.isalnum() for ch in stripped)
 
@@ -542,16 +577,16 @@ def _rl_apply_runtime_language_direction(active_lang):
 
         stripped = text.strip()
         miss_key = layer + u"\x1f" + stripped
-        if miss_key in _rl_runtime_miss_logged:
+        if miss_key in _rl_sys._rl_caches['missed']:
             return
-        if len(_rl_runtime_miss_logged) >= _rl_runtime_miss_limit:
+        if len(_rl_sys._rl_caches['missed']) >= _rl_runtime_miss_limit:
             return
 
         log_path = _rl_get_runtime_miss_path()
         if not log_path:
             return
 
-        _rl_runtime_miss_logged.add(miss_key)
+        _rl_sys._rl_caches['missed'][miss_key] = True
         normalized_reason = _rl_classify_runtime_miss_reason(text, reason)
         normalized_text = _rl_normalize_lookup_text(stripped)
         active_language = _rl_get_active_language()
@@ -646,7 +681,7 @@ def _rl_apply_runtime_language_direction(active_lang):
         return lang
 
     def _rl_load_translations():
-        global _rl_translations, _rl_translations_ci, _rl_translations_norm, _rl_phrase_variants, _rl_phrase_index, _rl_replace_cache, _rl_normalized_lookup_cache, _rl_loaded, _rl_translated_values, _rl_loaded_language, _rl_ci_conflicts_global, _rl_norm_conflicts_global, _rl_template_map, _rl_template_prefix_index, _rl_template_suffix_index, _rl_template_general
+        global _rl_translations, _rl_translations_ci, _rl_translations_norm, _rl_phrase_variants, _rl_phrase_index, _rl_loaded, _rl_loaded_language, _rl_ci_conflicts_global, _rl_norm_conflicts_global, _rl_template_map, _rl_template_prefix_index, _rl_template_suffix_index, _rl_template_general
 
         json_path = _rl_find_strings_json()
         if not json_path:
@@ -678,9 +713,8 @@ def _rl_apply_runtime_language_direction(active_lang):
             _rl_translations_norm = {{}}
             _rl_phrase_variants = []
             _rl_phrase_index = {{}}
-            _rl_replace_cache = {{}}
-            _rl_normalized_lookup_cache = {{}}
-            _rl_translated_values = set()
+            _rl_sys._rl_caches['replace'].clear()
+            _rl_sys._rl_caches['normalized'].clear()
             _rl_ci_conflicts_global = set()  # Track ambiguous lower-case keys
             _rl_norm_conflicts_global = set() # Track ambiguous normalized keys
             _rl_template_map = []
@@ -692,7 +726,7 @@ def _rl_apply_runtime_language_direction(active_lang):
                 if k and v and k.strip() and v.strip() and k.strip() != v.strip():
                     clean_k = k.strip()
                     clean_v = v.strip()
-                    _rl_translated_values.add(clean_v)
+                    _rl_sys._rl_caches['translated'][clean_v] = True
                     lower_k = clean_k.lower()
                     if lower_k in _rl_ci_conflicts_global:
                         pass  # Already marked ambiguous — skip
@@ -771,15 +805,27 @@ def _rl_apply_runtime_language_direction(active_lang):
             return False
 
     def _rl_ensure_language_sync():
-        global _rl_runtime_miss_path, _rl_runtime_miss_logged, _rl_replace_cache, _rl_normalized_lookup_cache
+        """Check if the active language changed and reload if needed.
+
+        v2.8.3 PERF FIX: Throttled to check at most once every
+        _rl_lang_sync_interval seconds. During rollback, Ren'Py re-executes
+        5-20 say statements rapidly, calling replace_text 15-100 times.
+        Without throttling, each call does hasattr + property access on
+        _preferences.language. With throttling, at most 1 check per
+        rollback burst.
+        """
+        global _rl_runtime_miss_path, _rl_lang_sync_last_check
         try:
+            now = _rl_time.time()
+            if _rl_loaded and (now - _rl_lang_sync_last_check) < _rl_lang_sync_interval:
+                return
+            _rl_lang_sync_last_check = now
             active_lang = _rl_get_active_language()
             if _rl_loaded and _rl_loaded_language == active_lang:
                 return
             _rl_runtime_miss_path = None
-            _rl_runtime_miss_logged = set()
-            _rl_replace_cache = {{}}
-            _rl_normalized_lookup_cache = {{}}
+            _rl_sys._rl_caches['replace'] = {{}}
+            _rl_sys._rl_caches['normalized'] = {{}}
             _rl_load_translations()
         except Exception:
             pass
@@ -937,7 +983,7 @@ def _rl_apply_runtime_language_direction(active_lang):
                     return _rl_prev_replace_text(text)
                 return text
 
-            cached_local = _rl_replace_cache.get(text)
+            cached_local = _rl_sys._rl_caches['replace'].get(text)
             if cached_local is not None:
                 if _rl_prev_replace_text:
                     return _rl_prev_replace_text(cached_local)
@@ -947,7 +993,7 @@ def _rl_apply_runtime_language_direction(active_lang):
             _stripped = text.strip()
 
             # 0. Skip already-translated text (performance + safety)
-            if _stripped and _stripped in _rl_translated_values:
+            if _stripped and _stripped in _rl_sys._rl_caches['translated']:
                 result = _rl_cache_local_replace(text, _rl_fix_punct_spacing(text))
                 if _rl_prev_replace_text:
                     result = _rl_prev_replace_text(result)

@@ -77,7 +77,7 @@
     "btn_download": "آپدیت",
     "btn_download_inject": "دانلود و تزریق کنید",
     "btn_encrypt": "رمزگذاری",
-    "btn_export": "صادرات",
+    "btn_export": "صدور",
     "btn_export_glossary": "خروجی",
     "btn_fix_now": "اصلاح کن",
     "btn_import": "واردات",
@@ -839,7 +839,6 @@
     "tm_export_desc": "مکانی برای صدور این منبع TM به عنوان پشتیبان انتخاب کنید:",
     "tm_export_select_location": "انتخاب محل صدور",
     "btn_rename": "تغییر نام",
-    "btn_export": "صدور",
     "btn_delete": "حذف",
     "btn_options": "گزینه‌ها",
     "placeholder_new_name": "نام جدید...",
@@ -1075,5 +1074,14 @@
     "tm_import_tools_note": "می‌توانید منابع TM واردشده را از صفحهٔ استفادهٔ دوباره از ترجمه‌ها نیز مدیریت کنید.",
     "translation_engines.deepseek": "🐳 DeepSeek (OpenAI API)",
     "translation_engines.libretranslate": "🌐 LibreTranslate (محلی)",
-    "placeholder_deepseek_base_url": "آدرس بیس دیپ‌سیک"
+    "placeholder_deepseek_base_url": "آدرس بیس دیپ‌سیک",
+    "cache_dashboard_desc": "Reuse previous translations through the automatic cache or imported translation memory sources.",
+    "cache_dashboard_entries": "Cached Entries",
+    "glossary_dashboard_desc": "Manage preferred terms, fill empty entries from source text, and keep frequently used translations consistent.",
+    "glossary_dashboard_total": "Total Terms",
+    "structured_data_experimental_tag": "Experimental",
+    "tools_dashboard_desc": "Use these tools to inspect projects, fix fonts, validate translation output, and package results.",
+    "tools_section_automation": "Automation & Packaging",
+    "tools_section_core": "Core Utilities",
+    "tools_section_quality": "Font and Validation"
 }

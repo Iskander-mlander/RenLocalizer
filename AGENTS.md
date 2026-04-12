@@ -1,7 +1,7 @@
 # AGENTS.md — RenLocalizer Proje Kılavuzu (AI Agent Bağlamı)
 
 > Bu dosya, AI kodlama asistanlarının (GitHub Copilot, Cursor, Claude vb.) projeyi hızla anlaması için hazırlanmıştır.
-> Son güncelleme: 2026-04-06 | Versiyon: 2.8.2
+> Son güncelleme: 2026-04-11 | Versiyon: 2.8.3
 
 ---
 
@@ -31,8 +31,8 @@ RenLocalizer/
 ├── RenLocalizer.spec       # PyInstaller build spec
 │
 ├── src/
-│   ├── version.py          # VERSION = "2.8.2"
-│   ├── cli_main.py         # CLI ana modülü (argparse + QCoreApplication)
+│   ├── version.py          # VERSION = "2.8.3"
+│   ├── cli_main.py         # CLI ana modülü (Rich TUI + argparse + QCoreApplication)
 │   │
 │   ├── core/               # ★ Ana çeviri motoru (17 modül, ~17K satır)
 │   │   ├── translation_pipeline.py  # 7-aşamalı orkestratör (QObject)
@@ -225,7 +225,7 @@ TranslationPipeline.run()
 - **Katman 2:** `config.replace_text` — post-interpolation exact + case-insensitive + normalized exact + sınırlı template-aware eşleme
 - **Ek:** Runtime miss diagnostics (`runtime_missed_strings.jsonl`), visible-form alias synthesis, runtime-observed alias promotion, screen-scope harvesting, RTL yön desteği ve dil değişiminde yeniden yükleme senkronu
 - **Mod Davranışı:** `balanced` yalnızca yüksek güvenli exact/alias kurtarmalarına izin verir; `aggressive` orta güvenli runtime/screen adaylarını da exact alias üretimine dahil eder
-- **Performans:** Template/phrase fallback adayları indexlenir; `replace_text` ve normalize lookup sonuçları bounded cache ile saklanır. Screen harvesting interaction-start tarafında tutulur, restart-heavy akışlarda tekrar tekrar çalışmaz. Bu özellikle büyük `strings.json` ve sandbox/custom-screen ağırlıklı oyunlarda rollback/UI gecikmesini azaltmayı hedefler.
+- **Performans:** Template/phrase fallback adayları indexlenir; `replace_text` ve normalize lookup sonuçları bounded cache ile saklanır (v2.8.3: cliff-edge `clear()` yerine LRU-benzeri yarı silme, language sync throttle, kısa metin fast-path). Screen harvesting interaction-start tarafında tutulur, restart-heavy akışlarda tekrar tekrar çalışmaz. Bu özellikle büyük `strings.json` ve sandbox/custom-screen ağırlıklı oyunlarda rollback/UI gecikmesini azaltmayı hedefler.
 - **Güvenlik:** Trie/substring replacement kullanılmaz; kısmi replacement yapılmaz (`[GAME.ship.name]` bozulma riski). Uzun phrase fallback yalnızca tek ve çakışmasız adaylarda çalışır. Screen harvesting yalnızca gözlem amaçlıdır; gameplay metnini değiştirmez.
 
 ### 5.5 Delimiter-Aware Translation
@@ -265,7 +265,7 @@ TranslationPipeline.run()
 ## 7. Test Altyapısı
 
 - **Framework:** `unittest` (standart Python)
-- **Toplam:** 700+ test (40+ test dosyası)
+- **Toplam:** 780+ test (40+ test dosyası)
 - **Çalıştırma:** `python -m pytest tests/` veya `python -m unittest discover tests/`
 - **Kapsam alanları:**
   - Parser doğruluğu, edge case'ler, false positive filtreleri
@@ -289,7 +289,7 @@ TranslationPipeline.run()
 | macOS | `build/macos/` scriptleri | DMG |
 | CI/CD | GitHub Actions | Release build + source compatibility matrix |
 
-**Bağımlılıklar:** `requirements.txt` — PyQt6 (source: `>=6.6,<6.11`), aiohttp, requests, httpx, chardet, openai, google-genai, rapidfuzz, pandas, openpyxl, unrpa, PyYAML, fonttools, Pillow
+**Bağımlılıklar:** `requirements.txt` — PyQt6 (source: `>=6.6,<6.11`), aiohttp, requests, httpx, chardet, openai, google-genai, rapidfuzz, pandas, openpyxl, unrpa, PyYAML, fonttools, rich, Pillow
 **Release pin:** `constraints-release.txt` — PyQt6 6.10.1 stack
 
 ---
@@ -386,7 +386,7 @@ strings.json ← Runtime hook davranışı için kritik index; yalnızca export 
 | `app_backend.py` | 1575 | ★★★★ |
 | `syntax_guard.py` | 1497 | ★★★★★ |
 | `output_formatter.py` | 1108 | ★★★★ |
-| `cli_main.py` | 1112 | ★★★ |
+| `cli_main.py` | 1577 | ★★★★ |
 | `SettingsPage.qml` | 924 | ★★★ |
 | `ai_translator.py` | 862 | ★★★★ |
 | `config.py` | 864 | ★★★★ |
