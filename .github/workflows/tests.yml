@@ -10,11 +10,12 @@ on:
 
 jobs:
   core-regression:
-    name: Core regression (py${{ matrix.python-version }}, Qt release pin)
-    runs-on: ubuntu-latest
+    name: Core regression (py${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ['3.10', '3.11', '3.12']
 
     steps:
@@ -27,6 +28,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Linux Qt runtime dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb \
@@ -60,7 +62,8 @@ jobs:
             tests/test_ci_pyqt_compat.py \
             -q
 
-      - name: Smoke test source Qt startup
+      - name: Smoke test source Qt startup (Linux)
+        if: runner.os == 'Linux'
         run: |
           python - <<'PY'
           import os
@@ -68,6 +71,21 @@ jobs:
           env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1")
           subprocess.run(
               ["xvfb-run", "-a", "python", "run.py"],
+              env=env,
+              check=True,
+              timeout=90,
+          )
+          PY
+
+      - name: Smoke test source Qt startup (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1", QT_QPA_PLATFORM="offscreen")
+          subprocess.run(
+              ["python", "run.py"],
               env=env,
               check=True,
               timeout=90,

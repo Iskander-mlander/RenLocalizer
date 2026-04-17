@@ -453,6 +453,8 @@ def run_renpy_lint(game_dir: str, *, timeout: int = 120) -> Optional[LintReport]
             cmd,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=timeout,
             cwd=game_dir,
         )

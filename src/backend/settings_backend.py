@@ -477,7 +477,6 @@ class SettingsBackend(QObject):
             
             # Create a temporary event loop to run the async health check
             loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             try:
                 success, message = loop.run_until_complete(translator.health_check())
                 loop.run_until_complete(translator.close())
@@ -546,7 +545,6 @@ class SettingsBackend(QObject):
                         return False, f"HTTP {resp.status}"
 
             loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             try:
                 success, message = loop.run_until_complete(_test())
                 return message
@@ -696,7 +694,6 @@ class SettingsBackend(QObject):
                 return pm.get_proxy_stats()
 
             loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             try:
                 stats = loop.run_until_complete(run_refresh())
                 working = stats['working_proxies']

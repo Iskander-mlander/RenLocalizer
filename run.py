@@ -843,15 +843,30 @@ def main() -> int:
                 smoke_delay_ms = _get_qt_smoke_test_delay_ms()
                 logger.info("Qt smoke test enabled; exiting after %sms", smoke_delay_ms)
                 print(f"[INFO] Qt smoke test enabled; exiting after {smoke_delay_ms}ms")
-                QTimer.singleShot(smoke_delay_ms, app.quit)
 
-            try:
-                graphics_api = root_window.rendererInterface().graphicsApi()
-                graphics_api_name = getattr(graphics_api, "name", str(graphics_api))
-                logger.info("Qt Quick graphics API in use: %s", graphics_api_name)
-                print(f"[INFO] Qt Quick graphics API in use: {graphics_api_name}")
-            except Exception as exc:
-                logger.debug("Could not query Qt Quick graphics API: %s", exc)
+                def _smoke_exit():
+                    try:
+                        graphics_api = root_window.rendererInterface().graphicsApi()
+                        graphics_api_name = getattr(graphics_api, "name", str(graphics_api))
+                        logger.info("Qt Quick graphics API in use: %s", graphics_api_name)
+                        print(f"[INFO] Qt Quick graphics API in use: {graphics_api_name}")
+                    except Exception as exc:
+                        logger.debug("Could not query Qt Quick graphics API: %s", exc)
+                    root_window.close()
+                    app.quit()
+
+                QTimer.singleShot(smoke_delay_ms, _smoke_exit)
+            else:
+                def _query_graphics_api():
+                    try:
+                        graphics_api = root_window.rendererInterface().graphicsApi()
+                        graphics_api_name = getattr(graphics_api, "name", str(graphics_api))
+                        logger.info("Qt Quick graphics API in use: %s", graphics_api_name)
+                        print(f"[INFO] Qt Quick graphics API in use: {graphics_api_name}")
+                    except Exception as exc:
+                        logger.debug("Could not query Qt Quick graphics API: %s", exc)
+
+                QTimer.singleShot(0, _query_graphics_api)
 
         print("[OK] UI loaded successfully. Entering event loop.")
         exit_code = app.exec()
@@ -872,27 +887,26 @@ def main() -> int:
             # Close any open aiohttp sessions before event loop cleanup
             if hasattr(backend, 'translation_manager'):
                 backend.translation_manager.close_all_sessions()
-            
-            # Get the current event loop if it exists
+        except Exception as cleanup_error:
+            logger.debug(f"Asyncio cleanup warning: {cleanup_error}")
+
+        try:
+            # Cancel pending asyncio tasks without run_until_complete —
+            # Qt event loop is already gone at this point; calling
+            # run_until_complete here causes SIGABRT in PyInstaller Linux builds.
+            # get_running_loop() raises RuntimeError when no loop is running (expected here).
+            # get_event_loop() is deprecated in 3.10+ in this context, so we use
+            # the policy directly as a best-effort cleanup.
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_event_loop_policy().get_event_loop()
                 if loop and not loop.is_closed():
-                    # Cancel all pending tasks
                     pending = asyncio.all_tasks(loop)
                     for task in pending:
                         task.cancel()
-                    
-                    # Wait for tasks to complete cancellation
-                    if pending:
-                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                    
-                    # Close the loop gracefully
                     loop.close()
-            except RuntimeError:
-                # No event loop exists, which is fine
+            except Exception:
                 pass
         except Exception as cleanup_error:
-            # Silent fail - cleanup errors shouldn't crash the app
             logger.debug(f"Asyncio cleanup warning: {cleanup_error}")
         
         return exit_code

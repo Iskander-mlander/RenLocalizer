@@ -1494,13 +1494,11 @@ def main() -> int:
             print_info("Attempting to use it as project root anyway...")
 
     if is_exe_file and mode == "translate":
+        mode = "full"
         if is_windows:
             print_info("EXE file provided with 'translate' mode. Switching to 'full' mode.")
-            mode = "full"
         else:
-            if not is_windows and is_exe_file:
-                print_info("EXE file detected. Attempting extraction via Unrpa (cross-platform).")
-                mode = "full"
+            print_info("EXE file detected. Attempting extraction via Unrpa (cross-platform).")
 
     # Display session info
     build_summary_panel({
@@ -1557,8 +1555,14 @@ def main() -> int:
 
         QTimer.singleShot(0, run_translation_wrapper)
 
-    # Setup signal handling for graceful exit (Ctrl+C)
+    # Setup signal handling for graceful exit (Ctrl+C and termination signals)
     signal.signal(signal.SIGINT, lambda *args: QCoreApplication.quit())
+    if sys.platform == "win32":
+        # SIGBREAK = Ctrl+Break on Windows
+        signal.signal(signal.SIGBREAK, lambda *args: QCoreApplication.quit())  # type: ignore[attr-defined]
+    else:
+        # SIGTERM is the standard "terminate gracefully" signal on Linux/macOS
+        signal.signal(signal.SIGTERM, lambda *args: QCoreApplication.quit())
 
     return app.exec()
 

@@ -123,9 +123,9 @@ def detect_system_language() -> str:
             except Exception:
                 pass
 
-        # Method 2: Standard locale detection
+        # Method 2: Standard locale detection (Linux/macOS)
         try:
-            system_locale = locale.getdefaultlocale()[0]
+            system_locale = locale.getlocale()[0]
             if system_locale:
                 if _is_turkic_locale(system_locale):
                     return 'tr'

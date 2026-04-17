@@ -432,16 +432,14 @@ init -999 python:
             gd = config.gamedir
             candidates.extend([
                 _rl_os.path.join(gd, "tl", lang, "strings.json"),
-                _rl_os.path.join(gd, "tl", lang, "strings.json").replace("\\\\", "/"),
-                _rl_os.path.join(gd, "tl", lang, "strings.json").replace("/", "\\\\"),
+                "/".join([gd, "tl", lang, "strings.json"]),
             ])
         
         if hasattr(renpy, 'config') and hasattr(renpy.config, 'searchpath') and renpy.config.searchpath:
             for d in renpy.config.searchpath:
                 candidates.extend([
                     _rl_os.path.join(d, "tl", lang, "strings.json"),
-                    _rl_os.path.join(d, "tl", lang, "strings.json").replace("\\\\", "/"),
-                    _rl_os.path.join(d, "tl", lang, "strings.json").replace("/", "\\\\"),
+                    "/".join([d, "tl", lang, "strings.json"]),
                 ])
         
         candidates.extend([

@@ -1,4 +1,4 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
 from pathlib import Path
@@ -126,8 +126,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(project_dir, 'icon.ico'),
-    manifest=os.path.join(project_dir, 'build', 'windows', 'RenLocalizer.manifest'),
+    icon=os.path.join(project_dir, 'icon.ico') if sys.platform == 'win32' else None,
+    manifest=os.path.join(project_dir, 'build', 'windows', 'RenLocalizer.manifest') if sys.platform == 'win32' else None,
 )
 
 # =========================================================
@@ -166,7 +166,7 @@ exe_cli = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(project_dir, 'icon.ico')
+    icon=os.path.join(project_dir, 'icon.ico') if sys.platform == 'win32' else None
 )
 
 # =========================================================

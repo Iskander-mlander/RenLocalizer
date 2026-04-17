@@ -2168,18 +2168,7 @@ class TranslationManager:
         Called during app shutdown to prevent asyncio cleanup errors.
         """
         try:
-            # Try to get existing event loop
-            try:
-                loop = asyncio.get_event_loop()
-                if loop and not loop.is_closed():
-                    loop.run_until_complete(self.close_all())
-                    return
-            except RuntimeError:
-                pass
-            
-            # If no loop exists, create a temporary one
             loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             try:
                 loop.run_until_complete(self.close_all())
             finally:

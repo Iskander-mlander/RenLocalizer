@@ -17,6 +17,7 @@ import json
 import time
 import webbrowser
 import urllib.parse
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -41,6 +42,13 @@ from src.core.translation_pipeline import TranslationPipeline, PipelineWorker
 if TYPE_CHECKING:
     from src.core.ai_translator import OpenAITranslator, GeminiTranslator, LocalLLMTranslator
 from src.utils.data_transfer import export_glossary_to_file, import_glossary_from_file
+
+
+def _strip_file_uri(raw: str) -> str:
+    """Convert a file:// URI to a local filesystem path, handling URL encoding."""
+    if raw.startswith("file://"):
+        return urllib.request.url2pathname(urllib.parse.urlparse(raw).path)
+    return raw
 
 
 class AppBackend(QObject):
@@ -975,8 +983,8 @@ class AppBackend(QObject):
     @pyqtSlot(str, str, str, str, bool)
     def startTLTranslation(self, tl_path: str, target_lang: str, source_lang: str, engine: str, use_proxy: bool):
         """Mevcut bir TL klasörünü çevirmeye başla."""
-        if tl_path.startswith("file:///"):
-            tl_path = tl_path[8:] if sys.platform == "win32" else tl_path[7:]
+        if tl_path.startswith("file://"):
+            tl_path = _strip_file_uri(tl_path)
 
         self.logMessage.emit("info", self.config.get_ui_text("log_tl_started"))
         self.logMessage.emit("info", self.config.get_log_text("log_tl_folder", folder=os.path.basename(tl_path)))
@@ -1683,8 +1691,8 @@ class AppBackend(QObject):
             )
             return
 
-        if folder_path.startswith("file:///"):
-            folder_path = folder_path[8:] if sys.platform == "win32" else folder_path[7:]
+        if folder_path.startswith("file://"):
+            folder_path = _strip_file_uri(folder_path)
         folder_path = folder_path.replace("/", os.sep)
         root = Path(folder_path)
         if not root.exists() or not root.is_dir():
@@ -1697,8 +1705,8 @@ class AppBackend(QObject):
             )
             return
 
-        if backup_root.startswith("file:///"):
-            backup_root = backup_root[8:] if sys.platform == "win32" else backup_root[7:]
+        if backup_root.startswith("file://"):
+            backup_root = _strip_file_uri(backup_root)
         backup_root = backup_root.replace("/", os.sep).strip()
         if not backup_root:
             backup_root = str(root.parent / "old-txt-yaml")
@@ -1722,8 +1730,12 @@ class AppBackend(QObject):
             parent_resolved = parent.resolve()
             return child_resolved == parent_resolved or parent_resolved in child_resolved.parents
         except Exception:
-            child_str = str(child).replace("\\", "/").lower()
-            parent_str = str(parent).replace("\\", "/").lower().rstrip("/") + "/"
+            child_str = str(child).replace("\\", "/")
+            parent_str = str(parent).replace("\\", "/").rstrip("/") + "/"
+            # Case-insensitive comparison only on case-insensitive file systems
+            if sys.platform in ("win32", "darwin"):
+                child_str = child_str.lower()
+                parent_str = parent_str.lower()
             return child_str.startswith(parent_str)
 
     def _run_structured_data_translation(self, folder_path: str, backup_root: str, target_language: str, engine_code: str, preserve_formatting: bool):

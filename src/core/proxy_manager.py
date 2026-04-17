@@ -338,7 +338,6 @@ class ProxyManager:
         def _bg_refresh():
             try:
                 loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
                 try:
                     loop.run_until_complete(self.update_proxy_list())
                 finally:

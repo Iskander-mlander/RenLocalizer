@@ -3798,7 +3798,6 @@ init python:
                 
                 # Create temporary event loop for detection
                 detect_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(detect_loop)
                 
                 detected_lang = detect_loop.run_until_complete(
                     detection_translator.detect_language(text_samples, target_lang=api_target_lang)
@@ -3881,7 +3880,6 @@ init python:
         self.log_message.emit("info", self.config.get_log_text('translation_lang_api', lang=self.target_language, api=api_target_lang))
 
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         
         # Ensure translator is registered; fallback to Google/DeepL defaults
         if self.engine == TranslationEngine.GOOGLE and self.engine not in self.translation_manager.translators:

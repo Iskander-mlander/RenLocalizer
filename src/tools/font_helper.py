@@ -401,7 +401,7 @@ label font_test_label:
     return
 """
         
-        with open(output_path, 'w', encoding='utf-8-sig') as f:
+        with open(output_path, 'w', encoding='utf-8-sig', newline='\n') as f:
             f.write(content)
         
         return output_path
