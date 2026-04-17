@@ -11,6 +11,7 @@
 <p align="center">
   <a href="https://github.com/Lord0fTurk/RenLocalizer/releases">Releases</a> |
   <a href="https://github.com/Lord0fTurk/RenLocalizer/wiki">Wiki</a> |
+  <a href="https://github.com/Lord0fTurk/RenLocalizer/issues/13">🎖️ Important Notice: Project Hiatus & Future</a> |
   <a href="docs/CLI_USAGE.md">CLI Usage</a> |
   <a href="CHANGELOG.md">Changelog</a>
 </p>
@@ -30,6 +31,8 @@ RenLocalizer is built for a very specific problem: translating Ren'Py projects w
 It is not just a text replacer. It understands Ren'Py syntax, protects placeholders, supports compiled script formats, filters technical false positives, and can output both file-based translation scripts and runtime translation data.
 
 If you work with visual novels, fan patches, private localization workflows, or AI-assisted translation pipelines, this project is designed to reduce manual cleanup while keeping output usable inside real games.
+
+🎖️ Important Notice: Project Hiatus & Future | https://github.com/Lord0fTurk/RenLocalizer/issues/13
 
 ## What It Does
 
