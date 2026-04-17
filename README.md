@@ -32,7 +32,7 @@ It is not just a text replacer. It understands Ren'Py syntax, protects placehold
 
 If you work with visual novels, fan patches, private localization workflows, or AI-assisted translation pipelines, this project is designed to reduce manual cleanup while keeping output usable inside real games.
 
-🎖️ Important Notice: Project Hiatus & Future | https://github.com/Lord0fTurk/RenLocalizer/issues/13
+[🎖️ Important Notice: Project Hiatus & Future](https://github.com/Lord0fTurk/RenLocalizer/issues/13)
 
 ## What It Does
 
