@@ -57,7 +57,19 @@ def test_tests_workflow_has_python_and_pyqt_matrices() -> None:
 def test_tests_workflow_runs_qt_smoke_test_from_source() -> None:
     workflow = yaml.safe_load(Path(".github/workflows/tests.yml").read_text(encoding="utf-8"))
 
-    for job_name in ("core-regression", "linux-pyqt-compat"):
+    # core-regression has platform-conditional smoke steps
+    core_steps = workflow["jobs"]["core-regression"]["steps"]
+    linux_smoke = [s for s in core_steps if s.get("name") == "Smoke test source Qt startup (Linux)"]
+    assert len(linux_smoke) == 1
+    assert 'RENLOCALIZER_QT_SMOKE_TEST="1"' in linux_smoke[0]["run"]
+    assert '"xvfb-run", "-a", "python", "run.py"' in linux_smoke[0]["run"]
+
+    windows_smoke = [s for s in core_steps if s.get("name") == "Smoke test source Qt startup (Windows)"]
+    assert len(windows_smoke) == 1
+    assert 'RENLOCALIZER_QT_SMOKE_TEST="1"' in windows_smoke[0]["run"]
+
+    # linux-pyqt-compat only runs on Linux, still uses the original step name
+    for job_name in ("linux-pyqt-compat",):
         smoke_steps = [s for s in workflow["jobs"][job_name]["steps"] if s.get("name") == "Smoke test source Qt startup"]
         assert len(smoke_steps) == 1
         assert 'RENLOCALIZER_QT_SMOKE_TEST="1"' in smoke_steps[0]["run"]
