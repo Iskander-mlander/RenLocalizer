@@ -46,6 +46,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run targeted regression suite
+        shell: bash
         run: |
           python -m pytest \
             tests/test_deep_extraction.py \
@@ -60,7 +61,7 @@ jobs:
             tests/test_v276_features.py \
             tests/test_release_linux_artifacts.py \
             tests/test_ci_pyqt_compat.py \
-            -q
+            -q --rootdir .
 
       - name: Smoke test source Qt startup (Linux)
         if: runner.os == 'Linux'
@@ -79,6 +80,7 @@ jobs:
 
       - name: Smoke test source Qt startup (Windows)
         if: runner.os == 'Windows'
+        shell: bash
         run: |
           python - <<'PY'
           import os

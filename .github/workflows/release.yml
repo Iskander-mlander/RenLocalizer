@@ -238,15 +238,7 @@ jobs:
   # macOS Build → DMG
   # ============================================
   build-macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            artifact_suffix: arm64
-          - runner: macos-13
-            artifact_suffix: intel
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -322,13 +314,13 @@ jobs:
             -srcfolder dmg_contents \
             -ov \
             -format UDZO \
-            RenLocalizer-macOS-${{ matrix.artifact_suffix }}.dmg
+            RenLocalizer-macOS.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build-${{ matrix.artifact_suffix }}
-          path: RenLocalizer-macOS-${{ matrix.artifact_suffix }}.dmg
+          name: macos-build
+          path: RenLocalizer-macOS.dmg
 
   # ============================================
   # Create GitHub Release
@@ -354,15 +346,10 @@ jobs:
         with:
           name: linux-build-targz
 
-      - name: Download macOS arm64 artifact
+      - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: macos-build-arm64
-
-      - name: Download macOS Intel artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-build-intel
+          name: macos-build
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -371,8 +358,7 @@ jobs:
             RenLocalizer-Windows-x64.zip
             RenLocalizer-Linux-x64.AppImage
             RenLocalizer-Linux-x64.tar.gz
-            RenLocalizer-macOS-arm64.dmg
-            RenLocalizer-macOS-intel.dmg
+            RenLocalizer-macOS.dmg
           body: ""
           draft: false
           prerelease: false
