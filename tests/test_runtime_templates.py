@@ -117,12 +117,12 @@ def test_runtime_hook_phrase_index(tmp_path):
 
 
 def test_runtime_hook_caching(tmp_path):
-    """Test runtime caching for performance."""
+    """Test runtime caching for performance (v4.2.0 MRU-based architecture)."""
     hook = rht.render_runtime_hook("tr", runtime_string_diagnostics=False)
 
-    assert "_rl_sys._rl_caches['replace']" in hook
-    assert "_rl_sys._rl_caches['normalized']" in hook
-    assert "_rl_replace_cache_limit" in hook
+    assert "_rl_mru_cache" in hook           # MRU list replaces sys._rl_caches['replace']
+    assert "_rl_translations_norm" in hook   # Pre-built norm dict replaces sys._rl_caches['normalized']
+    assert "_rl_mru_cache_max" in hook       # Size limit for MRU cache
 
 
 def test_runtime_hook_language_detection(tmp_path):

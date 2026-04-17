@@ -124,25 +124,18 @@ def test_pipeline_corruption_guard_blocks_placeholder_remnants() -> None:
 
 def test_engine_specific_batch_size_caps() -> None:
     assert get_engine_batch_size_cap("google") == 1000
-    assert get_engine_batch_size_cap("yandex") == 1000
     assert get_engine_batch_size_cap("libretranslate") is None
     assert get_effective_batch_size(100, "google") == 100
     assert get_effective_batch_size(5000, "google") == 1000
-    assert get_effective_batch_size(5000, "yandex") == 1000
     assert get_effective_batch_size(5000, "libretranslate") == 5000
 
 
-def test_pipeline_effective_batch_size_caps_google_and_yandex_only() -> None:
+def test_pipeline_effective_batch_size_caps_google_only() -> None:
     google_pipeline = _make_pipeline()
     google_pipeline.engine = TranslationEngine.GOOGLE
     google_pipeline.config.translation_settings.max_batch_size = 5000
     assert google_pipeline._get_requested_translation_batch_size() == 5000
     assert google_pipeline._get_effective_translation_batch_size() == 1000
-
-    yandex_pipeline = _make_pipeline()
-    yandex_pipeline.engine = TranslationEngine.YANDEX
-    yandex_pipeline.config.translation_settings.max_batch_size = 2500
-    assert yandex_pipeline._get_effective_translation_batch_size() == 1000
 
     libre_pipeline = _make_pipeline()
     libre_pipeline.engine = TranslationEngine.LIBRETRANSLATE
@@ -696,12 +689,12 @@ def test_core_ui_retry_recovers_unchanged_translation() -> None:
 def test_core_ui_retry_uses_fallback_translator_when_primary_stays_unchanged() -> None:
     fallback = DummyTranslator({("About", True): "Hakkında"})
     translator = DummyTranslator({}, fallback=fallback)
-    pipeline = _make_pipeline({TranslationEngine.YANDEX: translator})
+    pipeline = _make_pipeline({TranslationEngine.DEEPL: translator})
     request = TranslationRequest(
         text="About",
         source_lang="en",
         target_lang="tr",
-        engine=TranslationEngine.YANDEX,
+        engine=TranslationEngine.DEEPL,
         metadata={"preprotected": True, "original_text": "About", "placeholders": {}},
     )
     entry = TranslationEntry(

@@ -269,6 +269,15 @@ class FakePython(FakeASTBase):
         self.hide: bool = False
         self.store: str = "store"
 
+    def __setstate__(self, state: dict) -> None:
+        # EarlyPython nodes (mapped to FakePython) may omit 'hide' from their
+        # pickle state because EarlyPython predates the hide attribute.
+        # Set safe defaults before applying state so AttributeError is avoided.
+        self.code = None
+        self.hide = False
+        self.store = "store"
+        super().__setstate__(state)
+
 
 class FakePyCode:
     """Represents Python code object inside AST."""
@@ -2059,7 +2068,13 @@ class ASTTextExtractor:
             body = getattr(node, 'code', None) or getattr(node, 'block', None) or getattr(node, 'string', None)
             if isinstance(body, str):
                 self._extract_strings_from_code(body, getattr(node, 'linenumber', 0))
-        
+
+        # Show/Scene — descend into their ATL block (may contain Python with strings)
+        elif isinstance(node, (FakeShow, FakeScene)):
+            atl = getattr(node, 'atl', None)
+            if atl is not None:
+                self._process_node(atl, f"{context}:atl")
+
         # Generic block handling
         elif hasattr(node, 'block') and node.block:
             self._walk_nodes(node.block, context)
@@ -2167,6 +2182,16 @@ class ASTTextExtractor:
             if isinstance(loc, (list, tuple)) and len(loc) > 1 and isinstance(loc[1], int):
                 line_number = loc[1]
             self._extract_from_code_obj(getattr(node, 'expression', None), line_number)
+
+        # SL2 OnEvent — extract from its action (may contain Confirm/Notify/Tooltip)
+        elif isinstance(node, FakeSLOnEvent):
+            line_number = 0
+            loc = getattr(node, 'location', None)
+            if isinstance(loc, (list, tuple)) and len(loc) > 1 and isinstance(loc[1], int):
+                line_number = loc[1]
+            action = getattr(node, 'action', None)
+            if action is not None:
+                self._extract_from_action(action, line_number, context)
     
     def _extract_strings_from_code(self, code: str, line_number: int) -> None:
         """Extract string literals from Python code with enhanced pattern matching."""

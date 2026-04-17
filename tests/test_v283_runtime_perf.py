@@ -153,24 +153,23 @@ class TestCacheLimitWithEviction:
 # ============================================================================
 
 class TestLanguageSyncThrottle:
-    """Test the 2-second throttle on language preference checks."""
+    """Test the language sync throttle (now in _rl_harvest_screens, not hot path)."""
 
-    def test_throttle_interval_in_template(self):
-        """Verify the throttle interval constant is present and = 2.0."""
+    def test_harvest_throttle_in_template(self):
+        """Verify harvest throttle constant is present (replaces old 2s lang sync throttle)."""
         hook = rht.render_runtime_hook("tr")
-        assert "_rl_lang_sync_interval = 2.0" in hook
+        assert "_rl_harvest_throttle" in hook
 
     def test_throttle_check_uses_time(self):
         """Verify the throttle uses time.time() for comparison."""
         hook = rht.render_runtime_hook("tr")
         assert "_rl_time.time()" in hook
-        assert "_rl_lang_sync_last_check" in hook
 
     def test_throttle_skip_logic(self):
-        """Verify the early-return condition for throttled checks."""
+        """Verify harvest throttle early-return condition exists."""
         hook = rht.render_runtime_hook("tr")
-        # Should contain the comparison: now - last_check < interval
-        assert "(now - _rl_lang_sync_last_check) < _rl_lang_sync_interval" in hook
+        assert "_rl_last_harvest_time" in hook
+        assert "_rl_harvest_throttle" in hook
 
 
 # ============================================================================
@@ -178,27 +177,25 @@ class TestLanguageSyncThrottle:
 # ============================================================================
 
 class TestSoftReloadFlush:
-    """Test that Shift+R properly flushes all caches."""
+    """Test that v4.2.0 MRU/alias caches are properly cleared on reload."""
 
-    def test_shift_r_clears_all_four_caches(self):
-        """When sys._rl_caches already exists, all 4 dicts are flushed."""
+    def test_language_reload_clears_mru_cache(self):
+        """Hot-swap and load functions must reset the MRU cache dict."""
         hook = rht.render_runtime_hook("tr")
-        # The else branch should clear all 4 caches
-        assert "_rl_sys._rl_caches['replace'].clear()" in hook
-        assert "_rl_sys._rl_caches['normalized'].clear()" in hook
-        assert "_rl_sys._rl_caches['missed'].clear()" in hook
-        assert "_rl_sys._rl_caches['translated'].clear()" in hook
+        # v2.8.4: MRU is now a dict {{}} for O(1) lookup, cleared by reassignment
+        assert "_rl_mru_cache = {}" in hook
 
-    def test_initial_creation_uses_native_dict(self):
-        """First-time init should use type(sys.modules) for native dict."""
+    def test_language_reload_clears_alias_cache(self):
+        """Load / hot-swap must reset the alias cache dict."""
         hook = rht.render_runtime_hook("tr")
-        assert "type(_rl_sys.modules)" in hook
+        assert "_rl_alias_cache = {}" in hook
 
-    def test_four_cache_buckets_created(self):
-        """All 4 cache buckets must be initialized."""
+    def test_miss_set_present_and_cleared_on_reload(self):
+        """v2.8.4+: _rl_miss_set prevents repeated full-chain lookups for untranslated texts."""
         hook = rht.render_runtime_hook("tr")
-        for bucket in ("replace", "normalized", "missed", "translated"):
-            assert f"_rl_sys._rl_caches['{bucket}']" in hook
+        assert "_rl_miss_set = set()" in hook   # Init + clear on reload
+        assert "_rl_miss_set.add(" in hook       # Misses are added
+        assert "in _rl_miss_set" in hook         # Fast-path check
 
 
 # ============================================================================
@@ -256,51 +253,51 @@ class TestHookTemplateRendering:
 # ============================================================================
 
 class TestCacheUsagePatterns:
-    """Test the cache interaction patterns used in the hook."""
+    """Test the cache interaction patterns used in the v4.2.0 hook."""
 
     def test_replace_cache_used_in_replace_text(self):
-        """The replace_text function should check the replace cache first."""
+        """replace_text checks the MRU cache before dict lookups."""
         hook = rht.render_runtime_hook("tr")
-        assert "_rl_sys._rl_caches['replace'].get(text)" in hook
+        assert "_rl_mru_lookup(text)" in hook
 
     def test_normalized_cache_used_in_normalize(self):
-        """The normalize function should cache results."""
+        """Normalised lookup dict is built at load time for special-char keys (v2.8.4+: ASCII keys skipped for perf)."""
         hook = rht.render_runtime_hook("tr")
-        assert "_rl_sys._rl_caches['normalized'].get(text)" in hook
-        assert "_rl_sys._rl_caches['normalized'][text]" in hook
+        assert "_rl_translations_norm" in hook  # Still built + used in harvest/alias path
 
     def test_missed_cache_used_for_deduplication(self):
-        """Runtime miss logging should use the missed cache for dedup."""
+        """Runtime miss logging deduplicates via _rl_runtime_miss_logged set."""
         hook = rht.render_runtime_hook("tr", runtime_string_diagnostics=True)
-        assert "_rl_sys._rl_caches['missed']" in hook
+        assert "_rl_runtime_miss_logged" in hook
 
     def test_translated_cache_for_skip_already_translated(self):
-        """Already-translated text should be skipped via the translated cache."""
+        """MRU cache is updated after every successful translation."""
         hook = rht.render_runtime_hook("tr")
-        assert "_rl_sys._rl_caches['translated']" in hook
+        assert "_rl_mru_update(" in hook
 
     def test_eviction_called_at_limit(self):
-        """Eviction should be triggered when cache reaches limit."""
+        """MRU list is capped by _rl_mru_cache_max."""
         hook = rht.render_runtime_hook("tr")
-        assert "_rl_evict_cache_half" in hook
-        assert "_rl_replace_cache_limit" in hook
-        assert "_rl_normalized_lookup_cache_limit" in hook
+        assert "_rl_mru_cache_max" in hook
+        assert "_rl_mru_update" in hook
 
 
 # ============================================================================
-# 7. Increased Cache Limit Constants
+# 7. Cache Limit Constants
 # ============================================================================
 
 class TestCacheLimitConstants:
-    """Test that v2.8.3 cache limits are correctly set."""
+    """Test that v4.2.0 cache limit constants are correctly set."""
 
-    def test_replace_cache_limit_20000(self):
+    def test_mru_cache_max_default(self):
+        """Default MRU cache max should be 500 entries (v2.8.4+: increased from 100)."""
         hook = rht.render_runtime_hook("tr")
-        assert "_rl_replace_cache_limit = 20000" in hook
+        assert "_rl_mru_cache_max = 500" in hook
 
-    def test_normalized_cache_limit_12000(self):
-        hook = rht.render_runtime_hook("tr")
-        assert "_rl_normalized_lookup_cache_limit = 12000" in hook
+    def test_mru_cache_max_configurable(self):
+        """render_runtime_hook accepts mru_cache_size parameter."""
+        hook = rht.render_runtime_hook("tr", mru_cache_size=200)
+        assert "_rl_mru_cache_max = 200" in hook
 
 
 # ============================================================================
@@ -321,11 +318,11 @@ class TestHookArchitecture:
         assert "init 999 python:" in hook
 
     def test_three_layer_architecture(self):
-        """Hook should have Layer 1 (say_menu), Layer 2 (replace_text), Layer 3 (character)."""
+        """v4.2.0 hook has Layer 1 (say_menu) + Layer 2 (replace_text); Layer 3 is screen harvesting."""
         hook = rht.render_runtime_hook("tr")
         assert "_rl_say_menu_text_filter" in hook
         assert "_rl_replace_text" in hook
-        assert "_rl_character_callback" in hook
+        assert "_rl_harvest_screens" in hook
 
     def test_handler_chaining_preserved(self):
         """Previous handlers should be saved and chained, not overwritten."""
@@ -334,9 +331,9 @@ class TestHookArchitecture:
         assert "_rl_prev_replace_text" in hook
 
     def test_screen_observer_callback(self):
-        """Interaction callback for screen scope harvesting should be present."""
+        """Screen harvesting is installed via start_interact_callbacks."""
         hook = rht.render_runtime_hook("tr")
-        assert "_rl_interact_callback" in hook
+        assert "_rl_harvest_screens" in hook
         assert "start_interact_callbacks" in hook
 
     def test_rtl_language_set(self):
@@ -346,7 +343,7 @@ class TestHookArchitecture:
             assert lang in hook
 
     def test_hotkey_screen_overlay(self):
-        """Runtime hotkeys screen should be registered."""
+        """_rl_harvest_screens is registered in start_interact_callbacks."""
         hook = rht.render_runtime_hook("tr")
-        assert "_rl_runtime_hotkeys" in hook
-        assert "overlay_screens" in hook
+        assert "_rl_harvest_screens" in hook
+        assert "start_interact_callbacks" in hook

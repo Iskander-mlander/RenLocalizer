@@ -8,12 +8,12 @@ def test_save_cache_persists_empty_cache_to_disk(tmp_path: Path) -> None:
     cache_file = tmp_path / "translation_cache.json"
     manager = TranslationManager()
 
-    manager._cache[("yandex", "auto", "tr", "About")] = TranslationResult(
+    manager._cache[("deepl", "auto", "tr", "About")] = TranslationResult(
         original_text="About",
         translated_text="Hakkinda",
         source_lang="auto",
         target_lang="tr",
-        engine=TranslationEngine.YANDEX,
+        engine=TranslationEngine.DEEPL,
         success=True,
     )
     manager.save_cache(str(cache_file))

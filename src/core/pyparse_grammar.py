@@ -41,6 +41,39 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         "store.",
         "layout.",
         "label hide",
+        # Screen property statements — bunlar asla diyalog değil; dialog_re backtracking önlenir
+        "action ",
+        "focus_mask ",
+        "modal ",
+        "imagebutton",
+        "imagebutton:",
+        "add ",
+        "at ",
+        "zorder ",
+        "xalign ",
+        "yalign ",
+        "xpos ",
+        "ypos ",
+        "spacing ",
+        "padding ",
+        "background ",
+        "foreground ",
+        "hovered ",
+        "unhovered ",
+        "selected_",
+        "insensitive_",
+        "activate_sound ",
+        "hover_sound ",
+        "mouse ",
+        "keysym ",
+        "sensitive ",
+        "visible ",
+        "pos ",
+        "size ",
+        "rotate ",
+        "zoom ",
+        "crop ",
+        "xysize ",
     )
 
     dialog_re = re.compile(
@@ -90,15 +123,21 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         rf'^(?P<prefix>{dialogue_speaker_or_quoted}{dialogue_attr_tail}\s+)?(?P<delim>"""|\'\'\')(?P<body>.*)$'
     )
 
+    # Regex'leri döngü dışında bir kez derle — protect_placeholders her entry için çağrılıyor
+    _nested_var_pat = re.compile(r'\[{2,}[^\]]+\]{2,}')
+    _var_pat = re.compile(r"\[[^\[\]]+\]")
+    _tag_pat = re.compile(r"\{[^{}]+\}")
+    _renpy_tag_pat = re.compile(r'\{/?[a-z]+(?:=[^}]*)?\}')
+    # default/data string literal extraction — döngü içinde her satır için derlenmiyecek
+    _default_strings_re = re.compile(r'(?<!\\)(?:[fFuUrR][fFuUrR]?)?(?:"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')')
+
     def protect_placeholders(text: str):
         # NEW v2.4.1: Nested interpolation protection (e.g. [[var]])
-        nested_var_pat = re.compile(r'\[{2,}[^\]]+\]{2,}')
-        
-        var_pat = re.compile(r"\[[^\[\]]+\]")
-        tag_pat = re.compile(r"\{[^{}]+\}")
-        
+        nested_var_pat = _nested_var_pat
+        var_pat = _var_pat
+        tag_pat = _tag_pat
         # NEW v2.4.1: Ren'Py text tags with values (e.g. {size=30}, {b})
-        renpy_tag_pat = re.compile(r'\{/?[a-z]+(?:=[^}]*)?\}')
+        renpy_tag_pat = _renpy_tag_pat
         
         placeholders = {}
         counter = 0
@@ -206,8 +245,10 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         if paren_depth > 0 or buffer:
             buffer += line + "\n" # Keep newline for multi-line strings
             paren_depth = new_depth
-            if paren_depth <= 0:
-                # End of structure
+            # Safety: eğer buffer 50 satırı aştıysa parantez hiç kapanmıyor demektir
+            # (muhtemelen yorum veya string içindeki parantez sayım hatası).
+            # Buffer'ı flush et, yoksa tüm dosya tek bir "logical line" olur.
+            if paren_depth <= 0 or buffer.count('\n') > 50:
                 logical_lines.append(buffer)
                 buffer = ""
                 paren_depth = 0
@@ -274,7 +315,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         # Also handles lines inside brackets: "Start by helping her..."
         
         # v2.5.1: More robust string literal regex to avoid escaping issues
-        default_strings_re = re.compile(r'(?<!\\)(?:[fFuUrR][fFuUrR]?)?(?:"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')')
+        # default_strings_re artık döngü dışında derleniyor — her satır için re.compile() yok
         
         if stripped.startswith("default ") or not re.match(r'^[a-zA-Z_]', stripped):
             found_any = False
@@ -284,7 +325,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             elif re.match(r'^default\s+\w+\s*=\s*(?:True|False|None|\d+|[\d.]+)\s*$', stripped):
                 pass
             else:
-                for sm in default_strings_re.finditer(stripped):
+                for sm in _default_strings_re.finditer(stripped):
                     q = sm.group(0)
                     # Safe stripping of quotes
                     if len(q) < 2: continue
@@ -323,7 +364,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
                             "text": restore_placeholders(protected, ph),
                             "raw_text": q,
                             "line_number": idx + 1,
-                            "context_line": line,
+                            "context_line": line[:500],
                             "text_type": "data_string",
                             "file_path": file_path,
                             "context_path": current_context_path(),

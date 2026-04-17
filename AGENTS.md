@@ -1,7 +1,7 @@
 # AGENTS.md — RenLocalizer Proje Kılavuzu (AI Agent Bağlamı)
 
 > Bu dosya, AI kodlama asistanlarının (GitHub Copilot, Cursor, Claude vb.) projeyi hızla anlaması için hazırlanmıştır.
-> Son güncelleme: 2026-04-11 | Versiyon: 2.8.3
+> Son güncelleme: 2026-04-17 | Versiyon: 2.8.6
 
 ---
 
@@ -189,7 +189,6 @@ TranslationPipeline.run()
 | DeepSeek | OpenAI uyumlu | `ai_translator.py` | OpenAI API uyumlu endpoint desteği |
 | Local LLM | `LocalLLMTranslator` | `ai_translator.py` | Ollama / LM Studio, tamamen lokal |
 | LibreTranslate | `LibreTranslateTranslator` | `translator.py` | Offline (Docker/Local), 3-tier retry |
-| Yandex | `YandexTranslator` | `translator.py` | Free Widget API (SID-based rotation) |
 | Pseudo | `PseudoTranslator` | `translator.py` | Test amaçlı sahte çeviri |
 
 ---

@@ -202,6 +202,11 @@ class TranslationSettings:
     enable_deep_scan: bool = True  # Varsayılan artık açık (gizli string taraması)
     # RPYC Reader: Derlenmiş .rpyc dosyalarını AST ile doğrudan oku
     enable_rpyc_reader: bool = True  # Varsayılan artık açık (derlenmiş .rpyc okuma)
+    # Unrpyc Decompile: .rpyc → .rpy decompile edip regex parser ile de tara (complementary)
+    # Mevcut rpyc_reader'ın yanında çalışır; daha fazla metin yakalanır.
+    # Gereksinim: unrpyc (pip install git+https://github.com/CensoredUsername/unrpyc.git)
+    # veya rpycdec (pip install rpycdec) kurulu olmalıdır.
+    enable_unrpyc_decompile: bool = True  # Varsayılan açık (kurulu değilse sessizce atlanır)
     # Deep Extraction v2.7.1: Extended extraction for non-standard patterns
     enable_deep_extraction: bool = True  # Master toggle for all deep extraction features
     deep_extraction_bare_defines: bool = True  # define var = "text" without _() wrapper

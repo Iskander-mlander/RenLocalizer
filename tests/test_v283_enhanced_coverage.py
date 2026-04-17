@@ -60,7 +60,7 @@ class TestCacheClearPersistence:
         cache_file = tmp_path / "translation_cache.json"
         manager = TranslationManager()
 
-        for engine in (TranslationEngine.GOOGLE, TranslationEngine.YANDEX):
+        for engine in (TranslationEngine.GOOGLE, TranslationEngine.DEEPL):
             manager._cache[(engine.value, "auto", "tr", "Test")] = TranslationResult(
                 original_text="Test", translated_text="Deneme",
                 source_lang="auto", target_lang="tr",

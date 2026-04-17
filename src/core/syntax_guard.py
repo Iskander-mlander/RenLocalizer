@@ -92,10 +92,16 @@ _PAT_FMT = r'%\([^)]+\)[sdfi]|%[sdfi]'       # Python formatting: %(var)s or %s 
 _PAT_QMK = r'\?[A-Za-z]\d{3}\?'              # ?A000? style
 _PAT_UNI = r'\u27e6(?:[A-Z][A-Z0-9_]{1,24}|RLPH[A-F0-9]{6}_\d+)\u27e7'  # Legacy + internal unicode token style
 
+# v2.8.3: Ren'Py lenticular bracket ruby/furigana text — 【base｜ruby】 or 【base|ruby】
+# Must be protected atomically; splitting breaks the furigana structure.
+# The vertical bar separates base text from ruby annotation.
+_PAT_RUBY = r'【[^】]*[｜|][^】]*】'
+
 # Combined pattern string (Order matters: most specific/longest first)
 # v2.6.6: Complete escaped pairs MUST match before variables to prevent partial breakage
 # Example: [[Phone]] matches as atomic esc pair; bare [[Phone] won't match as [[ so [Phone] matches normally
-_PROTECT_PATTERN_STR = f"({_PAT_DISAMBIG}|{_PAT_ESC}|{_PAT_TAG}|{_PAT_EMPTY_BRACE}|{_PAT_FMT}|{_PAT_PCT}|{_PAT_QMK}|{_PAT_UNI}|{_PAT_VAR})"
+# v2.8.3: Ruby/furigana lenticular brackets added before variables to ensure correct atomic capture
+_PROTECT_PATTERN_STR = f"({_PAT_DISAMBIG}|{_PAT_ESC}|{_PAT_RUBY}|{_PAT_TAG}|{_PAT_EMPTY_BRACE}|{_PAT_FMT}|{_PAT_PCT}|{_PAT_QMK}|{_PAT_UNI}|{_PAT_VAR})"
 
 # Pre-compiled Regexes (Module Level Optimization)
 PROTECT_RE = re.compile(_PROTECT_PATTERN_STR)
@@ -157,7 +163,12 @@ _CLOSE_TAG_RE = re.compile(
     r'feature|'
     # Vertical/Horizontal text tags (Ren'Py 8)
     r'horiz|vert'
-    r')\})+$'
+    # v2.8.4: Allow optional trailing sentence-final punctuation after close tags.
+    # Patterns like {i}text{/i}. would previously fail to match because $
+    # did not anchor past the trailing period.  We now capture it so the
+    # close tag can still form a wrapper-pair and the punctuation is
+    # moved inside the inner text (visually equivalent in Ren'Py).
+    r')\})+([.!?…\u2026]*)$'
 )
 
 # Aggressive spaced pattern for restoration (handles AI adding spaces)
@@ -216,7 +227,12 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
     closing_match = _CLOSE_TAG_RE.search(result_text)
     if closing_match:
         _removed_closing_str = closing_match.group(0)
-        result_text = result_text[:closing_match.start()]  # Remove closing tags from end
+        # v2.8.4: If trailing punctuation was captured (group 2), keep it in the
+        # inner text so the close tag can still form a valid wrapper-pair.
+        # e.g. "{i}text{/i}." → inner="text.", wrapper=({i},{/i})
+        # The period ends up inside the italic, which is visually identical.
+        _trailing_punct = closing_match.group(2) or ''
+        result_text = result_text[:closing_match.start()] + _trailing_punct
         for tag_match in re.finditer(r'\{/[^}]+\}', _removed_closing_str):
             closing_tags.append(tag_match.group(0))
         closing_tags.reverse()  # Match them in correct nesting order

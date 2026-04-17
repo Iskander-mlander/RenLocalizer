@@ -55,8 +55,3 @@ REQUEST_TIMEOUT_READ = 30
 MIRROR_MAX_FAILURES = 5   # Max failures before temp ban
 MIRROR_BAN_TIME = 120     # Ban duration in seconds (2 min)
 
-# Yandex Translate (Widget API - free, no API key)
-YANDEX_TRANSLATE_API_URL = "https://translate.yandex.net/api/v1/tr.json"
-YANDEX_WIDGET_JS_URL = "https://translate.yandex.net/website-widget/v1/widget.js?widgetId=ytWidget&pageLang=es&widgetTheme=light&autoMode=false"
-YANDEX_SID_LIFETIME = 43200  # 12 hours in seconds
-YANDEX_MAX_CHARS_PER_REQUEST = 4000  # Widget API character limit

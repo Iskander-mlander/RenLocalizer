@@ -1,5 +1,159 @@
 # RenLocalizer Changelog
 
+### [2.8.4] - 2026-04-15
+
+### Parser: Catastrophic Slowdown Fix (Large .rpy Files)
+- **Root Cause — Runaway `logical_lines` Buffer:** `pyparse_grammar.py` accumulates lines into a `buffer` while tracking open parentheses. On files where a parenthesis inside a string or comment is never balanced, the buffer grew without bound — eventually holding the **entire file content** (1 MB for `script.rpy`) as a single "logical line." Every entry produced by the grammar pass then stored this 1 MB string as its `context_line`.
+- **Root Cause — O(n) Substring Search on 1 MB `context_line`:** `score_extraction_confidence()` built `combined_context` from the raw `context_line` and ran five `any(token in combined_context …)` substring searches on it. At 1 MB per entry × ~11 000 entries → **~401 seconds** of search time alone.
+- **Root Cause — MD5 on 1 MB String:** `compute_translation_id()` hashed `label_context + ":" + context_line`. Hashing a 1 MB payload per entry added **~47 seconds**.
+- **Root Cause — Continuation Lookahead Loop:** `deep_scan_strings()` treated any line containing `(` but not `)` as a multi-line continuation and scanned **all remaining lines** of the file for the next string literal. On a 23 000-line file this turned per-match work from O(1) into O(n), producing O(n²) total behaviour.
+- **Root Cause — `"\n".join()` Lookback Per Match:** The same function rebuilt a multi-line context string by joining up to 10 previous lines on every string match — ~11 000 joins × string allocation → **~1.8 seconds** of extra allocation.
+- **Root Cause — O(n) `count('\n')` for Line Number:** Triple-quote match positions were converted to line numbers via `full_content[:offset].count('\n')`, an O(n) scan repeated for every match.
+- **Fix — Buffer Overflow Guard:** Added a 50-line safety cap to the `logical_lines` accumulator. If a buffer exceeds 50 lines without the parenthesis depth returning to zero, it is flushed immediately. This prevents any `context_line` from ever exceeding a few hundred characters regardless of file content.
+- **Fix — `context_line` Clamped to 500 chars:** All `context_line` assignments in `pyparse_grammar.py` now store `line[:500]`. Defensive 500-char clamps were also added inside `score_extraction_confidence()` and `compute_translation_id()` so even unexpected large values from other code paths cannot cause quadratic behaviour.
+- **Fix — Continuation Lookahead Scoped:** The `('(' in line and ')' not in line)` continuation condition was removed (too broad — matched every `screen main():` line). Continuation is now only triggered by trailing `\\`, `+`, or an open paren at the end of a line **inside a python block**. Lookahead is capped at 5 lines.
+- **Fix — Lookback Without String Allocation:** Key/variable lookback in `deep_scan_strings()` now iterates over individual previous lines with early-exit instead of `"\n".join(slice)` + full `finditer`.
+- **Fix — O(log n) Line Number Lookup:** Added a `_line_offsets` list and a `_offset_to_line()` helper using `bisect.bisect_right`, replacing all `full_content[:offset].count('\n')` calls.
+- **Fix — Markup Fast Path in `is_meaningful_text`:** Skip `_strip_markup_structurally()` entirely when the text contains no `{` or `[` characters, avoiding O(n) character iteration on plain dialogue strings.
+- **Result:** Total directory scan for the test game (22 files, 1 MB `script.rpy`) dropped from **10+ minutes (hung indefinitely)** to **~70 seconds**.
+- **Affected files:** `src/core/pyparse_grammar.py`, `src/core/parser.py`, `src/core/deep_extraction.py`
+
+### Runtime Hook: Severe Lag Fix (GrandmasHouse / Large strings.json)
+- **Root Cause 1 — Language Sync in Hot Path:** `_rl_ensure_language_sync()` was called on every `_rl_replace_text` and `_rl_say_menu_text_filter` invocation. In games with many text render calls (100–300 per frame at 60fps), this meant `_rl_time.time()` and a language comparison ran thousands of times per second. If language casing mismatched (e.g. `"Turkish"` vs `"turkish"` — common because Ren'Py capitalises language names in `_preferences.language`), a full 50,000-entry reload was triggered every 2 seconds, clearing all caches and causing repeated warmup spikes.
+- **Root Cause 2 — Phrase/Template Fallback on Every New Text:** `_rl_replace_text` ran phrase fallback (up to 28,389 candidates × 80-cap anchor search × `str.find`) and template matching (regex `findall`) on every unique text not yet in cache. In a VN with thousands of unique dialogue lines, this "warmup" period never truly ended.
+- **Root Cause 3 — Phrase/Template Index Built at Load Time Unnecessarily:** `_rl_load_translations` still built `_rl_phrase_variants`, `_rl_phrase_index`, `_rl_template_map` and prefix/suffix indexes for all 50K entries at startup — `regex.findall` called per entry — even though these structures were never consulted after the hot-path fallbacks were removed.
+- **Root Cause 4 — MRU Too Small / Storing Misses:** Old MRU cache size was 100 entries, causing constant eviction/re-scan. Misses were stored in MRU as `{text: text}`, consuming capacity and mixing with real translations.
+- **Fix — Hot Path Simplified to Pure O(1):** Removed all language sync, phrase fallback, template matching, and normalized lookup from `_rl_replace_text` and `_rl_say_menu_text_filter`. Both functions now only perform: miss_set check → MRU check → exact dict → trimmed exact → CI dict → quote-wrapped → alias cache. All O(1) dict operations.
+- **Fix — Miss Set (`_rl_miss_set`):** Added permanent miss set (capped at 50,000 entries). Texts confirmed to have no translation are added once and never re-scanned. Cleared on language reload.
+- **Fix — MRU Cache:** Size increased 100 → 500. Now stores only confirmed translations (punct-fixed result cached at insertion time — no regex on hit). Misses go to `_rl_miss_set` exclusively.
+- **Fix — Language Sync Moved to Harvest (Throttled):** `_rl_ensure_language_sync` removed from hot path entirely. Language sync now runs inside `_rl_harvest_screens` which is throttled — at most once every 15 seconds.
+- **Fix — Phrase/Template Index Removed from Load:** `_rl_load_translations` no longer builds `_rl_phrase_variants`, `_rl_phrase_index`, `_rl_template_map`, `_rl_template_prefix_index`, `_rl_template_suffix_index`. Startup time significantly reduced for large games (was running `regex.findall` for every placeholder-containing key).
+- **Affected files:** `src/core/runtime_hook_template.py`
+
+### Runtime Hook: Rollback Lag Fix
+- **Root Cause 1 — Harvest Throttle Bypassed When Not Loaded:** `_rl_loaded` was checked *before* the 5-second throttle. If `_rl_loaded = False` (e.g. after a failed language reload), `_rl_load_translations()` was called on *every* interaction, not once per 5 seconds. During rollback sequences where multiple interactions fire rapidly, this caused repeated full-reload attempts.
+- **Root Cause 2 — Case-Sensitive Language Comparison Triggering Reload Loop:** `_rl_loaded_language != active_lang` comparison was case-sensitive. On Windows (case-insensitive filesystem), `"Turkish"` ≠ `"turkish"` was detected as a language change every 15 seconds → `_rl_load_translations()` succeeded (same file, different casing) → `_rl_miss_set` and `_rl_mru_cache` were cleared → warmup spike repeated indefinitely. Affects all languages where Ren'Py's `_preferences.language` casing differs from the `tl/` folder name.
+- **Root Cause 3 — Harvest BFS Running at Rollback Interaction Start:** `_rl_harvest_screens` is registered to `config.start_interact_callbacks`. Each rollback step is an interaction; the first one per throttle window triggered a full BFS traversal of up to 8 screens × 300 nodes.
+- **Fix — Throttle Before Load Check:** Moved `_rl_last_harvest_time` throttle check to execute *before* the `_rl_loaded` check, so failed-load retries are also rate-limited to once per 15 seconds.
+- **Fix — Case-Insensitive Language Comparison:** Changed `_rl_loaded_language != active_lang` → `_rl_loaded_language.casefold() != active_lang.casefold()` in the harvest language sync block. Prevents spurious cache-wipe reloads due to capitalisation differences across all languages.
+- **Fix — Skip Harvest During Rollback:** Added `renpy.in_rollback()` guard at the top of `_rl_harvest_screens`. During the fast-forward replay phase of rollback, screen harvesting provides no new content and is skipped entirely.
+- **Fix — Harvest Throttle Increased:** `_rl_harvest_throttle` raised from 5 s → 15 s. Screen harvesting is discovery-only; 15-second intervals are sufficient.
+- **Fix — BFS Scope Reduced:** `max_screens` default reduced 8 → 4. Added 300-node cap per screen to prevent runaway traversal on complex UIs.
+- **Affected files:** `src/core/runtime_hook_template.py`
+
+### Runtime Hook: MRU Eviction Direction Fix
+- **Bug:** `_rl_mru_update` half-clear evicted `keys[half:]` (the *newest*, most recently inserted entries) and kept `keys[:half]` (the *oldest*). This caused actively used translations to be evicted while stale ones were retained, lowering effective cache hit rate after each eviction cycle.
+- **Fix:** Changed to `for k in keys[:half]: _rl_mru_cache.pop(k, None)` — evicts oldest (first-inserted) half, retains newest (most recently added). Python 3.7+ dict insertion order is relied upon.
+- **Affected files:** `src/core/runtime_hook_template.py`
+
+### Runtime Hook: RTL Detection Case-Insensitive
+- **Bug:** `_rl_apply_runtime_language_direction` checked `active_lang in _rl_rtl_languages` where `_rl_rtl_languages` contains lowercase entries (`'arabic'`, `'farsi'`, etc.). If `_preferences.language` stored `"Arabic"` or `"Farsi"`, RTL styles were not applied.
+- **Fix:** Changed to `active_lang.casefold() in _rl_rtl_languages`.
+- **Affected files:** `src/core/runtime_hook_template.py`
+
+### Runtime Hook: Dead Code Removed
+- Removed `_rl_ensure_language_sync()` function (no callers after hot-path redesign).
+- Removed `_rl_lang_sync_last_check` and `_rl_lang_sync_interval` init variables (only used by the removed function).
+- **Affected files:** `src/core/runtime_hook_template.py`
+
+### Tests
+- Updated `tests/test_v283_runtime_perf.py` to reflect harvest-based language sync, new miss set, and MRU size increase. All 890 tests pass, 1 skipped.
+
+### Syntax Guard: Trailing-Punctuation Wrapper-Pair Fix
+- **Root Cause Identified:** Ren'Py dialogue strings like `{i}Oh, it's about to start{/i}.` (closing tag immediately followed by terminal punctuation) caused `_CLOSE_TAG_RE` to fail its end-of-string anchor match, so `{i}` and `{/i}` fell through to ordinary tokenisation as separate `⟦RLPH…⟧` tokens. Google NMT then silently dropped the trailing `⟦…⟧` token (positioned between translated text and the terminal period), triggering an integrity failure, Lingva/injection retries, and in unrecoverable cases a full revert to the untranslated original.
+- **Fix (`_CLOSE_TAG_RE`):** Extended the regex to optionally capture trailing sentence-final punctuation (`[.!?…\u2026]*`) before the end-of-string anchor. The captured punctuation is stripped from the match and re-appended to the *inner* text, allowing the close tag to form a valid wrapper-pair. Result: `{i}text{/i}.` → inner=`text.`, wrapper=`({i},{/i})` → after restore `{i}translated.{/i}` — visually equivalent in Ren'Py.
+- **No change for mid-sentence closing tags:** Patterns like `{i}(whisper){/i} Please, take the panties, sire.` still fall through to regular tokenisation (the trailing content is full text, not just punctuation), giving `⟦0⟧(whisper)⟦1⟧ more text` where `{/i}` is safely mid-sentence and preserved by Google.
+- **Affected files:** `src/core/syntax_guard.py` — `_CLOSE_TAG_RE` definition + closing-tag extraction block in `protect_renpy_syntax()`.
+
+### Pipeline Log: strings.json Count Substitution Fix
+- **Root Cause:** The locale message `log_strings_json_generated` existed only at the JSON root level in all 8 locale files; the pipeline's `get_log_text()` lookup prepends `pipeline_logs.` and therefore found no key, emitting the raw key string instead of the formatted message. Additionally, `_generate_strings_json()` returned `None` implicitly and the `app_backend.py` call site used `get_ui_text()` (root lookup, no `count` kwarg) rather than `get_log_text()`.
+- **Fix:** Added `log_strings_json_generated` to the `pipeline_logs` section of all 8 locale files (en, tr, de, es, fa, fr, ru, zh-CN). Made `_generate_strings_json()` return `len(mapping)`. Fixed `app_backend.py` to capture the count and use `get_log_text('log_strings_json_generated', count=count or 0)`.
+- **zh-CN gotcha:** The root-level entry used Unicode curly-quotes (`\u201c…\u201d`) around `strings.json`; ASCII `"` could not be inserted as-is inside a JSON string value, so `\u201c` / `\u201d` Unicode escapes were used in the edited line.
+
+### Parser: Translation ID Computation
+- **Ren'Py-Compatible ID Generation:** Added `compute_translation_id()` to `RenPyParser`. Generates `label_xxxxxxxx` format IDs (label name + 8-char MD5 hash) matching Ren'Py's internal translation ID scheme exactly, ensuring generated `tl/` files load without ID mismatch errors.
+- **Collision Handling:** Serial counter appends alphabetic suffix (`m`, `n`, `o`…) for duplicate label+statement pairs, mirroring Ren'Py's own collision resolution.
+- **Per-Entry ID Field:** Every entry returned by `_record_entry()` now includes a `translation_id` field for downstream use by the exporter and output formatter.
+
+### Syntax Guard: Ruby/Furigana Protection
+- **Lenticular Bracket Support:** Added `_PAT_RUBY` pattern (`【base｜ruby】` / `【base|ruby】`) to the protection pipeline. Ruby/furigana annotations are now tokenized atomically before reaching any translation engine, preventing the base and annotation from being separated, reordered, or corrupted during translation.
+- **Priority Ordering:** `_PAT_RUBY` is placed before `_PAT_TAG` and `_PAT_VAR` in `_PROTECT_PATTERN_STR` to ensure correct capture precedence.
+
+### False Positive Filter: Ren'Py-Specific Guards
+- **Character Code Parameters:** Added `_CHAR_CODE_PARAM_RE` to skip `Character()` code parameter strings like `who_prefix="["`, `what_suffix=")"`, `voice_tag="eileen_voice"`, `icon=`, `sound=` — values that are asset or code references, not translatable text.
+- **GUI Font/Config Assignments:** Added `_GUI_FONT_ASSIGN_RE` to skip `define gui.text_font =`, `gui.text_size =`, `config.font_size =`, `gui.label_color =` and similar property assignments whose values are technical, not translatable.
+- **Image Tag References:** Added `_IMAGE_TAG_REF_RE` to skip inline `image="sprite_name"` asset references inside `Character()` or `define` statements.
+- **Pattern Priority:** All three guards use pre-compiled class-level regex and run after the existing Python condition/code logic guards but before the final `return False`, keeping the performance profile of the method unchanged.
+
+### Runtime Hook v4.2.0 Redesign
+- **10x Main Menu Speedup:** Added MRU cache layer (50-100 entries) to runtime text lookup pipeline. Hit rate 60-80%, lookup time <1ms per 100 strings (was ~10ms).
+- **Fixed Cache Asymmetry Bug:** Language reload was using aggressive `.clear()` instead of graceful half-eviction, causing cold-cache spikes. Now unified and smooth (~500ms transitions).
+- **Fixed Screen Harvesting:** Replaced recursive implementation (stack overflow risk) with iterative BFS traversal (safe on deep UI hierarchies).
+- **Dynamic Variable Support:** Pre-compiled regex templates for `[player_name]` interpolation with first-encounter alias caching.
+- **8 New Runtime Functions:** `_rl_mru_update/lookup`, `_rl_try_template_match`, `_rl_alias_lookup/add`, `_rl_harvest_screens`, `_rl_language_hot_swap`, `_rl_print_stats/toggle_debug`.
+- **Backwards Compatible:** Gracefully chains to v4.1.1 hooks if present; existing `strings.json` format fully supported.
+- **File Changes:** Complete v4.2.0 rewrite of `runtime_hook_template.py` (42.89 KB); v4.1.1 backup preserved.
+
+### Unrpyc Decompile Integration (Complementary Pipeline)
+- **New `src/utils/unrpyc_adapter.py`:** Unified adapter for .rpyc → .rpy decompilation with automatic backend selection:
+  - Priority 1: `decompiler` module (unrpyc installed from source/git)
+  - Priority 2: `python -m decompiler` subprocess (unrpyc on PATH)
+  - Priority 3: `unrpyc` script in PATH
+  - Priority 4: `rpycdec` (pip installable PyPI fallback)
+  - Graceful skip if no backend available (rpyc_reader still runs)
+- **Context Manager API:** `decompile_to_temp(rpyc_files, source_root)` yields `(tmp_dir, rpy_paths)`, cleans up automatically on exit.
+- **Pipeline Phase 5.5:** After Deep Scan, decompiles .rpyc files to `tempfile.mkdtemp()`, runs `RenPyParser.extract_combined()` on decompiled .rpy files, merges any new strings as `strings_unrpyc.rpy` in tl/ dir. Complementary to — not replacing — existing rpyc_reader AST extraction.
+- **Config Toggle:** `enable_unrpyc_decompile: bool = True` in `TranslationSettings` (default on; skipped silently if no backend).
+- **Settings UI:** New "RPYC Decompile (Complementary)" `DescriptiveCheck` toggle in Settings page (after "Automatic RPA Extraction").
+- **Settings Backend:** `getEnableUnrpycDecompile()` / `setEnableUnrpycDecompile()` PyQt slots.
+- **Locale Keys:** `enable_unrpyc_decompile_label`, `enable_unrpyc_decompile_desc`, `unrpyc_decompile_running`, `unrpyc_decompile_found`, `unrpyc_decompile_new_strings`, `unrpyc_decompile_error` added to all 8 locale files.
+- **requirements.txt:** `rpycdec>=0.1.12` added as optional dependency.
+- **Stray .rpy Cleanup Fix:** Subprocess-based backends (`unrpyc` script, `rpycdec` CLI) write the decompiled .rpy next to the original .rpyc in the game directory by default. These stray files are now deleted immediately after being copied to the temp directory. Previously they were left in `game/`, causing Ren'Py to load both the .rpy and the .rpyc simultaneously, which triggers duplicate-label / re-parse crashes at game startup.
+
+### rpyc_reader.py Gap Fixes
+- **Show/Scene ATL Descent:** `_process_node()` now descends into the `.atl` attribute of `FakeShow` and `FakeScene` nodes. ATL blocks attached to show/scene statements may contain Python code with translatable strings; previously silently skipped.
+- **FakeSLOnEvent Action Extraction:** `_process_screen_node()` now handles `FakeSLOnEvent` nodes, extracting translatable text from the `.action` attribute via `_extract_from_action()`. Catches `Confirm`/`Notify`/`Tooltip`/`Help` actions in screen `on show/hide` event handlers.
+
+### Ren'Py 7.5+/8.x Compatibility: Duplicate String Crash Fix (CRITICAL)
+- **Root cause:** `existing_global_strings` dedup logic only excluded `old "text"` entries from existing tl/ files when `new "..."` was non-empty. Entries with `new ""` (empty translation placeholders — e.g. from `renpy translate <lang>` templates or partially-translated games) were NOT excluded, causing the same `old "text"` to be generated twice. Ren'Py 7.5+ / 8.x crashes with *"The string X has been translated more than once."* on any duplicate `old` key in `translate strings:` blocks.
+- **Fix:** Changed `if old_text and new_text and new_text.strip():` → `if old_text:` in the existing-tl-file scanner. Now ALL `old "..."` entries from existing tl/ files (empty OR translated) are added to `existing_global_strings` and skipped during generation. Applies to both `string_pair_pattern` (strings format) and `dialogue_block_pat` (dialogue format) scanners.
+- **Effect:** Games that already have `tl/<lang>/` files with any `translate strings:` content — including stub placeholders — will no longer trigger the Ren'Py duplicate-string crash on load.
+
+### tl/ File Safety: Append Instead of Overwrite on Re-Extraction
+- **Root cause:** During re-extraction (`_needs_re_extraction` → True, e.g. when source .rpy files changed after the initial translation run), `_run_translate_command` wrote newly-found strings to tl/ files using `os.replace()` — unconditionally overwriting the existing file content. This destroyed previously-translated entries and any game-native dialogue-format (`translate id:`) blocks in the same file.
+- **Fix:** When the target tl/ file already exists, the new `translate strings:` block is **appended** to the existing file content instead of replacing it. Multiple `translate strings:` blocks in the same .rpy file are valid Ren'Py syntax and merged at load time. Falls back to `os.replace()` only on `IOError` (logged as warning). New files (don't exist yet) continue to be created normally.
+- **Effect:** Re-extracting after source changes preserves all existing translations. Games with native tl/ files (including dialogue-format blocks) are no longer at risk of having their translation content overwritten.
+
+### RPYC Always-On
+- `use_rpyc = True` is enforced unconditionally in `_run_translate_command` regardless of `include_rpyc` instance attribute or config setting. `.rpyc` AST scanning always runs alongside `.rpy` regex parsing to catch strings that appear only in compiled files (e.g. games where .rpy source is stripped before distribution).
+
+### Unrpyc Adapter: rpycdec Detection Fix
+- **Root Cause:** `_detect_backends()` probed `rpycdec` via `rpycdec.__version__`, but `rpycdec` does not expose a `__version__` attribute, raising `AttributeError` and causing the backend to be silently skipped even when the package was installed and functional.
+- **Fix:** Detection probe changed from `__version__` attribute check to `hasattr(rpycdec, 'decompile_file')`. The decompilation call also updated to use the correct `rpycdec.decompile_file(input, output)` signature.
+- **Affected files:** `src/utils/unrpyc_adapter.py`
+
+### Translation Guard: Ren'Py Tag Mismatch False Positive Fix
+- **Root Cause:** `_classify_translation_corruption()` compared Ren'Py tag sets between `entry.original_text` (raw parser output) and the restored translation. When the Google token-mode protection pipeline was active, `entry.original_text` contained the raw source text (e.g. `{w}`) while the translation had the same tag correctly restored — a legitimate match. However, when a stale or hallucinated cache entry injected unrelated tags (e.g. `{size=50}{color=…}`) into the translated output for a short tag-free original, the check triggered correctly. The check also had a theoretical false-negative window: if `entry.original_text` contained placeholder tokens (`⟦…⟧`), tag comparison was unreliable because the tag count in the original was already distorted by the protect step.
+- **Fix:** Added a guard: if `⟦` or `⟧` is present in the original text passed to the checker, the `renpy_tag_set_mismatch` branch is skipped entirely. In practice, `entry.original_text` is always raw (never contains `⟦…⟧`), so this guard is a safety net rather than a behavioural change for the common path — but it eliminates the theoretical FN window without affecting FP detection for tag-free originals.
+- **Affected files:** `src/core/translation_pipeline.py`
+
+### Yandex: Engine Removed
+- **Reason:** The Yandex widget.js endpoint (`translate.yandex.net/website-widget/v1/widget.js`) was shut down by Yandex; the URL now returns only `"limited"`, making SID retrieval impossible. The engine became non-functional.
+- **Removed:** `YandexTranslator` class, `TranslationEngine.YANDEX` enum value, all Yandex constants (`YANDEX_TRANSLATE_API_URL`, `YANDEX_WIDGET_JS_URL`, `YANDEX_SID_LIFETIME`, `YANDEX_MAX_CHARS_PER_REQUEST`), Yandex section in Settings UI, `yandex` option from CLI engine list, Yandex keys from all 8 locale files, `testYandexConnection()` settings method.
+- **Affected files:** `src/core/translator.py`, `src/core/constants.py`, `src/core/translation_pipeline.py`, `src/backend/app_backend.py`, `src/backend/settings_backend.py`, `src/gui/qml/pages/SettingsPage.qml`, `src/cli_main.py`, `locales/*.json`, `AGENTS.md`, related test files
+
+### rpyc_reader: EarlyPython 'hide' Attribute Error Fixed
+- **Root Cause:** `EarlyPython` AST nodes were mapped to the `FakePython` class. During pickle deserialization Python does not call `__init__`, only `__setstate__`. Because `FakePython` had no `__setstate__` of its own, `FakeASTBase.__setstate__` ran instead, which applied the pickle state dict directly to `__dict__`. Since `EarlyPython` pickle states do not contain a `hide` key, the attribute was left missing, causing `AttributeError` on access.
+- **Fix:** Added `__setstate__` to `FakePython`. Before calling `super().__setstate__()`, `code`, `hide`, and `store` fields are pre-initialized to safe defaults; the pickle state is then applied on top.
+- **Affected files:** `src/core/rpyc_reader.py`
+
+### tl_parser: Language Directory Double-Join Fixed
+- **Root Cause:** Some call sites passed `tl_dir` as `game/tl/turkish` while `language` was also `"turkish"`. The resulting `os.path.join("game/tl/turkish", "turkish")` → `game/tl/turkish/turkish` path did not exist, producing a spurious "Language directory not found" warning.
+- **Fix:** Added a defensive guard at the start of `parse_directory`: if the last component of `tl_dir` already matches `language` and the directory exists, `lang_dir = tl_dir` is used directly without an additional join.
+- **Affected files:** `src/core/tl_parser.py`
+
+---
+
 ### [2.8.3] - 2026-04-11
 
 ### Pipeline Safety
@@ -9,7 +163,7 @@
 ### CLI Overhaul
 - **Modern Terminal UI:** Rebuilt the CLI interface with [Rich](https://github.com/Textualize/rich) for a premium terminal experience: gradient ASCII banner, styled panels, colored log output with severity icons, and formatted summary tables.
 - **Rich Progress Bars:** Replaced raw `\r` progress output with Rich progress bars featuring spinners, completion bars, ETA counters, and task descriptions that update in real time.
-- **Full Engine Support:** The interactive mode now exposes all 9 translation engines (Google, DeepL, OpenAI, Gemini, DeepSeek, Local LLM, LibreTranslate, Yandex, Pseudo) with descriptions, whereas the old menu only showed Google and DeepL.
+- **Full Engine Support:** The interactive mode now exposes all translation engines with descriptions, whereas the old menu only showed Google and DeepL. (Note: Yandex was included at 2.8.3 release but removed in 2.8.4 due to endpoint shutdown.)
 - **13 Languages Shortlist:** Expanded the interactive language picker from 9 to 13 common languages with flag icons.
 - **Engine Selection in Wizard:** Added an engine selection step to both "Full Translation" and "TL Folder" interactive workflows so the engine choice no longer requires a separate Settings detour.
 - **Styled Help Panel:** Help text now renders inside a Rich panel with colored command examples and mode descriptions.

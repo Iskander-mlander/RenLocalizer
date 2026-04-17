@@ -468,31 +468,7 @@ Rectangle {
                     }
                     Label { id: libreTestResult; Layout.fillWidth: true; color: text.includes("✓") ? "#6bcb77" : "#ff6b6b"; wrapMode: Text.Wrap }
 
-                    // Yandex Translate Section (Hidden: No longer works in most regions, enable Developer Options to show)
-                    RowLayout {
-                        Layout.topMargin: 10
-                        spacing: 10
-                        visible: settingsBackend.getShowDebugEngines()
-                        Label { text: "⚠️"; font.bold: true; font.family: root.iconFontFamily; color: root.mainTextColor }
-                        Label { text: stripLeadingGlyph(backend.getTextWithDefault("settings_yandex_title", "Yandex Translate (Beta)")); font.bold: true; color: root.warningColor; Layout.fillWidth: true; wrapMode: Text.WordWrap }
-                    }
-                    Label {
-                        text: (backend.uiTrigger, backend.getTextWithDefault("settings_yandex_desc", "DEPRECATED — Yandex removed public access from most regions. Enable Developer Options to show."))
-                        color: "#999"
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
-                        font.pixelSize: 13
-                        bottomPadding: 5
-                        visible: settingsBackend.getShowDebugEngines()
-                    }
-                    Button {
-                        text: "🔌 " + (backend.uiTrigger, backend.getTextWithDefault("test_yandex_connection", "Test Connection"))
-                        font.family: root.iconFontFamily
-                        Layout.fillWidth: true; highlighted: true
-                        visible: settingsBackend.getShowDebugEngines()
-                        onClicked: yandexTestResult.text = settingsBackend.testYandexConnection()
-                    }
-                    Label { id: yandexTestResult; Layout.fillWidth: true; color: text.includes("✓") ? "#6bcb77" : "#ff6b6b"; wrapMode: Text.Wrap; visible: settingsBackend.getShowDebugEngines() }
+                    // Yandex section removed — Widget API endpoint closed by Yandex
                 }
             }
 
@@ -625,7 +601,7 @@ Rectangle {
                             var effective = settingsBackend.getEffectiveBatchSizeForSelectedEngine()
                             var base = backend.getTextWithDefault(
                                 "batch_size_engine_cap_note",
-                                "General batch size can be set up to 10000. Google Translate and Yandex use a maximum effective batch size of 1000."
+                                "General batch size can be set up to 10000. Google Translate uses a maximum effective batch size of 1000."
                             )
                             if (cap > 0 && effective < requested) {
                                 var extra = backend.getTextWithDefault(
@@ -1031,6 +1007,13 @@ Rectangle {
                         description: (backend.uiTrigger, backend.getTextWithDefault("auto_unren_desc", ""))
                         checked: settingsBackend.getAutoUnren()
                         onToggled: (isChecked) => settingsBackend.setAutoUnren(isChecked)
+                    }
+
+                    DescriptiveCheck {
+                        label: (backend.uiTrigger, backend.getTextWithDefault("enable_unrpyc_decompile_label", "RPYC Decompile (Complementary)"))
+                        description: (backend.uiTrigger, backend.getTextWithDefault("enable_unrpyc_decompile_desc", "Decompile .rpyc files via unrpyc/rpycdec and scan with regex parser for additional strings (requires unrpyc or rpycdec installed)."))
+                        checked: settingsBackend.getEnableUnrpycDecompile()
+                        onToggled: (isChecked) => settingsBackend.setEnableUnrpycDecompile(isChecked)
                     }
 
                     DescriptiveCheck {

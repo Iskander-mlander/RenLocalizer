@@ -555,39 +555,6 @@ class SettingsBackend(QObject):
         except Exception as e:
             return f"{self.config.get_ui_text('error', 'Error')}: {str(e)}"
 
-    @pyqtSlot(result=str)
-    def testYandexConnection(self) -> str:
-        """Test connection to Yandex Translate Widget API by fetching SID."""
-        import asyncio
-        import aiohttp
-        try:
-            from src.core.constants import YANDEX_WIDGET_JS_URL
-
-            async def _test():
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(
-                        YANDEX_WIDGET_JS_URL,
-                        timeout=aiohttp.ClientTimeout(total=10)
-                    ) as resp:
-                        if resp.status != 200:
-                            return False, f"HTTP {resp.status}"
-                        text = await resp.text()
-                        import re
-                        match = re.search(r"sid\s*:\s*'([0-9a-f.]+)'", text)
-                        if match:
-                            return True, f"✓ Yandex OK — SID acquired"
-                        return False, "SID not found in widget.js"
-
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                success, message = loop.run_until_complete(_test())
-                return message
-            finally:
-                loop.close()
-        except Exception as e:
-            return f"{self.config.get_ui_text('error', 'Error')}: {str(e)}"
-    
     @pyqtSlot(result=float)
     def getAITemperature(self) -> float:
         return self.config.translation_settings.ai_temperature
@@ -887,6 +854,15 @@ class SettingsBackend(QObject):
     @pyqtSlot(bool)
     def setEnableRpycReader(self, enabled: bool):
         self.config.translation_settings.enable_rpyc_reader = enabled
+        self.config.save_config()
+
+    @pyqtSlot(result=bool)
+    def getEnableUnrpycDecompile(self) -> bool:
+        return getattr(self.config.translation_settings, 'enable_unrpyc_decompile', True)
+
+    @pyqtSlot(bool)
+    def setEnableUnrpycDecompile(self, enabled: bool):
+        self.config.translation_settings.enable_unrpyc_decompile = enabled
         self.config.save_config()
 
     @pyqtSlot(result=bool)

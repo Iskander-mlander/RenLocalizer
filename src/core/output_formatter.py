@@ -193,6 +193,24 @@ class RenPyOutputFormatter:
     # v2.7.3: Format string templates: "...".format(...)
     _FORMAT_TEMPLATE_RE = re.compile(r'"[^"]*"\s*\.format\s*\(')
     
+    # v2.8.3: Ren'Py-specific false positive patterns (from official docs research)
+    # Character definition code strings that are NOT translatable
+    _CHAR_CODE_PARAM_RE = re.compile(
+        r'(?:who_prefix|what_suffix|who_suffix|what_prefix|voice_tag|image|icon|sound)\s*='
+    )
+    # GUI font/config assignments (value side)
+    _GUI_FONT_ASSIGN_RE = re.compile(
+        r'(?:define\s+)?(?:gui|config)\.\w*(?:font|size|spacing|color|delay)\s*='
+    )
+    # Image tag references in define/Character statements
+    _IMAGE_TAG_REF_RE = re.compile(
+        r'(?:^|\s)image\s*=\s*["\'][a-zA-Z0-9_\-]+["\']'
+    )
+    # Ren'Py show/scene/hide attribute strings (e.g., 'happy', 'concerned')
+    _SHOW_ATTR_RE = re.compile(
+        r'^\s*(?:show|scene|hide)\s+[a-zA-Z_]\w*\s+[a-zA-Z_]\w*\s*$'
+    )
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
     
@@ -574,7 +592,29 @@ class RenPyOutputFormatter:
             rest = re.sub(r"^'[\w.]+'", '', text_strip).strip()
             if rest and re.match(r'^(?:in\b|not\b|and\b|or\b|==|!=|>=|<=|>|<)', rest):
                 return True
-        
+
+        # =================================================================
+        # v2.8.3: Ren'Py-Specific False Positive Guards
+        # =================================================================
+
+        # --- CHARACTER CODE PARAMETER STRINGS ---
+        # Pattern: who_prefix="[", what_suffix=")", voice_tag="eileen_voice"
+        # These are code parameters inside Character() definitions — NOT translatable
+        if self._CHAR_CODE_PARAM_RE.search(text_strip):
+            return True
+
+        # --- GUI FONT/CONFIG ASSIGNMENTS ---
+        # Pattern: define gui.text_font = "Noto Sans.ttf", config.window_title = "..."
+        # Font paths and config settings are NOT translatable text
+        if self._GUI_FONT_ASSIGN_RE.search(text_strip):
+            return True
+
+        # --- IMAGE TAG REFERENCES ---
+        # Pattern: image="char_eileen" in Character definition
+        # Image tags are asset references, NOT translatable
+        if self._IMAGE_TAG_REF_RE.search(text_strip):
+            return True
+
         return False
     
     def sanitize_translation_id(self, text: str) -> str:

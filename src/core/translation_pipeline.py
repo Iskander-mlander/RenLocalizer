@@ -36,7 +36,6 @@ from src.core.translator import (
     TranslationEngine,
     GoogleTranslator,
     DeepLTranslator,
-    YandexTranslator,
     LibreTranslateTranslator,
 )
 from src.core.ai_translator import OpenAITranslator, GeminiTranslator, LocalLLMTranslator, DeepSeekTranslator
@@ -377,8 +376,13 @@ class TranslationPipeline(QObject):
             return 'placeholder_set_mismatch'
         if self._extract_validation_placeholders(orig) != self._extract_validation_placeholders(trans, source_text=orig):
             return 'placeholder_set_mismatch'
-        if sorted(RENPY_TAG_RE.findall(orig)) != sorted(RENPY_TAG_RE.findall(trans)):
-            return 'renpy_tag_set_mismatch'
+        # If the original still contains ⟦⟧ placeholder tokens, the Ren'Py
+        # tags they represent will appear in the translated (restored) text but
+        # not in the original string — skip the tag set check in that case to
+        # avoid false-positive KORUMA blocks on legitimately restored output.
+        if '⟦' not in orig and '⟧' not in orig:
+            if sorted(RENPY_TAG_RE.findall(orig)) != sorted(RENPY_TAG_RE.findall(trans)):
+                return 'renpy_tag_set_mismatch'
         return None
 
     def _get_guard_reason_text(self, reason: str) -> str:
@@ -1539,6 +1543,87 @@ class TranslationPipeline(QObject):
             except Exception as e:
                 self.log_message.emit("warning", self.config.get_log_text('deep_scan_error', error=str(e)))
 
+        # Phase 5.5: Unrpyc Decompile Integration (rpyc_reader ile tamamlayıcı)
+        # .rpyc dosyalarını geçici klasöre decompile et, regex parser'dan geçir,
+        # rpyc_reader'ın bulamadığı metinleri tl_files'a ekle.
+        _unrpyc_enabled = getattr(self.config.translation_settings, 'enable_unrpyc_decompile', True)
+        if _unrpyc_enabled and has_rpyc:
+            self.log_message.emit("debug", self.config.get_log_text(
+                'unrpyc_decompile_running', default="Starting unrpyc decompile scan…"))
+            try:
+                from src.utils.unrpyc_adapter import UnrpycAdapter as _UnrpycAdapter
+                from pathlib import Path as _Path
+                import glob as _glob
+
+                _adapter = _UnrpycAdapter()
+                if _adapter.available:
+                    _rpyc_files = [
+                        _Path(p) for p in _glob.glob(
+                            os.path.join(game_dir, '**', '*.rpyc'), recursive=True
+                        )
+                        if not any(
+                            skip in p.replace('\\', '/').split('/')
+                            for skip in ('tl', 'renpy', 'common', 'cache', '__pycache__')
+                        )
+                    ]
+                    if _rpyc_files:
+                        with _adapter.decompile_to_temp(_rpyc_files, _Path(game_dir)) as (_tmp, _decompiled):
+                            if _decompiled:
+                                self.log_message.emit("info", self.config.get_log_text(
+                                    'unrpyc_decompile_found',
+                                    default="Unrpyc: {count} file(s) decompiled.",
+                                    count=len(_decompiled)))
+                                _parser_uc = RenPyParser(self.config)
+                                _scan_uc = _parser_uc.extract_combined(
+                                    _tmp,
+                                    include_rpy=True,
+                                    include_rpyc=False,
+                                    include_deep_scan=False,
+                                    recursive=True,
+                                    exclude_dirs=['tl', 'cache', '__pycache__'],
+                                )
+                                _existing_uc = {e.original_text for t in tl_files for e in t.entries}
+                                _missing_uc = []
+                                for _uc_entries in _scan_uc.values():
+                                    for _uc_e in _uc_entries:
+                                        _txt = _uc_e.get('text')
+                                        if _txt and _txt not in _existing_uc and len(_txt) > 1:
+                                            _missing_uc.append(_uc_e)
+                                            _existing_uc.add(_txt)
+
+                                if _missing_uc:
+                                    self.log_message.emit("info", self.config.get_log_text(
+                                        'unrpyc_decompile_new_strings',
+                                        default="Unrpyc: {count} additional string(s) found.",
+                                        count=len(_missing_uc)))
+                                    _uc_out_dir = os.path.join(tl_path, renpy_lang)
+                                    os.makedirs(_uc_out_dir, exist_ok=True)
+                                    _uc_file = os.path.join(_uc_out_dir, "strings_unrpyc.rpy")
+                                    _uc_lines = [
+                                        "# Strings found via unrpyc decompile (complementary to RPYC reader)",
+                                        f"translate {renpy_lang} strings:\n",
+                                    ]
+                                    for _m in _missing_uc:
+                                        _o = _m['text'].replace('"', '\\"').replace('\n', '\\n')
+                                        if _m.get('context'):
+                                            _uc_lines.append(f"    # context: {_m['context']}")
+                                        _uc_lines.append(f'    old "{_o}"\n    new ""\n')
+                                    with open(_uc_file, 'w', encoding='utf-8') as _f:
+                                        _f.write('\n'.join(_uc_lines))
+                                    for _ntf in self.tl_parser.parse_directory(_uc_out_dir, renpy_lang):
+                                        if os.path.normcase(_ntf.file_path) == os.path.normcase(_uc_file):
+                                            tl_files.append(_ntf)
+                                            break
+                else:
+                    self.log_message.emit("debug",
+                        "Unrpyc decompile: no decompiler backend available — skipping. "
+                        "Install unrpyc or rpycdec to enable complementary decompile scanning.")
+            except Exception as _uc_exc:
+                self.log_message.emit("warning",
+                    self.config.get_log_text('unrpyc_decompile_error',
+                                             default="Unrpyc decompile scan failed: {error}",
+                                             error=str(_uc_exc)))
+
         # Hata raporunda görülen UnicodeDecodeError'ları engellemek için tl çıktısını
         # tümüyle UTF-8-SIG formatında normalize et (renpy loader katı UTF-8 kullanıyor).
         try:
@@ -2270,6 +2355,7 @@ class TranslationPipeline(QObject):
                     encoding='utf-8',
                 )
                 self.log_message.emit('info', self.config.get_log_text('log_strings_json_generated', count=len(mapping)))
+                return len(mapping)
         except Exception as e:
             self.logger.warning(f"Failed to generate strings.json: {e}")
 
@@ -3282,10 +3368,12 @@ init python:
                                 # Find all 'old/new' pairs
                                 for match in string_pair_pattern.finditer(content):
                                     old_text = match.group('old')
-                                    new_text = match.group('new')
                                     
-                                    # ONLY skip if new_text is NOT empty and NOT equal to old_text (unless intentional)
-                                    if old_text and new_text and new_text.strip():
+                                    # FIX v2.8.6: Include ALL 'old "text"' entries in existing tl/ files,
+                                    # even those with empty 'new ""'. In Ren'Py 7.5+/8.x, duplicate
+                                    # 'old "text"' definitions across files cause a crash regardless
+                                    # of whether the translation is empty or not.
+                                    if old_text:
                                         # Normalize newlines and unescape for consistency
                                         old_text = old_text.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
                                         existing_global_strings.add(old_text)
@@ -3293,8 +3381,7 @@ init python:
                                 # Dialogue check
                                 for m2 in dialogue_block_pat.finditer(content):
                                     old_t = m2.group('old')
-                                    new_t = m2.group('new')
-                                    if old_t and new_t and new_t.strip():
+                                    if old_t:
                                         old_t = old_t.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
                                         existing_global_strings.add(old_t)
                                         
@@ -3303,7 +3390,7 @@ init python:
                                 self.logger.debug(f"Failed to scan {filepath}: {fe}")
                     
                     if existing_global_strings:
-                        self.log_message.emit("info", f"Found {len(existing_global_strings)} conflicting strings in existing translation files, skipping them for strings.rpy.")
+                        self.log_message.emit("info", f"Found {len(existing_global_strings)} existing 'old \"...\"' entries in tl/ files (including untranslated placeholders). Skipping these to prevent Ren'Py duplicate-string crash (7.5+/8.x).")
             except Exception as e:
                 self.logger.warning(f"Existing TL scan failed: {e}")
 
@@ -3404,7 +3491,22 @@ init python:
                         os.fsync(f.fileno())
                     
                     if os.path.exists(full_path):
-                        os.replace(temp_path, full_path)
+                        # FIX v2.8.6: APPEND instead of overwrite to preserve existing translations.
+                        # Multiple 'translate strings:' blocks in the same file are valid in Ren'Py.
+                        # This prevents losing dialogue-format blocks and previously-translated entries.
+                        translate_start = content.find(f'translate {renpy_lang} strings:')
+                        if translate_start >= 0:
+                            append_block = '\n\n' + content[translate_start:]
+                            try:
+                                with open(full_path, 'a', encoding='utf-8-sig', newline='\n') as fa:
+                                    fa.write(append_block)
+                                os.remove(temp_path)
+                            except Exception as _append_err:
+                                self.logger.warning(f"Append failed for {rel_path}, falling back to replace: {_append_err}")
+                                os.replace(temp_path, full_path)
+                        else:
+                            # No translate block in content; nothing meaningful to append
+                            os.remove(temp_path)
                     else:
                         os.rename(temp_path, full_path)
                     
@@ -3863,21 +3965,6 @@ init python:
             )
             t.status_callback = self.log_message.emit
             self.translation_manager.add_translator(TranslationEngine.LIBRETRANSLATE, t)
-
-        if self.engine == TranslationEngine.YANDEX and self.engine not in self.translation_manager.translators:
-            t = YandexTranslator(
-                proxy_manager=getattr(self.translation_manager, "proxy_manager", None),
-                config_manager=self.config
-            )
-            # Attach Google as fallback
-            fallback = GoogleTranslator(
-                proxy_manager=getattr(self.translation_manager, "proxy_manager", None),
-                config_manager=self.config
-            )
-            fallback.status_callback = self.log_message.emit
-            t.set_fallback_translator(fallback)
-            t.status_callback = self.log_message.emit
-            self.translation_manager.add_translator(TranslationEngine.YANDEX, t)
 
         # ================================================================
         # v2.7.1: Auto-protect character names — glossary'ye ekle

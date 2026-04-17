@@ -478,6 +478,12 @@ class TLParser:
             TranslationFile listesi
         """
         lang_dir = os.path.join(tl_dir, language)
+
+        # Guard: eğer tl_dir zaten language adıyla bitiyorsa çift join yapma
+        # (örn. tl_dir="game/tl/turkish", language="turkish" → yanlış "game/tl/turkish/turkish")
+        tl_dir_basename = os.path.basename(os.path.normpath(tl_dir))
+        if tl_dir_basename.lower() == language.lower() and os.path.isdir(tl_dir):
+            lang_dir = tl_dir
         
         # Case-insensitive folder search fallback for Linux/Mac
         if not os.path.isdir(lang_dir) and os.path.isdir(tl_dir):

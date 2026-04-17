@@ -4,40 +4,46 @@
 PyQt6>=6.6,<6.11
 
 # HTTP and async support
-aiohttp>=3.8.0
-requests>=2.28.0
-httpx>=0.24.0
-urllib3>=1.26.0
+aiohttp>=3.11.0
+requests>=2.32.0
+httpx>=0.27.0
+urllib3>=2.2.0
 
 # Text and Character Handling
-chardet==5.1.0
-charset-normalizer>=3.0.0
+chardet>=5.2.0
+charset-normalizer>=3.3.0
 
 # AI Translation Support
-openai>=1.0.0
-google-genai>=0.3.0
+openai>=1.30.0
+google-genai>=1.0.0
 
 
 # Packaging
 # packaging>=23.0 (Removed: Used custom parser instead)
 
 # Performance and Matching
-rapidfuzz>=3.0.0
+rapidfuzz>=3.9.0
 
 # Data Management (Excel/CSV)
-pandas>=2.0.0
-openpyxl>=3.1.0
+pandas>=2.2.0
+openpyxl>=3.1.2
 
 # RPA Extraction
 unrpa>=2.3.0
-PyYAML>=6.0
+PyYAML>=6.0.1
+
+# RPYC Decompilation (optional, complementary to built-in rpyc_reader)
+# rpycdec is a pip-installable fallback. For best results install unrpyc:
+#   pip install git+https://github.com/CensoredUsername/unrpyc.git
+# If neither is installed, the decompile step is silently skipped.
+rpycdec>=0.1.12  # optional: PyPI fallback for .rpyc decompilation
 
 # Tools Support
-fonttools>=4.40.0  # Required for Font Compatibility tool
-rich>=13.0.0  # Modern CLI terminal interface
+fonttools>=4.50.0  # Required for Font Compatibility tool
+rich>=13.7.0  # Modern CLI terminal interface
 
 # Optional/Platform Specific
-uvloop>=0.17.0; sys_platform != "win32"
-Pillow>=10.0.0  # Required for PyInstaller icon processing
+uvloop>=0.19.0; sys_platform != "win32"
+Pillow>=10.4.0  # Required for PyInstaller icon processing
 
 # Offline AI support removed in v2.7.8

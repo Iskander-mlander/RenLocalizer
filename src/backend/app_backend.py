@@ -204,16 +204,6 @@ class AppBackend(QObject):
         )
         self.translation_manager.add_translator(TranslationEngine.LIBRETRANSLATE, lt_translator)
 
-        # 8. Yandex Translate (Free, Widget API)
-        from src.core.translator import YandexTranslator
-        yandex_translator = YandexTranslator(
-            proxy_manager=self.proxy_manager,
-            config_manager=self.config
-        )
-        # Attach Google as fallback for Yandex
-        yandex_translator.set_fallback_translator(google_translator)
-        self.translation_manager.add_translator(TranslationEngine.YANDEX, yandex_translator)
-
         # Opus MT (Local Transformers) - Removed in v2.7.8
         pass
     
@@ -287,7 +277,6 @@ class AppBackend(QObject):
 
             {"code": "local_llm", "name": self.config.get_ui_text("translation_engines.local_llm", "🖥️ Local LLM")},
             {"code": "libretranslate", "name": self.config.get_ui_text("translation_engines.libretranslate", "🌐 LibreTranslate (Local)")},
-            {"code": "yandex", "name": self.config.get_ui_text("translation_engines.yandex", "🔵 Yandex Translate (Free)")},
         ]
         
         # Pseudo motorunu debug modunda göster
@@ -951,8 +940,8 @@ class AppBackend(QObject):
                         
                         # Create pipeline instance just to use _generate_strings_json
                         pipeline = TranslationPipeline(self.config, self.translation_manager)
-                        pipeline._generate_strings_json(tl_files, lang_dir)
-                        self.logMessage.emit('info', self.config.get_ui_text('log_strings_json_generated'))
+                        count = pipeline._generate_strings_json(tl_files, lang_dir)
+                        self.logMessage.emit('info', self.config.get_log_text('log_strings_json_generated', count=count or 0))
             except Exception as json_err:
                 self.logger.warning(f"Failed to generate strings.json in backend: {json_err}")
 
@@ -1029,7 +1018,6 @@ class AppBackend(QObject):
             "gemini": TranslationEngine.GEMINI,
             "local_llm": TranslationEngine.LOCAL_LLM,
             "libretranslate": TranslationEngine.LIBRETRANSLATE,
-            "yandex": TranslationEngine.YANDEX,
             "pseudo": TranslationEngine.PSEUDO,
         }
         return mapping.get(engine_str, TranslationEngine.GOOGLE)

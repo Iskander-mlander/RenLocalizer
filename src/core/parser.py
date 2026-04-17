@@ -561,6 +561,48 @@ class RenPyParser:
         if feature:
             return getattr(ts, feature, True)
         return True
+
+    def compute_translation_id(self, label_context: str, statement_text: str, serial: int = 0) -> str:
+        """
+        Compute Ren'Py-compatible translation ID using MD5 hash.
+        
+        Ren'Py generates translation IDs as: label_<8charhash>
+        For collisions, appends serial: label_<8charhash>m, label_<8charhash>n, etc.
+        
+        v2.8.3: This ensures RenLocalizer output matches Ren'Py's internal ID format exactly,
+        enabling proper loading of generated tl/ translation files.
+        
+        Args:
+            label_context: Current label name (e.g., 'start', 'define_character')
+            statement_text: Raw statement text (e.g., 'e "Thank you..."')
+            serial: Collision counter (0 = first, 1 = append 'm', 2 = append 'n', etc.)
+        
+        Returns:
+            Translation ID string (e.g., 'start_636ae3f5', 'start_bd1ad9e1m')
+        """
+        import hashlib
+        
+        # Normalize label context (remove special chars, lowercase)
+        label_clean = label_context.strip().lower() if label_context else 'default'
+        label_clean = re.sub(r'[^a-z0-9_]', '_', label_clean)
+        label_clean = label_clean[:32]  # Limit length (safety)
+        
+        # Create hash from statement text (Ren'Py uses MD5 on the statement + label)
+        combined = f"{label_clean}:{statement_text}".encode('utf-8', errors='replace')
+        hash_obj = hashlib.md5(combined)
+        hash_hex = hash_obj.hexdigest()[:8]  # 8-char hex prefix
+        
+        # Build translation ID
+        trans_id = f"{label_clean}_{hash_hex}"
+        
+        # Handle collisions with serial letters (m, n, o, p, ...)
+        if serial > 0:
+            # serial=1 → 'm', serial=2 → 'n', etc. (Ren'Py convention)
+            serial_char = chr(ord('m') + serial - 1)
+            trans_id += serial_char
+        
+        return trans_id
+
         
     # ========== NEW PATTERNS FOR BETTER EXTRACTION (v2.4.1) ==========
     # These are initialized in __init__ but need class-level declarations
@@ -2350,6 +2392,16 @@ class RenPyParser:
             # Keep high-confidence translated strings, but drop ambiguous candidates.
             return None
 
+        # v2.8.3: Compute Ren'Py-compatible translation ID
+        # Extract label context from context_path or use a sensible default
+        label_context = context_path[0] if context_path else 'unknown'
+        if label_context.lower() in ('screen', 'python', 'menu'):
+            # For non-dialogue contexts, use a more descriptive label
+            label_context = f"{label_context}_{line_number}"
+        # Clamp context_line to avoid hashing accidentally large strings
+        # (e.g. when grammar passes store the full file content as context_line).
+        translation_id = self.compute_translation_id(label_context, context_line[:500] if context_line else context_line)
+
         # context_tag is handled by callers (e.g., deep scan) via context_path
         return {
             'text': text,
@@ -2364,6 +2416,7 @@ class RenPyParser:
             'file_path': file_path,
             'confidence': confidence,
             'confidence_band': confidence_band(confidence),
+            'translation_id': translation_id,  # v2.8.3: Ren'Py-compatible ID
         }
 
     def _is_python_context(self, context_path: List[str]) -> bool:
@@ -2539,9 +2592,13 @@ class RenPyParser:
             
         # Crash Prevention: Reject file paths, URLs, and asset names immediately
         # Using structural markup stripping before fallback regex checks.
-        _text_no_tags = self._strip_markup_structurally(text)
-        if not _text_no_tags:
-            _text_no_tags = re.sub(r'\{/?[^}]*\}', '', text) if '{' in text else text
+        # Fast path: skip markup stripping if no markup characters present
+        if '{' in text or '[' in text:
+            _text_no_tags = self._strip_markup_structurally(text)
+            if not _text_no_tags:
+                _text_no_tags = re.sub(r'\{/?[^}]*\}', '', text) if '{' in text else text
+        else:
+            _text_no_tags = text
         if any(ind in _text_no_tags for ind in self.path_indicators):
             return False
             
@@ -3666,7 +3723,18 @@ class RenPyParser:
         
         # Tüm dosya içeriği (çok satırlı stringler için)
         full_content = '\n'.join(lines)
-        
+
+        # Performans: her karakter offsetinden satır numarasını O(1) ile bulmak için
+        # satır başı offsetleri listesi oluştur (bisect ile binary search).
+        import bisect as _bisect
+        _line_offsets: List[int] = [0]
+        for _ln, _lc in enumerate(lines):
+            _line_offsets.append(_line_offsets[-1] + len(_lc) + 1)  # +1 for '\n'
+
+        def _offset_to_line(offset: int) -> int:
+            """Return 1-indexed line number for a character offset in full_content."""
+            return _bisect.bisect_right(_line_offsets, offset)
+
         # Tüm string literal'leri yakalayan regex
         # Hem tek tırnak hem çift tırnak, escape karakterlerle
         # Support optional string prefixes (r, u, b, f, fr, rf, etc.)
@@ -3686,6 +3754,36 @@ class RenPyParser:
         assignment_context_re = re.compile(r'([a-zA-Z_]\w*)\s*=\s*')
         # join call detection ("delimiter".join([...]) )
         join_call_re = re.compile(r'(?P<delim>"[^"]*"|\'[^\']*\')\s*\.\s*join\s*\(')
+        # list_context_re modül düzeyinde derlenmesi gerekir — döngü içinde tekrar derlenmemesi için
+        list_context_re = re.compile(r'([a-zA-Z_]\w*)\s*(?:=\s*[\[\(\{]|\+=\s*[\[\(]|\.(?:append|extend|insert)\s*\()')
+
+        # --- Performans: python_block durumunu tüm satırlar için önceden hesapla ---
+        # _is_position_in_python_block her triple-quote için O(n) tarama yapıyordu → O(n²).
+        # Bunun yerine tek O(n) geçişiyle her satır numarası için bool önbelleği oluşturuyoruz.
+        _python_block_cache: List[bool] = []
+        _pb_active = False
+        _pb_indent = 0
+        for _pb_line in lines:
+            _pb_stripped = _pb_line.strip()
+            if not _pb_stripped or _pb_stripped.startswith('#'):
+                _python_block_cache.append(_pb_active)
+                continue
+            _pb_ind = self._calculate_indent(_pb_line)
+            if self.python_block_re.match(_pb_stripped):
+                _pb_active = True
+                _pb_indent = _pb_ind
+                _python_block_cache.append(_pb_active)
+                continue
+            if _pb_active and _pb_ind <= _pb_indent:
+                _pb_active = False
+            _python_block_cache.append(_pb_active)
+
+        def _cached_in_python(line_number: int) -> bool:
+            """1-indexed satır için önceden hesaplanmış python_block durumunu döndür."""
+            idx = line_number - 1
+            if 0 <= idx < len(_python_block_cache):
+                return _python_block_cache[idx]
+            return False
 
         # Önce çok satırlı triple-quoted stringleri tüm dosyada ara
         # Bu sayede birden fazla satıra yayılan stringler de yakalanır
@@ -3696,7 +3794,7 @@ class RenPyParser:
 
             context_tag = 'deep_scan'
             # triple quoted content: try to capture key in same line
-            line_number = full_content[:match.start()].count('\n') + 1
+            line_number = _offset_to_line(match.start())
             context_line = ''
             if 0 <= line_number - 1 < len(lines):
                 context_line = lines[line_number - 1].strip()
@@ -3705,9 +3803,9 @@ class RenPyParser:
             found_key = key_match.group(1) if key_match else None
             context_tag = f'variable:{found_key}' if found_key else 'deep_scan'
             if text and (text, context_tag) not in already_found:
-                # Calculate in_python status
-                line_number = full_content[:match.start()].count('\n') + 1
-                in_python = self._is_position_in_python_block(lines, line_number)
+                # Calculate in_python status — önbellekten O(1), artık O(n) tarama yok
+                # line_number already computed above via _offset_to_line (O(log n))
+                in_python = _cached_in_python(line_number)
 
                 # FIX: Define context_line safely
                 context_line = ""
@@ -3720,8 +3818,7 @@ class RenPyParser:
 
                 # Now pass the defined variable
                 if self._is_meaningful_data_value(text, found_key):
-                    # Python bloğu içinde mi kontrol et
-                    in_python = self._is_position_in_python_block(lines, line_number)
+                    # in_python zaten yukarıda önbellekten alındı — tekrar çağrı yok
                     entry = self._create_deep_scan_entry(
                         text=text,
                         line_number=line_number,
@@ -3768,30 +3865,35 @@ class RenPyParser:
                 key_match = key_capture_re.search(line[:match.start()])
                 if key_match:
                     found_key = key_match.group(1)
-                list_context_re = re.compile(r'([a-zA-Z_]\w*)\s*(?:=\s*[\[\(\{]|\+=\s*[\[\(]|\.(?:append|extend|insert)\s*\()')
+                # list_context_re fonksiyon başında önceden derlenmiş — döngü içinde yeniden derleme yok
                 list_match = list_context_re.search(line[:match.start()])
 
                 # 2. Look back at previous lines if not found
+                # Optimized: satırları ayrı ayrı tara, string birleştirme yapmadan
                 if not found_key and not list_match and line_num > 1:
                     start_idx = max(0, line_num - 10)
-                    prev_context = "\n".join(lines[start_idx:line_num-1]) + "\n" + line[:match.start()]
-                    prev_key_matches = list(key_capture_re.finditer(prev_context))
-                    if prev_key_matches:
-                        found_key = prev_key_matches[-1].group(1)
-                    matches = list(list_context_re.finditer(prev_context))
-                    if matches and not found_key:
-                        list_match = matches[-1]  # Take the closest one
+                    for _pb_ln in range(line_num - 2, start_idx - 1, -1):
+                        _pk = key_capture_re.search(lines[_pb_ln])
+                        if _pk:
+                            found_key = _pk.group(1)
+                            break
+                        _pl = list_context_re.search(lines[_pb_ln])
+                        if _pl:
+                            list_match = _pl
+                            break
 
                 if not found_key and list_match:
                     found_key = list_match.group(1)
                 else:
                     # Try assignment var detection (same-line or lookback)
                     assign_match = assignment_context_re.search(line[:match.start()]) if not found_key else None
-                    if not assign_match and line_num > 1:
-                        prev_context = "\n".join(lines[max(0, line_num - 10):line_num-1]) + "\n" + line[:match.start()]
-                        assign_matches = list(assignment_context_re.finditer(prev_context))
-                        if assign_matches and not found_key:
-                                assign_match = assign_matches[-1]
+                    if not assign_match and line_num > 1 and not found_key:
+                        start_idx = max(0, line_num - 10)
+                        for _ab_ln in range(line_num - 2, start_idx - 1, -1):
+                            _am = assignment_context_re.search(lines[_ab_ln])
+                            if _am:
+                                assign_match = _am
+                                break
                         if assign_match:
                             found_key = assign_match.group(1)
 
@@ -3812,11 +3914,21 @@ class RenPyParser:
                     rest = line[next_pos:]
                     # Simple detection: if a backslash at end, within parentheses, or trailing + operator then next line may continue the expression
                     rest_r = rest.rstrip()
-                    continuation = rest_r.endswith('\\') or (line.strip().endswith('(') or line.strip().endswith('+')) or ('(' in line and ')' not in line)
+                    # Continuation detection — daraltılmış koşul:
+                    # '(' in line and ')' not in line çok geniş kapsamlıydı; screen/label
+                    # tanımlarında neredeyse her satırı tetikleyerek O(n²) taramaya yol açıyordu.
+                    # Şimdi yalnızca gerçek devam belirteçleri (trailing \, +, açık parantez
+                    # sadece python bloğunda) sayılıyor ve lookahead max 5 satırla sınırlı.
+                    stripped_line = line.strip()
+                    continuation = (
+                        rest_r.endswith('\\')
+                        or rest_r.endswith('+')
+                        or (in_python_block and stripped_line.endswith('('))
+                    )
                     if continuation:
-                        # scan following lines for string literal
+                        # scan following lines for string literal — max 5 satır
                         j = line_num + 1
-                        while j <= len(lines):
+                        while j <= min(line_num + 5, len(lines)):
                             next_line = lines[j-1]
                             next_match = string_literal_re.search(next_line)
                             # ensure the next line's string literal isn't part of a new assignment

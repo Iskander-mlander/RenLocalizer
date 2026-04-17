@@ -99,7 +99,6 @@ ENGINES = [
     ("deepseek",       "DeepSeek",          "🔮", "API key required — OpenAI compatible"),
     ("local_llm",      "Local LLM",         "🏠", "Ollama / LM Studio — fully local"),
     ("libretranslate",  "LibreTranslate",    "🔓", "Self-hosted — Docker/Local"),
-    ("yandex",         "Yandex Translate",   "🟡", "Free widget API — SID rotation"),
     ("pseudo",         "Pseudo (Test)",      "🧪", "For testing — fake translations"),
 ]
 
@@ -1235,7 +1234,7 @@ def main() -> int:
     translate_parser.add_argument("--config", help="Path to JSON configuration file")
     translate_parser.add_argument("--target-lang", "-t", default="tr", help="Target language code (default: tr)")
     translate_parser.add_argument("--source-lang", "-s", default="auto", help="Source language code (default: auto)")
-    translate_parser.add_argument("--engine", "-e", default="google", choices=["google", "deepl", "openai", "gemini", "deepseek", "local_llm", "libretranslate", "yandex", "pseudo"], help="Translation engine")
+    translate_parser.add_argument("--engine", "-e", default="google", choices=["google", "deepl", "openai", "gemini", "deepseek", "local_llm", "libretranslate", "pseudo"], help="Translation engine")
     translate_parser.add_argument("--mode", choices=["auto", "full", "translate"], default="auto",
                         help="Operation mode: 'auto' (detect), 'full' (UnRen+Trans), 'translate' (Trans only)")
     translate_parser.add_argument("--proxy", action="store_true", help="Enable proxy")
@@ -1282,7 +1281,7 @@ def main() -> int:
     parser.add_argument("--config", help="Path to JSON configuration file to override settings")
     parser.add_argument("--target-lang", "-t", default="tr", help="Target language code (default: tr)")
     parser.add_argument("--source-lang", "-s", default="auto", help="Source language code (default: auto)")
-    parser.add_argument("--engine", "-e", default="google", choices=["google", "deepl", "openai", "gemini", "deepseek", "local_llm", "libretranslate", "yandex", "pseudo"], help="Translation engine")
+    parser.add_argument("--engine", "-e", default="google", choices=["google", "deepl", "openai", "gemini", "deepseek", "local_llm", "libretranslate", "pseudo"], help="Translation engine")
     parser.add_argument("--mode", choices=["auto", "full", "translate"], default="auto",
                         help="Operation mode: 'auto' (detect), 'full' (UnRen+Trans), 'translate' (Trans only)")
     parser.add_argument("--proxy", action="store_true", help="Enable proxy")
@@ -1456,19 +1455,6 @@ def main() -> int:
                     config_manager=config_manager
                 )
             )
-
-        elif selected_engine_code == 'yandex':
-            from src.core.translator import YandexTranslator
-            yandex_translator = YandexTranslator(
-                proxy_manager=proxy_manager,
-                config_manager=config_manager
-            )
-            google_fallback = GoogleTranslator(
-                proxy_manager=proxy_manager,
-                config_manager=config_manager
-            )
-            yandex_translator.set_fallback_translator(google_fallback)
-            translation_manager.add_translator(TranslationEngine.YANDEX, yandex_translator)
 
     except Exception as e:
         print_warning(f"Error setting up translation engine: {e}")

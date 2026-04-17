@@ -399,7 +399,10 @@ def score_extraction_confidence(
         return 0.0
 
     lowered_text = text.lower()
-    lowered_context = (context or "").lower()
+    # Clamp context to 500 chars to avoid O(n) substring search on accidentally
+    # large context_line strings (e.g. when a grammar pass stores the full file
+    # content as context_line).
+    lowered_context = (context or "")[:500].lower()
     lowered_path = " / ".join((p or "" for p in (context_path or []))).lower()
     combined_context = f"{lowered_context} {lowered_path} {character or ''} {var_name or ''}".lower()
 

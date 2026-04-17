@@ -23,28 +23,28 @@ def test_translate_with_retry_projects_cross_engine_cache_hits_to_requested_engi
         text="About",
         source_lang="auto",
         target_lang="tr",
-        engine=TranslationEngine.YANDEX,
+        engine=TranslationEngine.DEEPL,
         metadata={"original_text": "About"},
     )
 
     result = asyncio.run(manager.translate_with_retry(request))
 
     assert result.success is True
-    assert result.engine == TranslationEngine.YANDEX
+    assert result.engine == TranslationEngine.DEEPL
     assert result.metadata["cache_hit_type"] == "cross_engine"
     assert result.metadata["cache_source_engine"] == "libretranslate"
-    assert ("yandex", "auto", "tr", "About") in manager._cache
-    assert manager._cache[("yandex", "auto", "tr", "About")].engine == TranslationEngine.YANDEX
+    assert ("deepl", "auto", "tr", "About") in manager._cache
+    assert manager._cache[("deepl", "auto", "tr", "About")].engine == TranslationEngine.DEEPL
 
 
 def test_translate_batch_projects_source_lang_fallback_cache_hits() -> None:
     manager = TranslationManager()
-    manager._cache[("yandex", "en", "tr", "Save")] = TranslationResult(
+    manager._cache[("deepl", "en", "tr", "Save")] = TranslationResult(
         original_text="Save",
         translated_text="Kaydet",
         source_lang="en",
         target_lang="tr",
-        engine=TranslationEngine.YANDEX,
+        engine=TranslationEngine.DEEPL,
         success=True,
     )
 
@@ -52,15 +52,15 @@ def test_translate_batch_projects_source_lang_fallback_cache_hits() -> None:
         text="Save",
         source_lang="auto",
         target_lang="tr",
-        engine=TranslationEngine.YANDEX,
+        engine=TranslationEngine.DEEPL,
         metadata={"original_text": "Save"},
     )
 
     result = asyncio.run(manager.translate_batch([request]))[0]
 
     assert result.success is True
-    assert result.engine == TranslationEngine.YANDEX
+    assert result.engine == TranslationEngine.DEEPL
     assert result.source_lang == "auto"
     assert result.metadata["cache_hit_type"] == "source_lang_fallback"
     assert result.metadata["cache_source_lang"] == "en"
-    assert ("yandex", "auto", "tr", "Save") in manager._cache
+    assert ("deepl", "auto", "tr", "Save") in manager._cache
