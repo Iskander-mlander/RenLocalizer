@@ -65,18 +65,24 @@ def _detect_method() -> Optional[str]:
         pass
 
     # 2. Try subprocess: `python -m decompiler` or `unrpyc` script in PATH
+    # IMPORTANT: In a PyInstaller frozen build sys.executable points to the
+    # packaged app itself (e.g. RenLocalizer.exe), not a Python interpreter.
+    # Spawning it with "-m decompiler" would open a second app window, so we
+    # skip the subprocess_module probe entirely when frozen.
     _py = sys.executable
-    try:
-        result = subprocess.run(
-            [_py, "-m", "decompiler", "--help"],
-            capture_output=True, timeout=8, **_SUBPROCESS_NO_WINDOW
-        )
-        if result.returncode == 0 or b"usage" in result.stdout.lower():
-            _METHOD = "subprocess_module"
-            logger.debug("unrpyc_adapter: using subprocess (-m decompiler)")
-            return _METHOD
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        pass
+    _is_frozen = getattr(sys, "frozen", False)
+    if not _is_frozen:
+        try:
+            result = subprocess.run(
+                [_py, "-m", "decompiler", "--help"],
+                capture_output=True, timeout=8, **_SUBPROCESS_NO_WINDOW
+            )
+            if result.returncode == 0 or b"usage" in result.stdout.lower():
+                _METHOD = "subprocess_module"
+                logger.debug("unrpyc_adapter: using subprocess (-m decompiler)")
+                return _METHOD
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
 
     try:
         result = subprocess.run(
@@ -139,6 +145,12 @@ def _decompile_via_module(rpyc_path: Path, out_dir: Path) -> bool:
 def _decompile_via_subprocess(rpyc_path: Path, out_dir: Path, method: str) -> bool:
     """Decompile using unrpyc as subprocess."""
     _py = sys.executable
+    # In a frozen (PyInstaller) build sys.executable is the packaged app, not
+    # a Python interpreter.  subprocess_module must never be reached when frozen
+    # (it is skipped during detection), but guard here as a safety net.
+    if method == "subprocess_module" and getattr(sys, "frozen", False):
+        logger.debug("unrpyc_adapter: subprocess_module skipped in frozen build")
+        return False
     if method == "subprocess_module":
         cmd = [_py, "-m", "decompiler", "-c", str(rpyc_path)]
     else:  # subprocess_script
