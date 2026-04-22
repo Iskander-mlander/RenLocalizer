@@ -1,5 +1,58 @@
 # RenLocalizer Changelog
 
+### [2.8.5] - 2026-04-22
+
+> **Note:** DeepL-specific fixes in this release were validated through code analysis and unit tests only — no live API key was available for end-to-end testing. If you encounter any issues with DeepL translations, please open an issue.
+
+### DeepL: Critical Fix — 100% Translation Failure
+- **Root Cause:** `DeepLTranslator._translate_batch_deepl()` constructed the `User-Agent` request header using `self.config_manager.config.get('version', '2.0.0')`. `ConfigManager` has no `.config` attribute, causing an `AttributeError` on every DeepL API request. All 839 entries failed with this error, resulting in a 100% failure rate for any DeepL translation job.
+- **Fix:** Replaced the broken attribute access with a direct import of `VERSION` from `src.version`. The `User-Agent` header now reads `RenLocalizer/<version>` correctly without any runtime attribute lookup on `ConfigManager`.
+- **Affected files:** `src/core/translator.py`
+
+### DeepL: Response Read Outside Context Manager Fix
+- **Root Cause:** `payload = await resp.json()` was called outside the `async with session.post(...) as resp:` block. In aiohttp, reading the response body after the context manager exits risks a `ClientResponseError` (connection already closed). On stable connections this was silently fine, but on slower/proxied connections it could cause sporadic `200 OK` responses to fail at the read step.
+- **Fix:** Moved `payload = await resp.json(content_type=None)` inside the `async with` block, immediately after the `status != 200` guard. `translations = payload.get(...)` moved one line down accordingly.
+- **Affected files:** `src/core/translator.py`
+
+### Lingva: Dead Instances Removed
+- `lingva.garudalinux.org` (403) and `translate.plausibility.cloud` (500) are no longer responding. Removed from `LINGVA_INSTANCES`. Active instances: `lingva.lunar.icu` and `lingva.ml`.
+- **Affected files:** `src/core/constants.py`
+
+### Unrpyc: Suppress Console Window on Windows
+- **Root Cause:** `unrpyc_adapter.py` spawns subprocesses (`python -m decompiler`, `unrpyc`, `rpycdec`) to decompile `.rpyc` files. On Windows, each subprocess briefly opened a visible console window (a flash of the app's own splash screen), which was confusing to users.
+- **Fix:** Added `creationflags=subprocess.CREATE_NO_WINDOW` to all `subprocess.run` calls in `unrpyc_adapter.py` on Windows. Output capture behavior is unchanged; only the window visibility is suppressed. No effect on Linux/macOS.
+- **Affected files:** `src/utils/unrpyc_adapter.py`
+
+### DeepL: Quota Exceeded No Longer Retried
+- **Root Cause:** On HTTP 456 (quota exceeded), the translator entered the retry loop and waited 1 + 2 + 4 = 7 seconds before giving up, firing two additional pointless API requests along the way. A quota exhaustion is not a transient network error — retrying cannot resolve it.
+- **Fix:** HTTP 456 now short-circuits the retry loop immediately and returns a `quota_exceeded=True` result without any delay. HTTP 429 (rate limit) and HTTP 500 (server error) still retry normally as before.
+- **Affected files:** `src/core/translator.py`
+
+### DeepL: Ren'Py Closing Tag Corruption Fix
+- **Root Cause:** The post-translation tag cleanup list applied a `/?\s*` pattern (matching both `{i}` and `{/i}`) before the slash-specific pattern. Because `re.sub` processes the first matching rule, `{/i}` was matched by the no-slash branch, the `/` was silently discarded, and the result was `{i}` — a valid opening tag instead of a closing tag, causing Ren'Py syntax errors in translated output.
+- **Fix:** Reordered the cleanup list so the slash pattern (`{/i}`, `{/b}`, etc.) is tested first. The catch-all no-slash pattern now only matches tags that genuinely have no slash.
+- **Affected files:** `src/core/translator.py`
+
+### DeepL: Quota Error Now Reports Engine Name
+- The `error_api_quota` log message previously read "API Quota Exceeded!" with no indication of which engine triggered it. It now includes the engine name (e.g. "DeepL API quota exceeded!") so users don't have to scan the log to find the source.
+- Updated all 8 locale files (`en`, `tr`, `de`, `fr`, `es`, `ru`, `fa`, `zh-CN`) to accept the new `{engine}` format parameter.
+- **Affected files:** `src/core/translation_pipeline.py`, `locales/*.json`
+
+### DeepL: API Key Placeholder Corrected
+- The settings field placeholder previously showed `API Key (sk-...) or (free:...)`. Both formats are wrong: `sk-...` is an OpenAI key format and `free:...` does not exist in DeepL's API. The correct formats are `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx` (Free) and `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` (Pro/Paid).
+- Updated all 8 locale files with the correct UUID-based placeholder.
+- **Affected files:** `locales/*.json`
+
+### DeepL: "API Key Missing" Error Localized
+- `translate_batch` returned a hardcoded English string `"API Key Missing"` when no key was configured, bypassing the localization system. Now uses `_get_text('error_deepl_key_required', ...)` consistent with the rest of the error messages.
+- **Affected files:** `src/core/translator.py`
+
+### CI: `--rootdir .` Added to `linux-pyqt-compat` Job
+- The `linux-pyqt-compat` compatibility regression suite was missing `--rootdir .`, which the `core-regression` job already had. Without it, pytest's rootdir detection on certain runner configurations could pick up unintended directories and cause collection errors.
+- **Affected files:** `.github/workflows/tests.yml`
+
+---
+
 ### [2.8.4] - 2026-04-15
 
 ### Parser: Catastrophic Slowdown Fix (Large .rpy Files)

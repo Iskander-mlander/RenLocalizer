@@ -33,6 +33,7 @@ from src.core.constants import (
     MIRROR_BAN_TIME,
 )
 from src.utils.config import get_effective_batch_size
+from src.version import VERSION as _APP_VERSION
 
 class TranslationEngine(Enum):
     GOOGLE = "google"
@@ -1708,7 +1709,7 @@ class DeepLTranslator(BaseTranslator):
     async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
         if not requests: return []
         if not self.api_key:
-            return [TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, "API Key Missing") for r in requests]
+            return [TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, self._get_text('error_deepl_key_required', "DeepL API key required")) for r in requests]
 
         source_lang = self._map_lang(requests[0].source_lang, False) if requests[0].source_lang and requests[0].source_lang != "auto" else None
         target_lang = self._map_lang(requests[0].target_lang, True)
@@ -1737,7 +1738,7 @@ class DeepLTranslator(BaseTranslator):
         # Move auth_key to Header as per new DeepL requirements
         headers = {
             "Authorization": f"DeepL-Auth-Key {self.api_key}",
-            "User-Agent": f"RenLocalizer/{self.config_manager.config.get('version', '2.0.0')}" if self.config_manager else "RenLocalizer/2.0.0"
+            "User-Agent": f"RenLocalizer/{_APP_VERSION}"
         }
         
         data = {
@@ -1789,18 +1790,17 @@ class DeepLTranslator(BaseTranslator):
                             msg = await resp.text()
                             is_quota = False
                         
-                        # Don't retry on quota exceeded or auth errors
-                        if resp.status in (401, 403, 456):
-                            return [TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, f"DeepL Error: {msg[:120]}", quota_exceeded=is_quota) for r in requests]
-                        
-                        # Retry on transient errors (5xx, timeout, etc.)
                         last_error = f"HTTP {resp.status}: {msg[:100]}"
+                        if is_quota:
+                            # Quota exhausted — no point retrying, return immediately
+                            return [TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, f"DeepL Error: {last_error}", quota_exceeded=True) for r in requests]
                         if attempt < self.MAX_RETRIES - 1:
                             await asyncio.sleep(self.RETRY_DELAYS[attempt])
                             continue
                         return [TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, f"DeepL Error: {last_error}", quota_exceeded=is_quota) for r in requests]
 
-                payload = await resp.json(content_type=None)
+                    payload = await resp.json(content_type=None)
+
                 translations = payload.get("translations", [])
                 
                 results = []
@@ -1826,12 +1826,13 @@ class DeepLTranslator(BaseTranslator):
                         # { i } -> {i}, { b } -> {b}, { /i } -> {/i}, etc.
                         # This regex finds { tag } patterns and removes internal spaces
                         renpy_tag_cleanup = [
-                            # {i}, {b}, {u}, {s}, {/i}, {/b}, {/u}, {/s}, {plain}, {/plain}
-                            (r'\{\s*/?\s*(i|b|u|s|plain|fast|nw|p|w|cps|color|font|size|alpha|outlinecolor|k|rb|rt)\s*\}', 
-                             lambda m: '{' + m.group(1).strip().replace(' ', '') + '}'),
-                            # {/i}, {/b} etc with slash
+                            # {/i}, {/b} etc with slash — must come BEFORE the no-slash pattern
+                            # to prevent {/i} being matched by the /? pattern and losing the slash
                             (r'\{\s*/\s*(i|b|u|s|plain|fast|nw|p|w|cps|color|font|size|alpha|outlinecolor|k|rb|rt)\s*\}',
                              lambda m: '{/' + m.group(1).strip() + '}'),
+                            # {i}, {b}, {u}, {s}, {plain}, {fast} etc without slash
+                            (r'\{\s*(i|b|u|s|plain|fast|nw|p|w|cps|color|font|size|alpha|outlinecolor|k|rb|rt)\s*\}', 
+                             lambda m: '{' + m.group(1).strip() + '}'),
                             # {color=...}, {size=...}, {font=...} with values
                             (r'\{\s*(color|size|font|alpha|outlinecolor|cps|k)\s*=\s*([^}]+?)\s*\}',
                              lambda m: '{' + m.group(1).strip() + '=' + m.group(2).strip() + '}'),

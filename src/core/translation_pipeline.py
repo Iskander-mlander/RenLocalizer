@@ -4562,7 +4562,8 @@ init python:
                     self.emit_log("debug", f"Checkpoint saved: {cache_file} (Progress: {current}/{total})")
 
                 if stop_quota:
-                    self.log_message.emit("error", self.config.get_log_text('error_api_quota'))
+                    engine_name = getattr(self.engine, 'value', str(self.engine))
+                    self.log_message.emit("error", self.config.get_log_text('error_api_quota', engine=engine_name))
                     self.should_stop = True
                     break
                 self.emit_log("info", self.config.get_log_text('translated_count', current=current, total=total))

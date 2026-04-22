@@ -33,6 +33,14 @@ from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
+# Suppress console window popup on Windows when spawning subprocesses.
+# CREATE_NO_WINDOW is Windows-only; on other platforms we use an empty dict.
+_SUBPROCESS_NO_WINDOW: dict = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW}
+    if sys.platform == "win32"
+    else {}
+)
+
 # ---------------------------------------------------------------------------
 # Availability detection (cached at module level)
 # ---------------------------------------------------------------------------
@@ -61,7 +69,7 @@ def _detect_method() -> Optional[str]:
     try:
         result = subprocess.run(
             [_py, "-m", "decompiler", "--help"],
-            capture_output=True, timeout=8
+            capture_output=True, timeout=8, **_SUBPROCESS_NO_WINDOW
         )
         if result.returncode == 0 or b"usage" in result.stdout.lower():
             _METHOD = "subprocess_module"
@@ -73,7 +81,7 @@ def _detect_method() -> Optional[str]:
     try:
         result = subprocess.run(
             ["unrpyc", "--help"],
-            capture_output=True, timeout=8
+            capture_output=True, timeout=8, **_SUBPROCESS_NO_WINDOW
         )
         if result.returncode == 0 or b"usage" in result.stdout.lower():
             _METHOD = "subprocess_script"
@@ -138,7 +146,7 @@ def _decompile_via_subprocess(rpyc_path: Path, out_dir: Path, method: str) -> bo
 
     try:
         # Run decompiler; it writes file.rpy next to file.rpyc by default
-        result = subprocess.run(cmd, capture_output=True, timeout=60, cwd=str(out_dir))
+        result = subprocess.run(cmd, capture_output=True, timeout=60, cwd=str(out_dir), **_SUBPROCESS_NO_WINDOW)
         # The decompiler writes to cwd by default; look for the output
         out_rpy = out_dir / (rpyc_path.stem + ".rpy")
         if not out_rpy.exists():
@@ -184,7 +192,7 @@ def _decompile_via_rpycdec(rpyc_path: Path, out_dir: Path) -> bool:
             # Fallback: call via subprocess (rpycdec installs a CLI entrypoint)
             result = subprocess.run(
                 [sys.executable, "-m", "rpycdec", "decompile", str(rpyc_path)],
-                capture_output=True, timeout=60, cwd=str(out_dir)
+                capture_output=True, timeout=60, cwd=str(out_dir), **_SUBPROCESS_NO_WINDOW
             )
             # rpycdec writes to same dir as input by default
             candidate = rpyc_path.parent / (rpyc_path.stem + ".rpy")

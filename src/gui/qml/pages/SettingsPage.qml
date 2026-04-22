@@ -202,6 +202,13 @@ Rectangle {
                             placeholderText: (backend.uiTrigger, backend.getTextWithDefault("deepl_api_key_placeholder", "API Key (sk-...) or (free:...)"))
                             background: Rectangle { radius: 8; color: root.inputBackground; border.color: root.borderColor }
                         }
+                        Label {
+                            Layout.fillWidth: true
+                            text: (backend.uiTrigger, backend.getTextWithDefault("deepl_free_quota_note", "⚠️ Free tier: 500,000 characters/month. A typical Ren'Py game is 1–5 million characters — the free quota may only cover a short demo."))
+                            color: root.warningColor !== undefined ? root.warningColor : "#e0a020"
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                        }
                     }
                     
                     RowLayout {

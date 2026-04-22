@@ -166,7 +166,7 @@ jobs:
             tests/test_runtime_hook_diagnostics.py \
             tests/test_v276_features.py \
             tests/test_ci_pyqt_compat.py \
-            -q
+            -q --rootdir .
 
       - name: Smoke test source Qt startup
         run: |

@@ -30,10 +30,8 @@ GOOGLE_ENDPOINTS = [
 # Lingva Translate instances (Free Google Translate Proxy)
 # Ordered purely by preference/reliability history
 LINGVA_INSTANCES = [
-    "https://lingva.lunar.icu",         # Often fastest
-    "https://lingva.garudalinux.org",   # Very stable
-    "https://translate.plausibility.cloud", 
-    "https://lingva.ml",                # Official (put last due to traffic/downtime)
+    "https://lingva.lunar.icu",         # Active
+    "https://lingva.ml",                # Active (official, higher traffic)
 ]
 
 # User Agents for rotating requests to avoid bot detection
