@@ -122,7 +122,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=os.path.join(project_dir, 'icon.ico') if sys.platform == 'win32' else None,
-    manifest=os.path.join(project_dir, 'build', 'windows', 'RenLocalizer.manifest') if sys.platform == 'win32' else None,
+    manifest=os.path.join(project_dir, 'src', 'RenLocalizer.manifest') if (sys.platform == 'win32' and os.path.exists(os.path.join(project_dir, 'src', 'RenLocalizer.manifest'))) else None,
 )
 
 # =========================================================
