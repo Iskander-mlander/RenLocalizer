@@ -350,6 +350,11 @@ def main() -> int:
         app.processEvents()
         splash.close()
 
+        # Smoke test helper: If we are running in CI smoke test mode, exit cleanly after initialization
+        if os.environ.get("RENLOCALIZER_QT_SMOKE_TEST") == "1":
+            logger.info("Smoke test mode detected, exiting cleanly as requested.")
+            QTimer.singleShot(2000, app.quit)
+
         # Windows taskbar icon — natif yol
         ico_path = resolve_asset("icon.ico")
         if sys.platform == "win32" and ico_path.exists():

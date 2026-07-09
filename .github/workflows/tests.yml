@@ -65,33 +65,16 @@ jobs:
       - name: Smoke test source Qt startup (Linux)
         if: runner.os == 'Linux'
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1")
-          subprocess.run(
-              ["xvfb-run", "-a", "python", "run_lite.py"],
-              env=env,
-              check=True,
-              timeout=90,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          xvfb-run -a python run_lite.py
 
       - name: Smoke test source Qt startup (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1", QT_QPA_PLATFORM="offscreen")
-          subprocess.run(
-              ["python", "run_lite.py"],
-              env=env,
-              check=True,
-              timeout=90,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          export QT_QPA_PLATFORM="offscreen"
+          python run_lite.py
 
   linux-pyqt-compat:
     name: Linux source compatibility (PyQt6 ${{ matrix.pyqt6-version }})
@@ -169,14 +152,5 @@ jobs:
 
       - name: Smoke test source Qt startup
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1")
-          subprocess.run(
-              ["xvfb-run", "-a", "python", "run_lite.py"],
-              env=env,
-              check=True,
-              timeout=90,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          xvfb-run -a python run_lite.py

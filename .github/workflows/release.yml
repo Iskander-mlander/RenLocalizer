@@ -26,34 +26,6 @@ jobs:
           pip install pyinstaller
           pip install -c constraints-release.txt -r requirements.txt
 
-name: Build and Release
-
-on:
-  push:
-    tags:
-      - '*'
-
-jobs:
-  # ============================================
-  # Windows Build (unchanged — onedir zip)
-  # ============================================
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -c constraints-release.txt -r requirements.txt
-
       - name: Build with PyInstaller
         run: |
           pyinstaller RenLocalizer.spec
@@ -106,35 +78,14 @@ jobs:
 
       - name: Smoke test Qt startup (Linux native)
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1")
-          subprocess.run(
-              ["xvfb-run", "-a", "./dist/RenLocalizer/RenLocalizer"],
-              env=env,
-              check=True,
-              timeout=60,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          xvfb-run -a ./dist/RenLocalizer/RenLocalizer
 
       - name: Smoke test Qt startup (Linux software fallback)
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(
-              os.environ,
-              RENLOCALIZER_QT_SMOKE_TEST="1",
-              RENLOCALIZER_QT_RENDER_MODE="software",
-          )
-          subprocess.run(
-              ["xvfb-run", "-a", "./dist/RenLocalizer/RenLocalizer"],
-              env=env,
-              check=True,
-              timeout=60,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          export RENLOCALIZER_QT_RENDER_MODE="software"
+          xvfb-run -a ./dist/RenLocalizer/RenLocalizer
 
       - name: Convert icon
         run: |
@@ -199,50 +150,21 @@ jobs:
 
       - name: Smoke test AppImage startup (Linux native)
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1", APPIMAGE_EXTRACT_AND_RUN="1")
-          subprocess.run(
-              ["xvfb-run", "-a", "./RenLocalizer-LITE-Linux-x64.AppImage"],
-              env=env,
-              check=True,
-              timeout=60,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          export APPIMAGE_EXTRACT_AND_RUN="1"
+          xvfb-run -a ./RenLocalizer-LITE-Linux-x64.AppImage
 
       - name: Smoke test AppImage startup (Linux software fallback)
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(
-              os.environ,
-              RENLOCALIZER_QT_SMOKE_TEST="1",
-              RENLOCALIZER_QT_RENDER_MODE="software",
-              APPIMAGE_EXTRACT_AND_RUN="1",
-          )
-          subprocess.run(
-              ["xvfb-run", "-a", "./RenLocalizer-LITE-Linux-x64.AppImage"],
-              env=env,
-              check=True,
-              timeout=60,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          export RENLOCALIZER_QT_RENDER_MODE="software"
+          export APPIMAGE_EXTRACT_AND_RUN="1"
+          xvfb-run -a ./RenLocalizer-LITE-Linux-x64.AppImage
 
       - name: Smoke test portable launcher (Linux tar.gz payload)
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1")
-          subprocess.run(
-              ["xvfb-run", "-a", "./dist/RenLocalizer/RenLocalizer.sh"],
-              env=env,
-              check=True,
-              timeout=60,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          xvfb-run -a ./dist/RenLocalizer/RenLocalizer.sh
 
       - name: Create tar.gz (Linux Portable)
         run: |
@@ -293,35 +215,14 @@ jobs:
 
       - name: Smoke test Qt startup (macOS native)
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1")
-          subprocess.run(
-              ["./RenLocalizer.app/Contents/MacOS/launch"],
-              env=env,
-              check=True,
-              timeout=60,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          ./RenLocalizer.app/Contents/MacOS/launch
 
       - name: Smoke test Qt startup (macOS software fallback)
         run: |
-          python - <<'PY'
-          import os
-          import subprocess
-          env = dict(
-              os.environ,
-              RENLOCALIZER_QT_SMOKE_TEST="1",
-              RENLOCALIZER_QT_RENDER_MODE="software",
-          )
-          subprocess.run(
-              ["./RenLocalizer.app/Contents/MacOS/launch"],
-              env=env,
-              check=True,
-              timeout=60,
-          )
-          PY
+          export RENLOCALIZER_QT_SMOKE_TEST="1"
+          export RENLOCALIZER_QT_RENDER_MODE="software"
+          ./RenLocalizer.app/Contents/MacOS/launch
 
       - name: Create DMG
         run: |
