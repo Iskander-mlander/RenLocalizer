@@ -28,7 +28,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller RenLocalizer.spec
+          python -m PyInstaller RenLocalizer.spec
 
       - name: Create archive
         run: |
@@ -74,7 +74,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller RenLocalizer.spec
+          python -m PyInstaller RenLocalizer.spec
 
       - name: Smoke test Qt startup (Linux native)
         run: |
@@ -138,9 +138,10 @@ jobs:
           # Download appimagetool
           wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
           chmod +x appimagetool
+          ./appimagetool --appimage-extract
           
-          # Build AppImage
-          ARCH=x86_64 ./appimagetool --appimage-extract-and-run RenLocalizer.AppDir RenLocalizer-LITE-Linux-x64.AppImage
+          # Build AppImage using extracted tool (avoids FUSE error)
+          ARCH=x86_64 ./squashfs-root/AppRun RenLocalizer.AppDir RenLocalizer-LITE-Linux-x64.AppImage
           chmod +x RenLocalizer-LITE-Linux-x64.AppImage
 
       - name: Install portable launcher script (Linux tar.gz)
@@ -206,7 +207,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller RenLocalizer.spec
+          python -m PyInstaller RenLocalizer.spec
 
       - name: Create .app bundle
         run: |
