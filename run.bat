@@ -1,4 +1,4 @@
 @echo off
 echo RenLocalizer baslatiliyor...
-python run.py
+python run_lite.py
 pause

@@ -49,7 +49,6 @@ jobs:
         shell: bash
         run: |
           python -m pytest \
-            tests/test_deep_extraction.py \
             tests/test_parser.py \
             tests/test_false_positive_filters.py \
             tests/test_text_type_filtering.py \
@@ -71,7 +70,7 @@ jobs:
           import subprocess
           env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1")
           subprocess.run(
-              ["xvfb-run", "-a", "python", "run.py"],
+              ["xvfb-run", "-a", "python", "run_lite.py"],
               env=env,
               check=True,
               timeout=90,
@@ -87,7 +86,7 @@ jobs:
           import subprocess
           env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1", QT_QPA_PLATFORM="offscreen")
           subprocess.run(
-              ["python", "run.py"],
+              ["python", "run_lite.py"],
               env=env,
               check=True,
               timeout=90,
@@ -175,7 +174,7 @@ jobs:
           import subprocess
           env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1")
           subprocess.run(
-              ["xvfb-run", "-a", "python", "run.py"],
+              ["xvfb-run", "-a", "python", "run_lite.py"],
               env=env,
               check=True,
               timeout=90,

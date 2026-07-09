@@ -524,6 +524,10 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
     # Now using atomic wrapper pairs to prevent confusion
     if wrapper_pairs:
         for open_tag, close_tag in reversed(wrapper_pairs):
+            # Check if the result is already wrapped by open_tag and close_tag to prevent double-wrapping
+            res_stripped = result.strip()
+            if res_stripped.startswith(open_tag) and res_stripped.endswith(close_tag):
+                continue
             result = open_tag + result + close_tag
     
     # Eski __TAG_ sistemi uyumluluğu
@@ -1511,7 +1515,7 @@ def restore_renpy_syntax_xml(text: str, placeholders: Dict[str, str]) -> str:
     # Regex: <ph id="N">...</ph> or <ph id = 'N'>...</ ph>
     # Case insensitive, whitespace tolerant for attributes and closing tag
     ph_pattern = re.compile(
-        r'<ph\b[^>]*\bid\s*=\s*["\']?(\d+)["\']?[^>]*>.*?</\s*ph\s*>',
+        r'<ph\b[^>]*\bid\s*=\s*["\']?([A-Za-z0-9_]+)["\']?[^>]*>.*?</\s*ph\s*>',
         re.IGNORECASE | re.DOTALL
     )
     

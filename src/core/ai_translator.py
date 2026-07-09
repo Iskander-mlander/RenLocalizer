@@ -1,872 +1,977 @@
+# -*- coding: utf-8 -*-
+"""
+AI Translator Implementations for RenLocalizer Lite.
+=====================================================
+
+Supports OpenAI, DeepSeek (OpenAI-compatible) and Local LLM (Ollama/LM Studio).
+GeminiTranslator remains a stub for future use.
+
+All engines share a common base that handles:
+  - XML-based batch segmentation (token-efficient)
+  - Exponential backoff with jitter
+  - quota_exceeded flag propagation
+  - Safety filter / content policy graceful recovery (return original text)
+  - Conditional import guard (if openai not installed, engines raise ImportError)
+"""
 from __future__ import annotations
 
 import asyncio
 import logging
-import json
-import os
 import random
 import re
-from abc import abstractmethod
-from typing import Dict, List, Optional, Any, Union, TYPE_CHECKING
+import xml.etree.ElementTree as ET
+from typing import Any, Dict, List, Optional, Tuple
 
-if TYPE_CHECKING:
-    import openai
-    from openai import AsyncOpenAI
-    from google import genai
-    from google.genai import types
-    import httpx
-
-from .translator import (
-    BaseTranslator, 
-    TranslationRequest, 
-    TranslationResult, 
-    TranslationEngine
+from src.core.translator import (
+    BaseTranslator,
+    TranslationEngine,
+    TranslationRequest,
+    TranslationResult,
 )
-from .syntax_guard import (
+from src.core.syntax_guard import (
     protect_renpy_syntax,
     restore_renpy_syntax,
-    protect_renpy_syntax_xml,
-    restore_renpy_syntax_xml,
-    validate_translation_integrity
+    validate_translation_integrity,
+    inject_missing_placeholders,
 )
 from src.utils.constants import (
-    AI_DEFAULT_TEMPERATURE, AI_DEFAULT_TIMEOUT, AI_DEFAULT_MAX_TOKENS,
-    AI_MAX_RETRIES, AI_LOCAL_TIMEOUT, AI_LOCAL_URL
+    AI_DEFAULT_TIMEOUT,
+    AI_LOCAL_TIMEOUT,
+    AI_DEFAULT_MAX_TOKENS,
+    AI_MAX_RETRIES,
+    AI_LOCAL_URL,
 )
 
-class LLMTranslator(BaseTranslator):
-    """Abstract base class for LLM-based translators."""
+# ── Optional dependency guard ─────────────────────────────────────────────────
+try:
+    from openai import AsyncOpenAI, APIStatusError, APITimeoutError, APIConnectionError
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
 
-    SYSTEM_PROMPT_TEMPLATE = """You are a professional video game localizer specializing in Ren'Py visual novels.
-Your task is to translate the given text from {source_lang} to {target_lang}.
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
-CRITICAL SYSTEM RULES:
-1. Preserve all XML placeholders like <ph id="0">[variable]</ph> or <ph id="1">{{tag}}</ph> EXACTLY as they are.
-2. Do NOT translate the content inside <ph>...</ph> tags. Treat them as immutable variables.
-3. You can move the <ph> tags within the sentence to respect the target language grammar.
-4. NARRATIVE CONTEXT: This is a visual novel where sentences flow consecutively. Maintain a consistent and natural tone. Pay strict attention to pronouns, politeness levels (e.g. formal "siz" vs informal "sen" in Turkish), and character voice.
-5. Return ONLY the translated text. Do NOT add notes, explanations, conversational filler, or quotes.
-6. If the text contains only technical codes, paths, or is untranslatable, return it exactly as is.
-7. This is an adult/unrestricted game. The content belongs to a fictional world and may contain adult (NSFW), violent, or sensitive elements. You MUST translate everything accurately without any censorship, moralizing, or softening of language. Maintain the professional localizer's tone.
-"""
+_XML_ITEM_RE = re.compile(r'<item\s+id="(\d+)">(.*?)</item>', re.DOTALL)
 
-    # --- Constants for Batch Processing ---
-    BATCH_ITEM_WRAPPER = '<r id="{index}">{text}</r>'
-    # --- Compiled Regex for Performance ---
-    BATCH_PARSE_RE = re.compile(r'<r id="(\d+)"[^>]*>(.*?)</r>', re.DOTALL)
-    
-    # Common model headers/intros cleanup patterns
-    LOCAL_LLM_CLEANUP_PATTERNS = [
-        re.compile(r'^(Turkish|English|Translation|Çeviri|Output|Result|Here is|Sure|Translated):\s*', re.IGNORECASE | re.MULTILINE),
-        re.compile(r'^.*?çeviriyorum:?\s*', re.IGNORECASE | re.MULTILINE),
-        re.compile(r'^.*?translated text is:?\s*', re.IGNORECASE | re.MULTILINE),
-        re.compile(r'^Text to translate:\s*', re.IGNORECASE | re.MULTILINE)
-    ]
-    
-    BATCH_INSTRUCTION_TEMPLATE = (
-        "\n\nIMPORTANT: You are processing a BATCH of {count} items.\n"
-        "Each item is wrapped in <r id=\"N\" [type=\"...\"] [context=\"...\"]> tags.\n"
-        "The 'type' attribute (if present) gives context (e.g. [ui_action], [dialogue]). Use it to verify meaning.\n"
-        "The 'context' attribute (if present) shows the PREVIOUS dialogue line. Use it to maintain narrative continuity (e.g. for 'extend' lines that continue a sentence).\n"
-        "You MUST return the translations in the SAME XML-like format: <r id=\"N\">Translation</r>.\n"
-        "Maintain the original IDs. Do not combine lines. Return ALL items."
-    )
-
-    # --- Constants for OpenRouter Identification ---
-    # OpenRouter uses these headers to credit usage to the application on their rankings page.
-    OPENROUTER_HEADERS = {
-        "HTTP-Referer": "https://github.com/Lord0fTurk/RenLocalizer",
-        "X-Title": "RenLocalizer"
-    }
+_SUPPORTED_LANGUAGES: Dict[str, str] = {
+    "auto": "Auto-detect",
+    "en": "English", "tr": "Turkish", "de": "German", "fr": "French",
+    "es": "Spanish", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
+    "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ar": "Arabic",
+    "pl": "Polish", "nl": "Dutch", "sv": "Swedish", "no": "Norwegian",
+    "da": "Danish", "fi": "Finnish", "hu": "Hungarian", "cs": "Czech",
+    "ro": "Romanian", "uk": "Ukrainian", "vi": "Vietnamese", "th": "Thai",
+}
 
 
-    def __init__(self, api_key: str, model: str, config_manager=None, 
-                 temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
-                 max_tokens=AI_DEFAULT_MAX_TOKENS, max_retries=AI_MAX_RETRIES, **kwargs):
-        super().__init__(api_key=api_key, **kwargs)
-        self.model = model
-        self.config_manager = config_manager
-        self.temperature = temperature
-        self.timeout = timeout
-        self.max_tokens = max_tokens
-        self.max_retries = max_retries
-        # Fallback engine (usually Google Web) if AI refuses content
-        self.fallback_translator: Optional[BaseTranslator] = None
-
-    def _get_text(self, key: str, default: str, **kwargs) -> str:
-        """Helper to get localized text from config_manager."""
-        if self.config_manager:
-            return self.config_manager.get_ui_text(key, default).format(**kwargs)
-        return default.format(**kwargs)
-
-    def set_fallback_translator(self, translator: BaseTranslator):
-        """Sets a fallback translator for safety filter violations."""
-        self.fallback_translator = translator
-
-    def _get_glossary_prompt_part(self) -> str:
-        """Constructs glossary instructions for system prompt."""
-        if not self.config_manager or not hasattr(self.config_manager, 'glossary'):
-            return ""
-        
-        # Filter active terms (non-empty source and target)
-        glossary = self.config_manager.glossary
-        active_terms = {k: v for k, v in glossary.items() if k and v}
-        
-        if not active_terms:
-            return ""
-            
-        lines = ["\n\nGLOSSARY / TERMINOLOGY (STRICTLY FOLLOW THESE):"]
-        for src, tgt in active_terms.items():
-            # Escape potential formatting chars if needed, though simple replacement is safer
-            lines.append(f"- {src} -> {tgt}")
-            
-        return "\n".join(lines) + "\n"
-
-    async def _handle_fallback(self, request: TranslationRequest, error_msg: str) -> TranslationResult:
-        """Executes fallback translation if available."""
-        if self.fallback_translator:
-            log_msg = self._get_text('log_ai_safety_fallback', 
-                                    "AI Safety Triggered ({error}). Falling back to {engine}...",
-                                    error=error_msg, engine=self.fallback_translator.__class__.__name__)
-            self.logger.warning(log_msg)
-            return await self.fallback_translator.translate_single(request)
-        
-        err_msg = self._get_text('error_ai_filtered', "AI Filtered: {error}", error=error_msg)
-        return TranslationResult(
-            request.text, 
-            "", 
-            request.source_lang, 
-            request.target_lang, 
-            request.engine, 
-            False, 
-            err_msg
+def _build_xml_batch(texts: List[str]) -> str:
+    """Wraps texts in an XML structure for token-efficient batching."""
+    parts = ["<translations>"]
+    for i, text in enumerate(texts):
+        # Escape special XML chars
+        safe = (
+            text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
         )
+        parts.append(f'  <item id="{i}">{safe}</item>')
+    parts.append("</translations>")
+    return "\n".join(parts)
 
-    @abstractmethod
-    async def _generate_completion(self, system_prompt: str, user_prompt: str) -> str:
-        """Abstract method to call the specific LLM API."""
+
+import json
+
+AI_BATCH_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "translations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "translated_text": {"type": "string"}
+                },
+                "required": ["id", "translated_text"]
+            }
+        }
+    },
+    "required": ["translations"]
+}
+
+
+def _build_json_batch(texts: List[str]) -> str:
+    """Wraps texts in a JSON structure matching the schema."""
+    items = []
+    for i, text in enumerate(texts):
+        items.append({"id": i, "text": text})
+    return json.dumps({"items_to_translate": items}, ensure_ascii=False)
+
+
+def _parse_json_batch(json_text: str, count: int) -> List[Optional[str]]:
+    """Parses structured JSON response from the model. Returns list of strings."""
+    results: List[Optional[str]] = [None] * count
+    try:
+        clean_text = json_text.strip()
+        if clean_text.startswith("```json"):
+            clean_text = clean_text[7:]
+        if clean_text.startswith("```"):
+            clean_text = clean_text[3:]
+        if clean_text.endswith("```"):
+            clean_text = clean_text[:-3]
+        clean_text = clean_text.strip()
+
+        data = json.loads(clean_text)
+        translations = data.get("translations", [])
+        for item in translations:
+            idx = item.get("id")
+            val = item.get("translated_text")
+            if idx is not None and val is not None:
+                results[int(idx)] = val
+    except Exception:
+        pass
+    return results
+
+
+def _recover_placeholders_levenshtein(source_text: str, translated_text: str, placeholders: Dict[str, str]) -> str:
+    """
+    Attempts to recover missing placeholders in translated_text by aligning them
+    relative to their neighbor words (anchors) in source_text using Levenshtein distance.
+    """
+    if not placeholders:
+        return translated_text
+
+    src_words = source_text.split()
+    tr_words = translated_text.split()
+
+    if not tr_words:
+        return translated_text
+
+    def edit_distance(s1: str, s2: str) -> int:
+        if len(s1) > len(s2):
+            s1, s2 = s2, s1
+        distances = list(range(len(s1) + 1))
+        for i2, c2 in enumerate(s2):
+            distances_ = [i2 + 1]
+            for i1, c1 in enumerate(s1):
+                if c1 == c2:
+                    distances_.append(distances[i1])
+                else:
+                    distances_.append(1 + min((distances[i1], distances[i1 + 1], distances_[-1])))
+            distances = distances_
+        return distances[-1]
+
+    def clean_punct(w: str) -> str:
+        return re.sub(r'[^\w\s\u0080-\uffff]', '', w).lower()
+
+    for token, original_val in placeholders.items():
+        if token in translated_text:
+            continue
+
+        token_idx = -1
+        for idx, w in enumerate(src_words):
+            if token in w:
+                token_idx = idx
+                break
+
+        if token_idx == -1:
+            continue
+
+        left_anchor = src_words[token_idx - 1] if token_idx > 0 else None
+        right_anchor = src_words[token_idx + 1] if token_idx < len(src_words) - 1 else None
+
+        best_left_idx = -1
+        best_left_val = 9999
+        best_right_idx = -1
+        best_right_val = 9999
+
+        for idx, w in enumerate(tr_words):
+            w_clean = clean_punct(w)
+            if not w_clean:
+                continue
+            if left_anchor:
+                la_clean = clean_punct(left_anchor)
+                dist = edit_distance(w_clean, la_clean)
+                if dist < best_left_val and dist < max(3, len(la_clean) // 2):
+                    best_left_val = dist
+                    best_left_idx = idx
+            if right_anchor:
+                ra_clean = clean_punct(right_anchor)
+                dist = edit_distance(w_clean, ra_clean)
+                if dist < best_right_val and dist < max(3, len(ra_clean) // 2):
+                    best_right_val = dist
+                    best_right_idx = idx
+
+        insert_idx = -1
+        if best_left_idx != -1 and best_right_idx != -1:
+            if best_left_idx < best_right_idx:
+                insert_idx = best_left_idx + 1
+            else:
+                insert_idx = best_right_idx
+        elif best_left_idx != -1:
+            insert_idx = best_left_idx + 1
+        elif best_right_idx != -1:
+            insert_idx = best_right_idx
+        else:
+            insert_idx = len(tr_words)
+
+        if insert_idx != -1:
+            tr_words.insert(insert_idx, token)
+
+    return _clean_orphaned_placeholders(" ".join(tr_words))
+
+
+def _clean_orphaned_placeholders(text: str) -> str:
+    """Removes any mangled or orphaned placeholder residues like PHxxxx_y, RLPHxxxx_y, ⟦, ⟧ etc."""
+    if not text:
+        return text
+    # 1. Remove namespaced token codes like RLPHxxxx or PHxxxx (with or without brackets, spaces, underscores, indices)
+    text = re.sub(r'⟦?\s*(?:R[A-Z]{0,6}LPH|PH)[0-9A-F]{3,}(?:\s*_\s*\d+|\s*\d+)?\s*⟧?', '', text, flags=re.IGNORECASE)
+    
+    # 2. Mask valid digit-based placeholders (e.g. ⟦0⟧, ⟦12⟧) so they don't get stripped
+    valid_tokens = re.findall(r'⟦\d+⟧', text)
+    for i, token in enumerate(valid_tokens):
+        text = text.replace(token, f"__VALID_PH_{i}__")
+        
+    # 3. Clean any orphaned bracket remains
+    text = text.replace('\u27e6', '').replace('\u27e7', '')
+    
+    # 4. Restore valid masked tokens
+    for i, token in enumerate(valid_tokens):
+        text = text.replace(f"__VALID_PH_{i}__", token)
+        
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def _parse_xml_batch(xml_text: str, count: int) -> List[Optional[str]]:
+    """Parses XML batch response. Returns list of strings (None for missing items)."""
+    results: List[Optional[str]] = [None] * count
+    try:
+        # Try to find and parse the <translations> block
+        start = xml_text.find("<translations>")
+        end = xml_text.find("</translations>")
+        if start != -1 and end != -1:
+            xml_block = xml_text[start: end + len("</translations>")]
+            root = ET.fromstring(xml_block)
+            for item in root.findall("item"):
+                idx_str = item.get("id")
+                if idx_str is not None and item.text is not None:
+                    try:
+                        results[int(idx_str)] = item.text
+                    except (ValueError, IndexError):
+                        pass
+            return results
+    except ET.ParseError:
         pass
 
-    # Enhanced prompt template for aggressive retry - forces AI to translate
-    AGGRESSIVE_RETRY_PROMPT = """You are a professional visual novel translator. The previous translation attempt returned the EXACT SAME text as the original.
-This is INCORRECT. You MUST translate the text from {source_lang} to {target_lang}.
+    # Fallback: regex scan
+    for m in _XML_ITEM_RE.finditer(xml_text):
+        try:
+            idx = int(m.group(1))
+            results[idx] = m.group(2)
+        except (ValueError, IndexError):
+            pass
+    return results
 
-IMPORTANT:
-- The text "{original_text}" IS NOT A VARIABLE, CODE, OR PATH. It is dialogue or narration.
-- Unless it is a proper noun (e.g., "John", "Tokyo") or an interface code, it MUST be translated.
-- If it contains <ph> tags, keep them unmodified but translate the readable text around them.
-- Ensure the translation fits a visual novel context (pay attention to formal/informal tone).
-- Return ONLY the translation, nothing else. No apologies, no explanations.
-- Preserve XML placeholders like <ph id="0">...</ph> exactly."""
+
+def _jitter_sleep(base: float, attempt: int, cap: float = 60.0) -> float:
+    """Returns wait time with full jitter: uniform(0, min(cap, base * 2^attempt))."""
+    return random.uniform(0, min(cap, base * (2 ** attempt)))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AsyncBaseAITranslator
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AsyncBaseAITranslator(BaseTranslator):
+    """
+    Shared base for all OpenAI-compatible AI translators.
+
+    Subclasses must set:
+      - self._client: AsyncOpenAI instance
+      - self._engine: TranslationEngine enum value
+      - self._model: str  (model name)
+      - self._timeout: float  (request timeout in seconds)
+      - self._batch_size: int  (segments per XML batch request)
+      - self._semaphore_count: int  (max parallel API requests)
+    """
+
+    _SYSTEM_PROMPT_TEMPLATE = (
+        "You are a professional game translator. "
+        "Translate game dialogue and UI text from {src} to {tgt}. "
+        "Preserve ALL special placeholders and XML tags exactly: tokens like <ph id=\"N\">...</ph>, "
+        "[variable], {tag}, {color=#fff}. "
+        "Maintain the tone, register and style of the original. "
+        "Return only the translated text, no explanations."
+    )
+
+    _BATCH_SYSTEM_PROMPT_TEMPLATE = (
+        "You are a professional game translator. "
+        "Translate game dialogue/UI text from {src} to {tgt}. "
+        "Rules: 1) Preserve ALL special tokens/tags exactly (XML tags like <ph id=\"N\">...</ph>, [var], {tag}). "
+        "2) Maintain tone, register, style. "
+        "3) You will receive an XML block with numbered <item> elements. "
+        "Return the SAME XML structure with translated text inside each <item>. "
+        "Do NOT add explanations or extra content outside the XML."
+    )
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        proxy_manager=None,
+        config_manager=None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+        timeout: Optional[float] = None,
+        batch_size: Optional[int] = None,
+        semaphore_count: Optional[int] = None,
+    ) -> None:
+        super().__init__(api_key=api_key, proxy_manager=proxy_manager, config_manager=config_manager)
+        if not _OPENAI_AVAILABLE:
+            raise ImportError(
+                "The 'openai' package is required for AI translation engines. "
+                "Install it with: pip install openai"
+            )
+        self._model: str = model or "gpt-4o-mini"
+        self._base_url: Optional[str] = base_url
+        self._timeout: float = timeout or AI_DEFAULT_TIMEOUT
+        self._batch_size: int = batch_size or 20
+        self._semaphore_count: int = semaphore_count or 5
+        self._engine: TranslationEngine = TranslationEngine.OPENAI
+        self._client: Optional[AsyncOpenAI] = None
+        self._semaphore: Optional[asyncio.Semaphore] = None
+
+    def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            kwargs: Dict[str, Any] = {
+                "api_key": self.api_key or "none",
+                "timeout": self._timeout,
+                "max_retries": 0,  # We handle retries ourselves
+            }
+            if self._base_url:
+                kwargs["base_url"] = self._base_url
+            self._client = AsyncOpenAI(**kwargs)
+        return self._client
+
+    def _map_unicode_to_ascii_placeholders(
+        self, text: str, placeholders: Dict[str, str]
+    ) -> Tuple[str, Dict[str, str]]:
+        """
+        Maps namespaced Unicode tokens (e.g. ⟦RLPHxxxx_0⟧) to tokenizer-friendly
+        ASCII placeholders (__PH_0__) to optimize model attention and prevent mutilation.
+        Returns mapped text and the new mapping registry.
+        """
+        if not text or not placeholders:
+            return text, {}
+
+        # Filter out metadata wrapper keys
+        vars_only = [
+            k for k in placeholders.keys()
+            if not k.startswith("__WRAPPER_") and not k.startswith("__TAG_")
+        ]
+        
+        ascii_map: Dict[str, str] = {}
+        mapped_text = text
+        for i, unicode_token in enumerate(vars_only):
+            ascii_token = f"__PH_{i}__"
+            ascii_map[ascii_token] = unicode_token
+            mapped_text = mapped_text.replace(unicode_token, ascii_token)
+            
+        return mapped_text, ascii_map
+
+    def _map_ascii_to_unicode_placeholders(
+        self, text: str, ascii_map: Dict[str, str]
+    ) -> str:
+        """
+        Reverts the tokenizer-friendly ASCII placeholders (__PH_0__) back to their
+        original namespaced Unicode tokens using tolerance-based regex.
+        """
+        if not text or not ascii_map:
+            return text
+
+        result = text
+        # Regex to capture '__PH_0__', '__ PH_0__', '__ph_0__' etc. with spaces
+        ph_pattern = re.compile(r'(?i)__\s*PH\s*_\s*(\d+)\s*__')
+        
+        def _replace_ph(m: re.Match) -> str:
+            try:
+                idx = int(m.group(1))
+                ascii_key = f"__PH_{idx}__"
+                return ascii_map.get(ascii_key, m.group(0))
+            except (ValueError, IndexError):
+                return m.group(0)
+                
+        result = ph_pattern.sub(_replace_ph, result)
+        return result
+
+    def _get_semaphore(self) -> asyncio.Semaphore:
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self._semaphore_count)
+        return self._semaphore
+
+    def _get_temperature(self) -> float:
+        if self.config_manager:
+            return getattr(self.config_manager.translation_settings, "ai_temperature", 0.3)
+        return 0.3
+
+    def _get_max_tokens(self) -> int:
+        if self.config_manager:
+            return getattr(self.config_manager.translation_settings, "ai_max_tokens", AI_DEFAULT_MAX_TOKENS)
+        return AI_DEFAULT_MAX_TOKENS
+
+    def _get_retry_count(self) -> int:
+        if self.config_manager:
+            return getattr(self.config_manager.translation_settings, "ai_retry_count", AI_MAX_RETRIES)
+        return AI_MAX_RETRIES
+
+    async def _call_api(
+        self,
+        system_prompt: str,
+        user_content: str,
+        use_json_schema: bool = False,
+    ) -> Optional[str]:
+        """Makes a single API call with retry + jitter backoff. Returns response text or None."""
+        client = self._get_client()
+        retries = self._get_retry_count()
+
+        for attempt in range(retries + 1):
+            try:
+                kwargs: Dict[str, Any] = {
+                    "model": self._model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "temperature": self._get_temperature(),
+                    "max_tokens": self._get_max_tokens(),
+                }
+                if use_json_schema:
+                    kwargs["response_format"] = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "translation_response",
+                            "strict": True,
+                            "schema": AI_BATCH_SCHEMA
+                        }
+                    }
+                response = await client.chat.completions.create(**kwargs)
+                finish_reason = response.choices[0].finish_reason
+                if finish_reason == "content_filter":
+                    # Safety filter block — return None to trigger graceful recovery
+                    self.logger.warning(
+                        f"[{self.__class__.__name__}] Content filter triggered. "
+                        "Will return original text for affected segment(s)."
+                    )
+                content = response.choices[0].message.content or None
+                if content:
+                    self.logger.debug(f"[{self.__class__.__name__}] Raw Response (truncated): {content[:300]}")
+                return content
+
+            except Exception as exc:
+                if use_json_schema and _OPENAI_AVAILABLE and isinstance(exc, APIStatusError) and exc.status_code == 400:
+                    self.logger.warning(
+                        f"[{self.__class__.__name__}] Custom engine failed on response_format json_schema (400). "
+                        "Retrying request immediately without JSON Schema constraints."
+                    )
+                    return await self._call_api(system_prompt, user_content, use_json_schema=False)
+
+                if _OPENAI_AVAILABLE and isinstance(exc, APIStatusError):
+                    status = exc.status_code
+                    if status == 404:
+                        self.logger.error(
+                            f"[{self.__class__.__name__}] Error 404: Model '{self._model}' not found on the server. "
+                            f"Please verify if model name is spelled correctly or ensure it is downloaded/loaded on your server."
+                        )
+                    elif status == 401:
+                        self.logger.error(
+                            f"[{self.__class__.__name__}] Error 401: Unauthorized. "
+                            f"Please check if your API Key is valid or configured correctly."
+                        )
+                elif _OPENAI_AVAILABLE and isinstance(exc, APIConnectionError):
+                    self.logger.error(
+                        f"[{self.__class__.__name__}] Connection Error: Could not connect to host '{self._base_url or 'OpenAI'}'. "
+                        f"Please verify your internet connection or check if your Local LLM engine (Ollama/LM Studio) is running."
+                    )
+
+                is_quota = False
+                is_retryable = False
+                retry_after: Optional[float] = None
+
+                if _OPENAI_AVAILABLE:
+                    if isinstance(exc, APIStatusError):
+                        status = exc.status_code
+                        # Check for Retry-After header
+                        try:
+                            ra = exc.response.headers.get("retry-after")
+                            if ra:
+                                retry_after = float(ra)
+                        except Exception:
+                            pass
+                        if status == 429:
+                            is_quota = True
+                            is_retryable = True
+                        elif status in (500, 502, 503, 504):
+                            is_retryable = True
+                        # 400, 401, 403 → not retryable
+                    elif isinstance(exc, (APITimeoutError, APIConnectionError)):
+                        is_retryable = True
+
+                if not is_retryable and not is_quota:
+                    self.logger.error(f"[{self.__class__.__name__}] Non-retryable error: {exc}")
+                    return None
+
+                if attempt >= retries:
+                    if is_quota:
+                        self.logger.warning(f"[{self.__class__.__name__}] Quota exceeded after {retries} retries.")
+                    else:
+                        self.logger.warning(f"[{self.__class__.__name__}] API error after {retries} retries: {exc}")
+                    return None
+
+                wait = retry_after if retry_after else _jitter_sleep(2.0, attempt)
+                self.logger.warning(
+                    f"[{self.__class__.__name__}] Retry {attempt + 1}/{retries} in {wait:.1f}s — {exc}"
+                )
+                await asyncio.sleep(wait)
+
+        return None
 
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
-        # ── Preprotected guard: pipeline may have already applied protect_renpy_syntax ──
-        meta = request.metadata if isinstance(request.metadata, dict) else {}
-        source_text = meta.get('original_text', request.text) if meta.get('preprotected') else request.text
-        protected_text, placeholders = protect_renpy_syntax_xml(source_text)
-        
-        # Add context to single translation
-        context_hint = meta.get('context_hint')
-        if context_hint:
-            protected_text_prompt = f"CONTEXT (Previous line): {context_hint}\n\nTEXT TO TRANSLATE:\n{protected_text}"
-        else:
-            protected_text_prompt = protected_text
+        """Translates a single segment."""
+        source_text = request.text.strip()
+        if not source_text:
+            return TranslationResult(
+                source_text, source_text, request.source_lang, request.target_lang,
+                self._engine, True, confidence=1.0,
+            )
 
-        
-        # Check if aggressive retry is enabled
-        aggressive_retry = False
-        if self.config_manager:
-            aggressive_retry = getattr(self.config_manager.translation_settings, 'aggressive_retry_translation', False)
-        
-        # Check if user has defined a custom system prompt
-        custom_prompt = ""
-        if self.config_manager:
-            custom_prompt = getattr(self.config_manager.translation_settings, 'ai_custom_system_prompt', '').strip()
-        
-        if custom_prompt:
-            # User-defined prompt with variable substitution
-            system_prompt = custom_prompt.replace('{source_lang}', request.source_lang).replace('{target_lang}', request.target_lang)
-        else:
-            # Default localized prompt
-            system_prompt = self._get_text('ai_system_prompt', self.SYSTEM_PROMPT_TEMPLATE,
-                                         source_lang=request.source_lang,
-                                         target_lang=request.target_lang)
-        
-        # Append Glossary instructions if available
-        glossary_part = self._get_glossary_prompt_part()
-        if glossary_part:
-            system_prompt += glossary_part
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        preprotected = bool(metadata.get('preprotected'))
+        xml_mode = bool(metadata.get('xml_mode', True))  # AI by default XML
 
-        max_retries = self.max_retries
-        backoff_base = 2.0
-        max_unchanged_retries = 2  # Number of retries with enhanced prompt for unchanged translations
+        if preprotected:
+            protected = request.text
+            placeholders = metadata.get('placeholders', {})
+        else:
+            from src.core.syntax_guard import protect_renpy_syntax_xml
+            if xml_mode:
+                protected, placeholders = protect_renpy_syntax_xml(source_text)
+            else:
+                protected, placeholders = protect_renpy_syntax(source_text)
+ 
+        # Map Unicode placeholders to tokenizer-friendly ASCII placeholders
+        if xml_mode:
+            mapped_protected = protected
+            ascii_map = {}
+        else:
+            mapped_protected, ascii_map = self._map_unicode_to_ascii_placeholders(protected, placeholders)
+
+        src = _SUPPORTED_LANGUAGES.get(request.source_lang, request.source_lang)
+        if request.source_lang == "auto":
+            src = "the original language"
+        tgt = _SUPPORTED_LANGUAGES.get(request.target_lang, request.target_lang)
         
-        for attempt in range(max_retries + 1):
-            try:
-                translated_content = await self._generate_completion(system_prompt, protected_text_prompt)
-                final_text = restore_renpy_syntax_xml(translated_content, placeholders)
-                
-                # 2. AŞAMA KORUMA (Validation - Sadece uyarı, reddetme)
-                missing_vars = validate_translation_integrity(final_text, placeholders)
-                if missing_vars:
-                   self.emit_log("warning", f"Syntax integrity warning: Possible missing variables {missing_vars}. Text: {source_text[:30]}...")
-                   # v2.5.1 uyumlu: Hata fırlatma, sadece uyar
-                
-                # Aggressive Retry: If translation equals original, retry with enhanced prompt
-                if aggressive_retry and final_text.strip() == source_text.strip() and len(source_text.strip()) > 3:
-                    self.emit_log("debug", f"AI translation unchanged, trying aggressive retry: {source_text[:50]}...")
-                    
-                    for retry_attempt in range(max_unchanged_retries):
-                        # Use aggressive prompt that forces translation
-                        aggressive_prompt = self.AGGRESSIVE_RETRY_PROMPT.format(
-                            source_lang=request.source_lang,
-                            target_lang=request.target_lang,
-                            original_text=source_text[:100]  # Include snippet of original
-                        )
-                        
-                        try:
-                            retry_content = await self._generate_completion(aggressive_prompt, protected_text_prompt)
-                            retry_final = restore_renpy_syntax_xml(retry_content, placeholders)
-                            
-                            if retry_final.strip() != source_text.strip():
-                                self.emit_log("info", f"Aggressive retry successful after {retry_attempt + 1} attempts")
-                                return TranslationResult(
-                                    original_text=source_text,
-                                    translated_text=retry_final.strip(),
-                                    source_lang=request.source_lang,
-                                    target_lang=request.target_lang,
-                                    engine=request.engine,
-                                    success=True,
-                                    confidence=0.85,  # Lower confidence for aggressive retry
-                                    metadata=request.metadata
-                                )
-                        except Exception as retry_e:
-                            self.emit_log("warning", f"Aggressive retry attempt {retry_attempt + 1} failed: {retry_e}")
-                        
-                        await asyncio.sleep(0.5)  # Brief delay between retries
-                    
-                    self.emit_log("warning", f"AI translation unchanged after aggressive retry: {source_text[:50]}...")
-                
-                return TranslationResult(
-                    original_text=source_text,
-                    translated_text=final_text.strip(),
-                    source_lang=request.source_lang,
-                    target_lang=request.target_lang,
-                    engine=request.engine,
-                    success=True,
-                    confidence=0.95,
-                    metadata=request.metadata # Preserve metadata!
-                )
-                
-            except ValueError as ve:
-                # Usually safety violations raise ValueError in our implementation
-                return await self._handle_fallback(request, str(ve))
-            except Exception as e:
-                # Rate limit error handling (429)
-                is_rate_limit = self._is_rate_limit_error(e)
-                
-                if is_rate_limit and attempt < max_retries:
-                    # Exponential backoff with jitter to avoid thundering herd
-                    wait_time = (backoff_base ** (attempt + 1)) + random.uniform(0.1, 1.0)
-                    self.emit_log("warning", f"AI Rate Limit hit ({request.engine.value}), waiting {wait_time:.2f}s... (Attempt {attempt+1}/{max_retries})")
-                    await asyncio.sleep(wait_time)
-                    continue
-                
-                self.emit_log("error", f"LLM Translation Error ({request.engine.value}): {e}")
-                if attempt < max_retries and not is_rate_limit:
-                    # For other errors, maybe a small delay before retry
-                    await asyncio.sleep(1.0)
-                    continue
-                
-                # Report definitive failure
-                return TranslationResult(
-                    source_text, "", request.source_lang, request.target_lang, request.engine, False, str(e), quota_exceeded=is_rate_limit
-                )
+        custom_prompt = None
+        if self.config_manager:
+            custom_prompt = getattr(self.config_manager.translation_settings, "ai_custom_system_prompt", None)
+            
+        if custom_prompt and custom_prompt.strip():
+            system_prompt = (
+                custom_prompt.strip() +
+                "\n\nImportant: You must strictly preserve all placeholders like __PH_0__, __PH_1__ exactly as they appear."
+            )
+        else:
+            system_prompt = (
+                "You are a professional game translator. "
+                f"Translate game dialogue and UI text from {src} to {tgt}. "
+                "Preserve ALL special placeholders exactly: tokens like __PH_0__, __PH_1__, "
+                "[variable], {tag}, {color=#fff}. "
+                "Maintain the tone, register and style of the original. "
+                "Return only the translated text, no explanations.\n\n"
+                "Examples with placeholders:\n"
+                "- Input: \"Hello __PH_0__, welcome to __PH_1__.\"\n"
+                "- Output: \"Merhaba __PH_0__, __PH_1__ sitesine hoş geldiniz.\"\n"
+                "- Input: \"Press {i}Enter{/i} to start [game_name].\"\n"
+                "- Output: \"{i}Enter{/i} tuşuna basarak [game_name] oyununu başlatın.\""
+            )
+ 
+        async with self._get_semaphore():
+            response = await self._call_api(system_prompt, mapped_protected)
+ 
+        if response is None:
+            # Graceful recovery: return original
+            return TranslationResult(
+                source_text, source_text, request.source_lang, request.target_lang,
+                self._engine, True, confidence=0.0, metadata={"skipped": True},
+            )
+ 
+        if xml_mode:
+            from src.core.syntax_guard import restore_renpy_syntax_xml
+            translated = restore_renpy_syntax_xml(response.strip(), placeholders)
+            missing = validate_translation_integrity(translated, placeholders)
+            if missing:
+                translated = source_text
+        else:
+            unmapped_response = self._map_ascii_to_unicode_placeholders(response.strip(), ascii_map)
+            translated = restore_renpy_syntax(unmapped_response, placeholders)
+            missing = validate_translation_integrity(translated, placeholders)
+            if missing:
+                # Attempt smart Levenshtein recovery first
+                recovered_lev = _recover_placeholders_levenshtein(source_text, translated, placeholders)
+                recovered_lev = restore_renpy_syntax(recovered_lev, placeholders)
+                still_missing = validate_translation_integrity(recovered_lev, placeholders)
+                if not still_missing:
+                    translated = recovered_lev
+                else:
+                    recovered = inject_missing_placeholders(translated, protected, placeholders, missing)
+                    recovered = restore_renpy_syntax(recovered, placeholders)
+                    still_missing = validate_translation_integrity(recovered, placeholders)
+                    translated = recovered if not still_missing else source_text
+        
+        # Clean any leftover orphaned/mangled placeholder residues at the very end
+        translated = _clean_orphaned_placeholders(translated)
+
+        return TranslationResult(
+            source_text, translated, request.source_lang, request.target_lang,
+            self._engine, True, confidence=0.9, metadata=request.metadata,
+        )
 
     async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
+        """Translates a batch using structured JSON Schema or XML grouping for token efficiency."""
         if not requests:
             return []
-            
-        # Get batch size from settings
-        batch_size = getattr(self.config_manager.translation_settings, 'ai_batch_size', 50)
-        
-        # If total requests exceed batch_size, split and process
-        if len(requests) > batch_size:
-            self.emit_log("info", f"Splitting large AI batch: {len(requests)} texts into chunks of {batch_size}")
-            results = []
-            for i in range(0, len(requests), batch_size):
-                chunk = requests[i:i + batch_size]
-                chunk_results = await self._translate_batch_internal(chunk)
-                results.extend(chunk_results)
-            return results
-        
-        return await self._translate_batch_internal(requests)
-
-    async def _translate_batch_internal(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
-        """Original batch translation logic, now handles a single appropriately sized chunk."""
         if len(requests) == 1:
             return [await self.translate_single(requests[0])]
-        
-        
-        # Internal Deduplication for AI Batch (Token saving)
-        # Even though Manager has dedup, doing it here is safer if translate_batch is called directly
-        indexed = list(enumerate(requests))
-        unique_map = {} # text -> [original_indices]
-        for idx, req in indexed:
-            unique_map.setdefault(req.text, []).append(idx)
-        
-        unique_requests = []
-        unique_indices_map = {} # unique_idx -> [original_indices]
-        for i, (text, indices) in enumerate(unique_map.items()):
-            # Use the first request as representative
-            first_req_idx = indices[0]
-            unique_requests.append(requests[first_req_idx])
-            unique_indices_map[i] = indices
-            
-        # Protect all texts and prepare prompt
-        batch_items = []
-        all_placeholders = [] # Corresponds to unique_requests
-        
-        for i, req in enumerate(unique_requests):
-            # ── Preprotected guard: pipeline may have already applied protect_renpy_syntax ──
-            meta = req.metadata if isinstance(req.metadata, dict) else {}
-            source_text = meta.get('original_text', req.text) if meta.get('preprotected') else req.text
-            protected, placeholders = protect_renpy_syntax_xml(source_text)
-            
-            # Extract context info from metadata if available
-            # We look for [tag] style markers in context_path
-            ctx_path = req.metadata.get('context_path', [])
-            type_attr = ""
-            if ctx_path:
-                # helper to join useful context
-                # Filter out file paths or IDs, keep descriptive tags
-                useful_ctx = [c for c in ctx_path if c.startswith('[') and c.endswith(']')]
-                if useful_ctx:
-                    type_val = ";".join(useful_ctx).replace('&', '&amp;').replace('"', '&quot;')
-                    type_attr = f' type="{type_val}"'
-            
-            # v2.7.1: extend context hint — önceki diyalog satırını bağlam olarak ekle
-            context_hint = meta.get('context_hint')
-            ctx_attr = ""
-            if context_hint:
-                # Sadece ilk 120 karakter — prompt şişmemeli
-                # & must be escaped FIRST to avoid double-escaping
-                hint_clean = (context_hint[:120]
-                              .replace('&', '&amp;')
-                              .replace('"', '&quot;')
-                              .replace('<', '&lt;')
-                              .replace('>', '&gt;'))
-                ctx_attr = f' context="{hint_clean}"'
-            
-            batch_items.append(f'<r id="{i}"{type_attr}{ctx_attr}>{protected}</r>')
-            all_placeholders.append(placeholders)
-            
-        user_prompt = "\n".join(batch_items)
-        
-        # System prompt with batching instructions
-        req0 = requests[0]
-        custom_prompt = ""
-        if self.config_manager:
-            custom_prompt = getattr(self.config_manager.translation_settings, 'ai_custom_system_prompt', '').strip()
-        
-        if custom_prompt:
-            base_system = custom_prompt.replace('{source_lang}', req0.source_lang).replace('{target_lang}', req0.target_lang)
-        else:
-            base_system = self._get_text('ai_system_prompt', self.SYSTEM_PROMPT_TEMPLATE,
-                                         source_lang=req0.source_lang,
-                                         target_lang=req0.target_lang)
-                                         
-        batch_instruction = self.BATCH_INSTRUCTION_TEMPLATE.format(count=len(unique_requests))
-        system_prompt = base_system + batch_instruction
-        
-        # Append Glossary instructions if available
-        glossary_part = self._get_glossary_prompt_part()
-        if glossary_part:
-            system_prompt += glossary_part
-        
-        max_retries = self.max_retries
-        for attempt in range(max_retries + 1):
-            if self.should_stop_callback and self.should_stop_callback():
-                return [TranslationResult(r.text, "", req0.source_lang, req0.target_lang, req0.engine, False, "Stopped by user") for r in requests]
-            try:
-                response_text = await self._generate_completion(system_prompt, user_prompt)
-                
-                # Parse the response (simple regex or tag lookup)
-                unique_results_map: Dict[int, TranslationResult] = {}
-                matches = self.BATCH_PARSE_RE.finditer(response_text)
-                
-                found_count = 0
-                for m in matches:
-                    u_idx = int(m.group(1)) # This is unique index
-                    translated_protected = m.group(2).strip()
-                    if 0 <= u_idx < len(unique_requests):
-                        final_text = restore_renpy_syntax_xml(translated_protected, all_placeholders[u_idx])
-                        
-                        # 2. AŞAMA KORUMA (Validation - Sadece uyarı)
-                        missing_vars = validate_translation_integrity(final_text, all_placeholders[u_idx])
-                        if missing_vars:
-                             self.emit_log("warning", f"Batch item {u_idx} integrity warning: Missing {missing_vars}. Continuing anyway.")
-                             # v2.5.1 uyumlu: continue yerine devam et
 
-                        req = unique_requests[u_idx]
-                        req_meta = req.metadata if isinstance(req.metadata, dict) else {}
-                        req_orig = req_meta.get('original_text', req.text)
-                        
-                        unique_results_map[u_idx] = TranslationResult(
-                            original_text=req_orig,
-                            translated_text=final_text,
-                            source_lang=req0.source_lang,
-                            target_lang=req0.target_lang,
-                            engine=req0.engine,
-                            success=True,
-                            metadata=req.metadata
-                        )
-                        found_count += 1
-                
-                # Check if we got all unique items back
-                if found_count >= len(unique_requests) * 0.9: # 90% success is good enough for batch, retry logic handles rest
-                    # Distribute results to all requests
-                    final_results: List[TranslationResult] = [None] * len(requests)
-                    
-                    # First fill from batch results
-                    for u_idx, res in unique_results_map.items():
-                        # Distribute to all original indices mapped to this unique index
-                        if u_idx in unique_indices_map:
-                            for orig_idx in unique_indices_map[u_idx]:
-                                # Copy result with correct metadata if needed
-                                orig_meta = requests[orig_idx].metadata if isinstance(requests[orig_idx].metadata, dict) else {}
-                                orig_text = orig_meta.get('original_text', requests[orig_idx].text)
-                                final_results[orig_idx] = TranslationResult(
-                                    orig_text,
-                                    res.translated_text,
-                                    res.source_lang,
-                                    res.target_lang,
-                                    res.engine,
-                                    True,
-                                    metadata=requests[orig_idx].metadata
-                                )
-                                
-                    # Handle missing items by falling back to single translation
-                    tasks = []
-                    missing_indices = []
-                    
-                    for i, res in enumerate(final_results):
-                        if res is None:
-                            missing_indices.append(i)
-                            # Only create task for unique missing items to save tokens
-                            pass 
+        # Chunk into batches of self._batch_size
+        chunks: List[List[Tuple[int, TranslationRequest]]] = []
+        cur_chunk: List[Tuple[int, TranslationRequest]] = []
+        for i, req in enumerate(requests):
+            cur_chunk.append((i, req))
+            if len(cur_chunk) >= self._batch_size:
+                chunks.append(cur_chunk)
+                cur_chunk = []
+        if cur_chunk:
+            chunks.append(cur_chunk)
 
-                    # If missing items, fallback individually (simple approach for now)
-                    if missing_indices:
-                        self.emit_log("warning", f"AI Batch incomplete. {len(missing_indices)} items missing. Retrying missing items individually...")
-                        for i in missing_indices:
-                             final_results[i] = await self.translate_single(requests[i])
-                             
-                    return final_results
+        results: List[Optional[TranslationResult]] = [None] * len(requests)
+        sem = self._get_semaphore()
+
+        async def process_chunk(chunk: List[Tuple[int, TranslationRequest]]) -> None:
+            protected_list: List[str] = []
+            placeholder_list: List[Dict] = []
+            source_list: List[str] = []
+            ascii_maps_list: List[Dict[str, str]] = []
+            
+            first_req = chunk[0][1]
+            first_metadata = first_req.metadata if isinstance(first_req.metadata, dict) else {}
+            xml_mode = bool(first_metadata.get('xml_mode', True))  # AI by default XML
+
+            for _, req in chunk:
+                src_text = req.text.strip()
+                source_list.append(src_text)
+                
+                req_metadata = req.metadata if isinstance(req.metadata, dict) else {}
+                req_preprotected = bool(req_metadata.get('preprotected'))
+                
+                if req_preprotected:
+                    prot = src_text
+                    ph = req_metadata.get('placeholders', {})
                 else:
-                    self.emit_log("warning", f"AI Batch partially incomplete ({found_count}/{len(unique_requests)}). Retrying items with limited concurrency...")
-                    # Fallback to concurrent single translations but LIMITED by a semaphore
-                    import asyncio
-                    concurrency = getattr(self.config_manager.translation_settings, 'ai_concurrency', 2)
-                    sem = asyncio.Semaphore(concurrency)
-                    
-                    async def sem_translate(req):
-                        async with sem:
-                            return await self.translate_single(req)
-                    
-                    results = await asyncio.gather(*[sem_translate(r) for r in requests], return_exceptions=True)
-                    
-                    # Handle results
-                    final_results = []
-                    for i, res in enumerate(results):
-                        if isinstance(res, Exception):
-                            final_results.append(TranslationResult(requests[i].text, "", requests[i].source_lang, requests[i].target_lang, requests[i].engine, False, str(res)))
-                        else:
-                            final_results.append(res)
-                    return final_results
-                    
-            except Exception as e:
-                is_rate_limit = self._is_rate_limit_error(e)
-                if is_rate_limit and attempt < max_retries:
-                    wait_time = (2.0 ** (attempt + 1)) + random.uniform(0.1, 1.0)
-                    self.emit_log("warning", f"AI Rate Limit hit in batch, waiting {wait_time:.2f}s...")
-                    await asyncio.sleep(wait_time)
-                    continue
+                    from src.core.syntax_guard import protect_renpy_syntax_xml
+                    if xml_mode:
+                        prot, ph = protect_renpy_syntax_xml(src_text)
+                    else:
+                        prot, ph = protect_renpy_syntax(src_text)
                 
-                self.emit_log("error", f"AI Batch Error: {e}. Falling back to limited concurrency...")
-                concurrency = getattr(self.config_manager.translation_settings, 'ai_concurrency', 2)
-                sem = asyncio.Semaphore(concurrency)
-                async def sem_translate(req):
-                    async with sem:
-                        return await self.translate_single(req)
-                return await asyncio.gather(*[sem_translate(r) for r in requests])
-                
-        concurrency = getattr(self.config_manager.translation_settings, 'ai_concurrency', 2)
-        sem = asyncio.Semaphore(concurrency)
-        async def sem_translate(req):
-            async with sem:
-                return await self.translate_single(req)
-        return await asyncio.gather(*[sem_translate(r) for r in requests])
+                if xml_mode:
+                    mapped_prot = prot
+                    ascii_map = {}
+                else:
+                    mapped_prot, ascii_map = self._map_unicode_to_ascii_placeholders(prot, ph)
+                    
+                protected_list.append(mapped_prot)
+                placeholder_list.append(ph)
+                ascii_maps_list.append(ascii_map)
 
-    def _is_rate_limit_error(self, e: Exception) -> bool:
-        """Determines if an exception is related to rate limiting (429)."""
-        err_str = str(e).lower()
-        # Common 429 indicators
-        if "429" in err_str or "rate limit" in err_str or "too many requests" in err_str:
-            return True
-        # Provider specific indicators
-        if "resource_exhausted" in err_str or "quota" in err_str:
-            return True
-        return False
+            src_lang = chunk[0][1].source_lang
+            tgt_lang_code = chunk[0][1].target_lang
+            src_label = _SUPPORTED_LANGUAGES.get(src_lang, src_lang)
+            if src_lang == "auto":
+                src_label = "the original language"
+            tgt_lang = _SUPPORTED_LANGUAGES.get(tgt_lang_code, tgt_lang_code)
+
+            # Check for custom system prompt
+            custom_prompt = None
+            if self.config_manager:
+                custom_prompt = getattr(self.config_manager.translation_settings, "ai_custom_system_prompt", None)
+
+            use_json = True
+            if custom_prompt and custom_prompt.strip():
+                system_prompt = (
+                    custom_prompt.strip() +
+                    "\n\nImportant: You must strictly return your response in the requested JSON structure matching the schema: "
+                    "{'translations': [{'id': integer, 'translated_text': string}]}. "
+                    "Do not add any conversational text or markdown wrappers. "
+                    "You must strictly preserve all placeholders like __PH_0__, __PH_1__ exactly as they appear."
+                )
+            else:
+                system_prompt = (
+                    "You are a professional game translator. "
+                    f"Translate game dialogue/UI text from {src_label} to {tgt_lang}. "
+                    "Rules: 1) Preserve ALL special tokens/tags exactly (like __PH_0__, __PH_1__, [var], {tag}). "
+                    "2) Maintain tone, register, style. "
+                    "3) Respond ONLY with a JSON object matching this schema: "
+                    "{'translations': [{'id': integer, 'translated_text': string}]}. "
+                    "Do NOT add any conversational prefix, suffix, or markdown code block formatting.\n\n"
+                    "Examples with placeholders:\n"
+                    "- Input: \"Hello __PH_0__, welcome to __PH_1__.\"\n"
+                    "- Output: \"Merhaba __PH_0__, __PH_1__ sitesine hoş geldiniz.\"\n"
+                    "- Input: \"Press {i}Enter{/i} to start [game_name].\"\n"
+                    "- Output: \"{i}Enter{/i} tuşuna basarak [game_name] oyununu başlatın.\""
+                )
+
+            batch_input = _build_json_batch(protected_list)
+
+            async with sem:
+                response = await self._call_api(system_prompt, batch_input, use_json_schema=use_json)
+
+            if response is None:
+                # Graceful recovery for whole chunk
+                for orig_idx, req in chunk:
+                    results[orig_idx] = TranslationResult(
+                        req.text, req.text, req.source_lang, req.target_lang,
+                        self._engine, True, confidence=0.0, metadata={"skipped": True},
+                    )
+                return
+
+            # Try parsing as JSON first
+            parsed = _parse_json_batch(response, len(chunk))
+
+            # Fallback to XML if JSON parsing yielded nothing
+            if all(x is None for x in parsed):
+                parsed = _parse_xml_batch(response, len(chunk))
+
+            for i, (orig_idx, req) in enumerate(chunk):
+                src_text = source_list[i]
+                translated_raw = parsed[i]
+                if translated_raw is None:
+                    # Fallback to individual translate
+                    results[orig_idx] = await self.translate_single(req)
+                    continue
+
+                if xml_mode:
+                    from src.core.syntax_guard import restore_renpy_syntax_xml
+                    translated = restore_renpy_syntax_xml(translated_raw.strip(), placeholder_list[i])
+                    missing = validate_translation_integrity(translated, placeholder_list[i])
+                    if missing:
+                        translated = src_text
+                else:
+                    unmapped_raw = self._map_ascii_to_unicode_placeholders(translated_raw.strip(), ascii_maps_list[i])
+                    translated = restore_renpy_syntax(unmapped_raw, placeholder_list[i])
+                    missing = validate_translation_integrity(translated, placeholder_list[i])
+                    if missing:
+                        # Attempt smart Levenshtein recovery first
+                        recovered_lev = _recover_placeholders_levenshtein(src_text, translated, placeholder_list[i])
+                        recovered_lev = restore_renpy_syntax(recovered_lev, placeholder_list[i])
+                        still_missing = validate_translation_integrity(recovered_lev, placeholder_list[i])
+                        if not still_missing:
+                            translated = recovered_lev
+                        else:
+                            recovered = inject_missing_placeholders(
+                                translated, protected_list[i], placeholder_list[i], missing
+                            )
+                            recovered = restore_renpy_syntax(recovered, placeholder_list[i])
+                            still_missing = validate_translation_integrity(recovered, placeholder_list[i])
+                            translated = recovered if not still_missing else src_text
+                
+                # Clean any leftover orphaned/mangled placeholder residues at the very end
+                translated = _clean_orphaned_placeholders(translated)
+
+                results[orig_idx] = TranslationResult(
+                    src_text, translated, req.source_lang, req.target_lang,
+                    self._engine, True, confidence=0.9, metadata=req.metadata,
+                )
+
+        await asyncio.gather(*(process_chunk(ch) for ch in chunks))
+
+        # Fill any None gaps with original text (safety net)
+        for i, req in enumerate(requests):
+            if results[i] is None:
+                results[i] = TranslationResult(
+                    req.text, req.text, req.source_lang, req.target_lang,
+                    self._engine, True, confidence=0.0,
+                )
+
+        return results  # type: ignore[return-value]
 
     def get_supported_languages(self) -> Dict[str, str]:
-        # LLMs support basically everything
-        return {"auto": "Auto", "en": "English", "tr": "Turkish"}
+        return _SUPPORTED_LANGUAGES
+
+    async def close(self) -> None:
+        await super().close()
+        if self._client:
+            try:
+                await self._client.close()
+            except Exception:
+                pass
+            self._client = None
 
 
-class OpenAITranslator(LLMTranslator):
-    """Translator using OpenAI API (ChatGPT) or OpenAI-compatible APIs (OpenRouter, Ollama)."""
+# ─────────────────────────────────────────────────────────────────────────────
+# OpenAITranslator
+# ─────────────────────────────────────────────────────────────────────────────
 
-    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo", base_url: Optional[str] = None, 
-                 temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
-                 max_tokens=AI_DEFAULT_MAX_TOKENS, **kwargs):
-        super().__init__(api_key, model, temperature=temperature, timeout=timeout, max_tokens=max_tokens, **kwargs)
-        
-        try:
-            from openai import AsyncOpenAI
-        except ImportError:
-            raise ImportError("openai library is not installed. Please install it via pip.")
-            
-        self.client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url  # Can be OpenRouter or local Ollama URL
-        )
-        self.is_openrouter = base_url and "openrouter" in base_url
+class OpenAITranslator(AsyncBaseAITranslator):
+    """
+    OpenAI translator (gpt-4o-mini default).
 
-    async def _generate_completion(self, system_prompt: str, user_prompt: str) -> str:
-        # OpenRouter expects identification headers for usage ranking.
-        extra_headers = self.OPENROUTER_HEADERS if self.is_openrouter else None
-        
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                timeout=self.timeout,
-                extra_headers=extra_headers
+    Uses XML batch for token efficiency and full retry/quota handling.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        proxy_manager=None,
+        config_manager=None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+        **kwargs,
+    ) -> None:
+        resolved_model = model
+        if not resolved_model and config_manager:
+            resolved_model = getattr(
+                config_manager.translation_settings, "openai_model", "gpt-4o-mini"
             )
-            
-            # Safely extract content from response
-            if not response or not hasattr(response, 'choices') or not response.choices:
-                raise ValueError(self._get_text('error_ai_no_choices', 
-                    "AI response has no choices. Check if your API provider is running correctly."))
-            
-            first_choice = response.choices[0]
-            if not first_choice or not hasattr(first_choice, 'message') or not first_choice.message:
-                raise ValueError(self._get_text('error_ai_no_message', 
-                    "AI response has no message. The model may not be loaded properly."))
-            
-            content = first_choice.message.content
-            if not content:
-                # Some models return refusal in a different field or just empty
-                if hasattr(first_choice, 'refusal') and first_choice.refusal:
-                    raise ValueError(f"AI Refusal: {first_choice.refusal}")
-                raise ValueError(self._get_text('error_ai_empty_response', "Empty response from AI"))
-                
-            # Token usage tracking
-            if hasattr(response, 'usage') and response.usage:
-                prompt_tokens = getattr(response.usage, 'prompt_tokens', 0)
-                completion_tokens = getattr(response.usage, 'completion_tokens', 0)
-                total_tokens = getattr(response.usage, 'total_tokens', 0)
-                self.emit_log("debug", f"OpenAI Token Usage: {prompt_tokens} prompt + {completion_tokens} completion = {total_tokens} total")
-                
-            # Basic refusal check
-            if hasattr(first_choice, 'finish_reason') and first_choice.finish_reason == 'content_filter':
-                raise ValueError(self._get_text('error_ai_content_filter', "Content filtered by AI safety policy"))
+        resolved_model = resolved_model or "gpt-4o-mini"
 
-            return content
-            
-        except Exception as e:
-            # Check for refusal in exception message
-            if "content_filter" in str(e) or "safety" in str(e).lower():
-                raise ValueError(self._get_text('error_ai_content_policy', "Content Policy Violation: {error}", error=str(e)))
-            raise e
+        resolved_base_url = base_url
+        if not resolved_base_url and config_manager:
+            resolved_base_url = getattr(
+                config_manager.translation_settings, "openai_base_url", None
+            ) or None
 
-    async def close(self):
-        await self.client.close()
+        timeout = AI_DEFAULT_TIMEOUT
+        if config_manager:
+            timeout = getattr(config_manager.translation_settings, "ai_timeout", AI_DEFAULT_TIMEOUT)
+
+        batch_size = 20
+        if config_manager:
+            batch_size = getattr(config_manager.translation_settings, "ai_batch_size", 20)
+
+        super().__init__(
+            api_key=api_key,
+            proxy_manager=proxy_manager,
+            config_manager=config_manager,
+            model=resolved_model,
+            base_url=resolved_base_url,
+            timeout=timeout,
+            batch_size=batch_size,
+            semaphore_count=5,
+        )
+        self._engine = TranslationEngine.OPENAI
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DeepSeekTranslator
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+_DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
 
 
 class DeepSeekTranslator(OpenAITranslator):
-    """DeepSeek-compatible translator (uses the same API as OpenAI)."""
-    def __init__(self, api_key: str, model: str = "deepseek-chat", 
-                 temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
-                 max_tokens=AI_DEFAULT_MAX_TOKENS, **kwargs):
-        # DeepSeek API endpoint
-        base_url = "https://api.deepseek.com/v1"
-        super().__init__(api_key, model, base_url=base_url, 
-                         temperature=temperature, timeout=timeout, 
-                         max_tokens=max_tokens, **kwargs)
-
-
-
-
-class LocalLLMTranslator(LLMTranslator):
     """
-    Translator for local LLM servers (Ollama, LM Studio, Text Generation WebUI, LocalAI).
-    Uses httpx for direct HTTP requests instead of OpenAI SDK for better control and error handling.
+    DeepSeek translator via OpenAI-compatible API.
+
+    Uses the same XML batch pipeline as OpenAI; only the endpoint and model differ.
+    Higher concurrency allowed (DeepSeek supports more concurrent requests).
     """
-    
-    # Optimized prompt for local LLMs (Ollama, LM Studio)
-    # Smaller models get confused by long rules; keep it very direct
-    LOCAL_SYSTEM_PROMPT = """Translate from {source_lang} to {target_lang}. Preserve Ren'Py [vars] and {{tags}}. Return ONLY the translated text."""
-    
-    def __init__(self, model: str = "llama3.2", base_url: str = "http://localhost:11434/v1",
-                 api_key: str = "local", temperature=AI_DEFAULT_TEMPERATURE,
-                 timeout=AI_LOCAL_TIMEOUT, max_tokens=AI_DEFAULT_MAX_TOKENS, config_manager=None, **kwargs):
-        super().__init__(api_key=api_key, model=model, temperature=temperature,
-                         timeout=timeout, max_tokens=max_tokens, config_manager=config_manager, **kwargs)
-        
-        try:
-            import httpx
-        except ImportError:
-            raise ImportError("httpx library is not installed. Please install it via: pip install httpx")
-        
-        self.httpx = httpx
-        
-        self.base_url = base_url.rstrip('/')
-        self.server_type = self._detect_server_type(base_url)
-        self._client: Optional[httpx.AsyncClient] = None
-        self._health_checked = False
-        self._available_models: List[str] = []
-    
-    def _detect_server_type(self, url: str) -> str:
-        """Detect the server type from URL."""
-        url_lower = url.lower()
-        if ":11434" in url_lower or "ollama" in url_lower:
-            return "ollama"
-        elif ":1234" in url_lower or "lmstudio" in url_lower:
-            return "lmstudio"
-        elif ":5000" in url_lower or "textgen" in url_lower:
-            return "textgen"
-        elif ":8080" in url_lower or "localai" in url_lower:
-            return "localai"
-        return "unknown"
-    
-    async def _get_client(self):
-        """Get or create the HTTP client."""
-        if self._client is None or self._client.is_closed:
-            self._client = self.httpx.AsyncClient(
-                timeout=self.httpx.Timeout(self.timeout, connect=10.0),
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}" if self.api_key else ""
-                }
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        proxy_manager=None,
+        config_manager=None,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            api_key=api_key,
+            proxy_manager=proxy_manager,
+            config_manager=config_manager,
+            model=_DEEPSEEK_DEFAULT_MODEL,
+            base_url=_DEEPSEEK_BASE_URL,
+        )
+        # DeepSeek allows more concurrent requests than OpenAI
+        self._semaphore_count = 12
+        self._semaphore = None  # Reset so new semaphore is created with updated count
+        self._timeout = 120.0
+        self._engine = TranslationEngine.OPENAI  # Routed through OpenAI engine enum
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LocalLLMTranslator
+# ─────────────────────────────────────────────────────────────────────────────
+
+class LocalLLMTranslator(OpenAITranslator):
+    """
+    Local LLM translator via Ollama / LM Studio OpenAI-compatible API.
+
+    Connects to a local inference server (default: Ollama at localhost:11434).
+    Uses lower concurrency since local GPUs run single-threaded inference.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        proxy_manager=None,
+        config_manager=None,
+        **kwargs,
+    ) -> None:
+        base_url = AI_LOCAL_URL
+        model = "llama3.2"
+        if config_manager:
+            base_url = (
+                getattr(config_manager.translation_settings, "local_llm_url", None)
+                or AI_LOCAL_URL
             )
-        return self._client
-    
-    async def health_check(self) -> tuple:
-        """Check if the local LLM server is running and accessible."""
-        try:
-            client = await self._get_client()
-            models_url = f"{self.base_url}/models"
-            response = await client.get(models_url, timeout=5.0)
-            if response.status_code == 200:
-                return (True, "Ready")
-            return (False, f"HTTP {response.status_code}")
-        except Exception as e:
-            return (False, str(e))
+            model = (
+                getattr(config_manager.translation_settings, "local_llm_model", None)
+                or "llama3.2"
+            )
 
-    async def _generate_completion(self, system_prompt: str, user_prompt: str) -> str:
-        """Direct HTTP call for local LLM completion."""
-        try:
-            client = await self._get_client()
-            url = f"{self.base_url}/chat/completions"
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens
-            }
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                content = data['choices'][0]['message']['content'] or ""
-                self.emit_log("debug", f"Local LLM Raw Output: {content[:100]}...")
-                return content
-            raise RuntimeError(f"API Error {resp.status_code}: {resp.text}")
-        except Exception as e:
-            raise e
+        super().__init__(
+            api_key=api_key or "none",  # Local LLM doesn't need a real key
+            proxy_manager=proxy_manager,
+            config_manager=config_manager,
+            model=model,
+            base_url=base_url,
+        )
+        # Local LLMs run single GPU inference — low concurrency avoids thrashing
+        self._semaphore_count = 2
+        self._semaphore = None
+        self._timeout = AI_LOCAL_TIMEOUT
+        self._batch_size = 10  # Smaller batches for slower local models
+        self._engine = TranslationEngine.LOCAL_LLM
 
-    # ULTRA-MINIMAL prompt for local models - no examples, just direct command
-    LOCAL_SYSTEM_PROMPT = """Translate from {source_lang} to {target_lang}. Keep [brackets] and {{braces}} unchanged. Output only the translation.
 
-{text}"""
+# ─────────────────────────────────────────────────────────────────────────────
+# GeminiTranslator — stub (for future implementation)
+# ─────────────────────────────────────────────────────────────────────────────
 
-    def _get_lang_name(self, code: str) -> str:
-        """Convert language codes to full names for better LLM understanding."""
-        names = {
-            'tr': 'Turkish', 'en': 'English', 'de': 'German', 'fr': 'French',
-            'es': 'Spanish', 'ru': 'Russian', 'it': 'Italian', 'zh': 'Chinese',
-            'pt': 'Portuguese', 'ja': 'Japanese', 'ko': 'Korean', 'auto': 'Source Language'
-        }
-        return names.get(code.lower(), code)
+class GeminiTranslator(BaseTranslator):
+    """Gemini translator stub. Not yet implemented in Lite edition."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass  # No super().__init__ — intentionally non-functional
 
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
-        """Single translation with full language names and zero-wrapper prompt."""
-        try:
-            # Check for custom prompt
-            custom_prompt = None
-            if self.config_manager:
-                custom_prompt = getattr(self.config_manager.translation_settings, 'ai_custom_system_prompt', None)
-            
-            # Use full names for better quality
-            src_name = self._get_lang_name(request.source_lang)
-            tgt_name = self._get_lang_name(request.target_lang)
-            
-            # ── Preprotected guard: pipeline may have already applied protect_renpy_syntax ──
-            meta = request.metadata if isinstance(request.metadata, dict) else {}
-            source_text = meta.get('original_text', request.text) if meta.get('preprotected') else request.text
-            protected, placeholders = protect_renpy_syntax(source_text)
-            
-            # Add context constraint
-            context_hint = meta.get('context_hint')
-            context_str = f"Context (Previous line): {context_hint}\nText to translate:\n" if context_hint else ""
-            
-            if custom_prompt:
-                system_prompt = custom_prompt.replace('{source_lang}', src_name).replace('{target_lang}', tgt_name)
-                final_user_prompt = context_str + protected
-            else:
-                # For Local LLM, we combine system and user into a single clear instruction 
-                # because some local servers handle "system" role poorly.
-                system_prompt = "You are a professional translator."
-                final_user_prompt = self.LOCAL_SYSTEM_PROMPT.format(
-                    source_lang=src_name,
-                    target_lang=tgt_name,
-                    text=context_str + protected
-                )
-            
-            # Get completion
-            raw_text = await self._generate_completion(system_prompt, final_user_prompt)
-            
-            # Post-processing cleanup (Aggressively remove conversational filler)
-            clean_text = raw_text.strip()
-            
-            # Remove common model headers/intros (Case insensitive & multiline)
-            # Remove common model headers/intros (Case insensitive & multiline)
-            for pattern in self.LOCAL_LLM_CLEANUP_PATTERNS:
-                clean_text = pattern.sub('', clean_text)
-            
-            clean_text = clean_text.split('\n')[0] # Only take the first line (common for single translations)
-            clean_text = clean_text.strip(' "«»\'') # Strip quotes and brackets
-            
-            # Restore
-            final_text = restore_renpy_syntax(clean_text, placeholders)
-            
-            # Last resort: if the model corrupted XRPYX placeholders or returned empty, use original
-            if not final_text or 'XRPYX' in final_text and 'XRPYX' not in source_text:
-                 self.emit_log("warning", f"Local LLM corrupted placeholders, using original: {source_text[:50]}...")
-                 final_text = source_text
+        return TranslationResult(
+            request.text, request.text, request.source_lang, request.target_lang,
+            TranslationEngine.GEMINI, False, "Gemini engine is not available in Lite edition.",
+        )
 
-            return TranslationResult(source_text, final_text, request.source_lang, request.target_lang, request.engine, True)
-        except Exception as e:
-            return TranslationResult(source_text, "", request.source_lang, request.target_lang, request.engine, False, str(e))
-
-    async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
-        """Local LLMs often fail with XML-style batching. Process one-by-one instead."""
-        results = []
-        for req in requests:
-            res = await self.translate_single(req)
-            results.append(res)
-        return results
-
-
-class GeminiTranslator(LLMTranslator):
-    """Translator using Google Gemini API (via new google-genai SDK)."""
-
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash", safety_level: str = "BLOCK_NONE", 
-                 temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
-                 max_tokens=AI_DEFAULT_MAX_TOKENS, **kwargs):
-        super().__init__(api_key, model, temperature=temperature, timeout=timeout, max_tokens=max_tokens, **kwargs)
-        
-        try:
-            from google import genai
-            from google.genai import types
-            self.genai = genai
-            self.types = types
-        except ImportError:
-            raise ImportError("google-genai library is not installed.")
-        
-        self.client = self.genai.Client(api_key=api_key)
-        self.safety_level = safety_level
-
-    def _get_safety_settings(self) -> List[types.SafetySetting]:
-        # Default to BLOCK_NONE for all categories if user requested no blocking
-        level = "BLOCK_NONE"
-        if self.safety_level == "BLOCK_ONLY_HIGH":
-            level = "BLOCK_ONLY_HIGH"
-        elif self.safety_level == "STANDARD":
-            level = "BLOCK_LOW_AND_ABOVE" # Default behavior for Gemini
-            
-        categories = [
-            "HARM_CATEGORY_HARASSMENT",
-            "HARM_CATEGORY_HATE_SPEECH",
-            "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "HARM_CATEGORY_DANGEROUS_CONTENT"
-        ]
-        
-        return [
-            self.types.SafetySetting(category=cat, threshold=level)
-            for cat in categories
-        ]
-
-    async def _generate_completion(self, system_prompt: str, user_prompt: str) -> str:
-        try:
-            # The new SDK supports system_instruction directly
-            config = self.types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=self.temperature,
-                max_output_tokens=self.max_tokens,
-                safety_settings=self._get_safety_settings()
-            )
-            
-            # Use asyncio.to_thread for synchronous SDK calls or use async client if available
-            # Note: as of now, direct async support in google-genai might vary, 
-            # we use the standard generate_content in a thread to keep it stable.
-            def call_gemini():
-                return self.client.models.generate_content(
-                    model=self.model,
-                    contents=user_prompt,
-                    config=config
-                )
-            
-            response = await asyncio.to_thread(call_gemini)
-            
-            if not response.text:
-                # If no text, check if it was blocked
-                raise ValueError(self._get_text('error_ai_blocked', "AI returned empty text, possibly blocked by safety filters."))
-            
-            # Token usage tracking for Gemini
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                prompt_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0)
-                completion_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0)
-                total_tokens = getattr(response.usage_metadata, 'total_token_count', 0)
-                self.emit_log("debug", f"Gemini Token Usage: {prompt_tokens} prompt + {completion_tokens} completion = {total_tokens} total")
-                
-            return response.text
-            
-        except Exception as e:
-            err_str = str(e).lower()
-            if "safety" in err_str or "block" in err_str:
-                raise ValueError(self._get_text('error_gemini_safety', "Gemini Safety Filter: {error}", error=str(e)))
-            raise e
-
-    async def close(self):
-        """Cleanup resources."""
-        await super().close()
+    def get_supported_languages(self) -> Dict[str, str]:
+        return {}

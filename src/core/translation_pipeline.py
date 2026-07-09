@@ -366,7 +366,7 @@ class TranslationPipeline(QObject):
             return None
         if any(remnant in trans for remnant in SEPARATOR_REMNANTS):
             return 'separator_remnant'
-        if '⟦' in trans or '⟧' in trans or PLACEHOLDER_REMNANT_RE.search(trans):
+        if '⟦' in trans or '⟧' in trans or PLACEHOLDER_REMNANT_RE.search(trans) or '<ph id=' in trans or '</ph>' in trans:
             return 'placeholder_remnant'
         if HTML_LEAK_RE.search(trans):
             return 'html_leakage'
@@ -3651,8 +3651,8 @@ init python:
 
         return '\n'.join(header + lines)
     
-    def _protect_glossary_terms(self, text: str) -> Tuple[str, Dict[str, str]]:
-        """Sözlük terimlerini Unicode bracket placeholder ile korur ve karşılıklarını saklar.
+    def _protect_glossary_terms(self, text: str, xml_mode: bool = False) -> Tuple[str, Dict[str, str]]:
+        """Sözlük terimlerini Unicode bracket placeholder veya XML tag ile korur ve karşılıklarını saklar.
         
         v3.4: [[g0]] formatı yerine ⟦RLPH{ns}_gN⟧ formatına geçildi.
         Eski format Google Translate tarafından kolayca bozuluyordu çünkü
@@ -3679,8 +3679,13 @@ init python:
             
             def replace_func(match):
                 nonlocal counter
-                key = f"\u27e6RLPH{token_namespace}_G{counter}\u27e7"
-                placeholders[key] = dst  # Hedef çeviriyi yer tutucu sözlüğüne koy!
+                matched_text = match.group(0)
+                if xml_mode:
+                    key = f'<ph id="G{counter}">{matched_text}</ph>'
+                    placeholders[f"G{counter}"] = dst
+                else:
+                    key = f"\u27e6RLPH{token_namespace}_G{counter}\u27e7"
+                    placeholders[key] = dst  # Hedef çeviriyi yer tutucu sözlüğüne koy!
                 counter += 1
                 return key
                 
@@ -3715,7 +3720,14 @@ init python:
     def _translate_entries(self, entries: List[TranslationEntry]) -> Dict[str, str]:
         """Girişleri çevir (placeholder koruması zorunlu)."""
         from src.core.translator import protect_renpy_syntax
-        from src.core.syntax_guard import split_delimited_text, rejoin_delimited_text, split_angle_pipe_groups, rejoin_angle_pipe_groups
+        from src.core.syntax_guard import (
+            split_delimited_text,
+            rejoin_delimited_text,
+            split_angle_pipe_groups,
+            rejoin_angle_pipe_groups,
+            protect_renpy_syntax_xml,
+            restore_renpy_syntax_xml,
+        )
         translations = {}
         self._last_atomic_segments = {}  # v2.7.1: Delimiter atomik segment çiftleri
         formatter = RenPyOutputFormatter()
@@ -3827,10 +3839,9 @@ init python:
         should_use_global_cache = getattr(self.config.translation_settings, 'use_global_cache', True)
         
         if should_use_global_cache:
-            # Create a project name based ID (last part of project_path)
-            project_name = os.path.basename(self.project_path.rstrip('/\\'))
-            if not project_name:
-                project_name = "default_project"
+            # Create a stable project name ID based on options.rpy, EXE name, or folder normalization
+            from src.utils.path_manager import get_project_id
+            project_name = get_project_id(self.project_path, self.game_exe_path)
             
             # Use data_dir from config (which accounts for portable mode)
             base_cache_dir = os.path.join(self.config.data_dir, getattr(self.config.translation_settings, 'cache_path', 'cache'))
@@ -4002,6 +4013,7 @@ init python:
             failed_entries: List[str] = []
             sample_logs: List[str] = []
             stop_quota = False
+            is_ai_engine = self.engine in (TranslationEngine.OPENAI, TranslationEngine.GEMINI, TranslationEngine.LOCAL_LLM)
             for i in range(0, total, batch_size):
                 if self.should_stop:
                     break
@@ -4081,8 +4093,12 @@ init python:
                         self.log_message.emit("debug", f"[MultiGroup] {len(groups)} groups ({sum(group_lens)} segments): {_log_preview}")
                         
                         # Request 0: Template ([DGRP_N] placeholder'lı — protect_renpy_syntax korur)
-                        protected_template, ph_template = protect_renpy_syntax(template)
-                        protected_template, gph_template = self._protect_glossary_terms(protected_template)
+                        if is_ai_engine:
+                            protected_template, ph_template = protect_renpy_syntax_xml(template)
+                            protected_template, gph_template = self._protect_glossary_terms(protected_template, xml_mode=True)
+                        else:
+                            protected_template, ph_template = protect_renpy_syntax(template)
+                            protected_template, gph_template = self._protect_glossary_terms(protected_template)
                         ph_template.update(gph_template)
                         
                         requests.append(TranslationRequest(
@@ -4099,6 +4115,7 @@ init python:
                                 'line_number': entry.line_number,
                                 'context_path': getattr(entry, 'context_path', []),
                                 'placeholders': ph_template,
+                                'xml_mode': is_ai_engine,
                                 '_multi_group_template': True,
                             }
                         ))
@@ -4107,8 +4124,12 @@ init python:
                         for group in groups:
                             for seg in group:
                                 seg_text = seg.strip()
-                                protected_seg, ph_seg = protect_renpy_syntax(seg_text)
-                                protected_seg, gph_seg = self._protect_glossary_terms(protected_seg)
+                                if is_ai_engine:
+                                    protected_seg, ph_seg = protect_renpy_syntax_xml(seg_text)
+                                    protected_seg, gph_seg = self._protect_glossary_terms(protected_seg, xml_mode=True)
+                                else:
+                                    protected_seg, ph_seg = protect_renpy_syntax(seg_text)
+                                    protected_seg, gph_seg = self._protect_glossary_terms(protected_seg)
                                 ph_seg.update(gph_seg)
                                 
                                 requests.append(TranslationRequest(
@@ -4125,6 +4146,7 @@ init python:
                                         'line_number': entry.line_number,
                                         'context_path': getattr(entry, 'context_path', []),
                                         'placeholders': ph_seg,
+                                        'xml_mode': is_ai_engine,
                                         '_multi_group_segment': True,
                                     }
                                 ))
@@ -4149,8 +4171,12 @@ init python:
                         # Her segmenti ayrı bir request olarak ekle
                         for seg in segments:
                             seg_text = seg.strip()
-                            protected_text, placeholders = protect_renpy_syntax(seg_text)
-                            protected_text, glossary_placeholders = self._protect_glossary_terms(protected_text)
+                            if is_ai_engine:
+                                protected_text, placeholders = protect_renpy_syntax_xml(seg_text)
+                                protected_text, glossary_placeholders = self._protect_glossary_terms(protected_text, xml_mode=True)
+                            else:
+                                protected_text, placeholders = protect_renpy_syntax(seg_text)
+                                protected_text, glossary_placeholders = self._protect_glossary_terms(protected_text)
                             placeholders.update(glossary_placeholders)
                             
                             req = TranslationRequest(
@@ -4167,6 +4193,7 @@ init python:
                                     'line_number': entry.line_number,
                                     'context_path': getattr(entry, 'context_path', []),
                                     'placeholders': placeholders,
+                                    'xml_mode': is_ai_engine,
                                     '_delimiter_segment': True,  # İşaretçi: bu bir segment
                                 }
                             )
@@ -4179,10 +4206,12 @@ init python:
                     # Normal (non-delimited) entry işleme
                     # ============================================================
                     # Her metni çeviri öncesi koru (Ren'Py tagleri + Sözlük terimleri)
-                    protected_text, placeholders = protect_renpy_syntax(entry.original_text)
-                    
-                    # Sözlük koruması uygula
-                    protected_text, glossary_placeholders = self._protect_glossary_terms(protected_text)
+                    if is_ai_engine:
+                        protected_text, placeholders = protect_renpy_syntax_xml(entry.original_text)
+                        protected_text, glossary_placeholders = self._protect_glossary_terms(protected_text, xml_mode=True)
+                    else:
+                        protected_text, placeholders = protect_renpy_syntax(entry.original_text)
+                        protected_text, glossary_placeholders = self._protect_glossary_terms(protected_text)
                     placeholders.update(glossary_placeholders)
                     
                     req = TranslationRequest(
@@ -4199,6 +4228,7 @@ init python:
                             'line_number': entry.line_number,
                             'context_path': getattr(entry, 'context_path', []),
                             'placeholders': placeholders,
+                            'xml_mode': is_ai_engine,
                             'context_hint': _prev_entry_text if (
                                 getattr(entry, 'text_type', '') == 'extend'
                                 and _prev_entry_file == entry.file_path  # Same file only

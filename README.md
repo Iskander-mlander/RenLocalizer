@@ -1,18 +1,16 @@
-# RenLocalizer
+# RenLocalizer Lite: Visual Novel Localization Made Simple
 
 <p align="center">
-  <strong>Advanced translation and localization toolkit for Ren'Py games.</strong>
+  <strong>Minimalist, Zero-Dependency Translation and Localization Toolkit for Ren'Py Games.</strong>
 </p>
 
 <p align="center">
-  Extracts translatable text from <code>.rpy</code>, <code>.rpyc</code>, and <code>.rpymc</code> files, translates it with multiple engines, and generates Ren'Py-friendly output with a desktop GUI and full CLI workflow.
+  RenLocalizer Lite is a streamlined, single-page desktop application designed to translate Ren'Py games (.rpy, .rpyc, and tl/ directories) without breaking game code, formatting, or variables. 
 </p>
 
 <p align="center">
   <a href="https://github.com/Lord0fTurk/RenLocalizer/releases">Releases</a> |
-  <a href="https://github.com/Lord0fTurk/RenLocalizer/wiki">Wiki</a> |
-  <a href="https://github.com/Lord0fTurk/RenLocalizer/issues/13">🎖️ Important Notice: Project Hiatus & Future</a> |
-  <a href="docs/CLI_USAGE.md">CLI Usage</a> |
+  <a href="https://github.com/Lord0fTurk/RenLocalizer/wiki/LITE-RELEASE-GUIDE">Wiki & Wiki Guide</a> |
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
@@ -20,102 +18,48 @@
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-2d6cdf">
   <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-3776ab">
   <img alt="GUI" src="https://img.shields.io/badge/gui-PyQt6%20%2B%20QML-41cd52">
-  <img alt="Version" src="https://img.shields.io/badge/version-2.7.6-111827">
+  <img alt="Build" src="https://img.shields.io/badge/build-Portable%20%2F%20Tak--Çalıştır-ff6b6b">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.8.6--LITE-111827">
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue">
 </p>
 
-## Why RenLocalizer?
+---
 
-RenLocalizer is built for a very specific problem: translating Ren'Py projects without breaking game logic.
+## Why RenLocalizer Lite?
 
-It is not just a text replacer. It understands Ren'Py syntax, protects placeholders, supports compiled script formats, filters technical false positives, and can output both file-based translation scripts and runtime translation data.
+Visual Novel translations often fail because translation tools don't understand code. They accidentally translate variable names, corrupt formatting tags (`{i}`/`{b}`), or trigger duplicate translation key crashes. 
 
-If you work with visual novels, fan patches, private localization workflows, or AI-assisted translation pipelines, this project is designed to reduce manual cleanup while keeping output usable inside real games.
+**RenLocalizer Lite solves this with zero hassle:**
+*   **🔌 Zero Dependencies (Plug-and-Play):** All major machine translation and LLM submodules (including Google Translate, OpenAI, DeepSeek, and Local LLM support) are pre-bundled inside the application. No need to install Python or configure virtual environments.
+*   **🎯 Minimalist UI:** Stripped of complex tabs and overwhelming settings. The single-page Material dashboard focuses strictly on: **Select Project -> Configure Engine -> Translate.**
+*   **🛡️ Decoupled NMT & LLM Protection:** Google Translate is fed with custom Unicode brackets (`⟦N⟧`) which it preserves best, while LLMs (OpenAI/Local LLMs) receive structured XML tags (`<ph id="N">...</ph>`) to prevent subword tokenizer splitting and keep grammar markers contextually correct.
 
-[🎖️ Important Notice: Project Hiatus & Future](https://github.com/Lord0fTurk/RenLocalizer/issues/13)
+---
 
-## What It Does
+## Core Features
 
-- Extracts text from `game/` projects, loose `.rpy` files, compiled `.rpyc`, and `.rpymc`.
-- Supports Google, DeepL, OpenAI, Gemini, DeepSeek-compatible endpoints, Local LLMs, LibreTranslate, Yandex, and pseudo-localization.
-- Preserves Ren'Py placeholders, tags, interpolation blocks, and syntax-sensitive fragments.
-- Generates Ren'Py-compatible `tl/<language>/` output, `strings.json`, and runtime hook files.
-- Includes deep extraction for hidden strings inside `init python`, data structures, and non-standard patterns.
-- Reuses prior work with cache, glossary, and external translation memory support.
-- Runs through both a desktop UI and a headless CLI.
+*   **Diverse Engines:** Translate via Google Translate (free, no API key), OpenAI (GPT models), DeepSeek API, or fully offline Local LLMs (Ollama / LM Studio).
+*   **Smart TL Retranslation Mode:** Selecting an existing `tl/` folder automatically triggers a fallback retranslation mode. It preserves existing manual translations and only fills empty dialogue blocks (`new ""`).
+*   **Technical Skipping & Filtering:** Over 200 pre-compiled regex guards prevent code parameters, font assignments, asset paths, and technical abbreviations from being translated.
+*   **Compiled AST Reading:** Directly extracts and parses compiled bytecode `.rpyc` scripts when raw source `.rpy` files are missing.
+*   **Structural Failsafes:** Captures broken/unclosed tags, edit-distance Levenshtein positioning alignment, and structural XML leakage checks to guarantee that the output compiles cleanly in Ren'Py.
 
-## Core Highlights
+---
 
-### Safe Ren'Py-aware translation
+## Quick Start (GUI Workflow)
 
-RenLocalizer protects:
+1.  Download the latest packaged build from the [Releases page](https://github.com/Lord0fTurk/RenLocalizer/releases).
+2.  Open **RenLocalizer**.
+3.  Click **Browse** or **EXE** to select your game directory or executable.
+4.  Choose your preferred **Translation Engine** and **Target Language**.
+5.  Click **Translate** (▶) and watch the real-time logs.
+6.  Launch your game and select the new language from the preferences menu!
 
-- interpolation variables like `[player_name]`
-- Ren'Py text tags like `{b}` and `{color=#fff}`
-- technical strings that should never be translated
-- delimited variant text such as `A|B|C` and `<A|B|C>`
+---
 
-This is handled through a dedicated syntax guard, output filtering, and integrity validation pipeline instead of relying on a single regex pass.
+## Running from Source
 
-### Multiple translation engines
-
-| Engine | Type | Notes |
-| --- | --- | --- |
-| Google Translate | Web/API-style | Fast, fallback-heavy, multi-endpoint |
-| DeepL | API | Strong quality, formality support |
-| OpenAI | LLM | XML-protected AI flow |
-| Gemini | LLM | Safety controls and batch prompts |
-| DeepSeek-compatible | LLM/API | OpenAI-style endpoint support |
-| Local LLM | Offline | Ollama, LM Studio, OpenAI-compatible servers |
-| LibreTranslate | Self-hosted/API | Useful for local or privacy-focused setups |
-| Yandex | Web-based | Extra free-engine option |
-| Pseudo | Debug/testing | UI overflow and localization testing |
-
-### Deep extraction and compiled-script support
-
-The parser stack goes beyond ordinary `.rpy` dialogue lines.
-
-- Reads compiled `.rpyc` directly when sources are missing.
-- Scans `.rpymc` content.
-- Performs deep AST-based extraction inside Python blocks.
-- Parses existing `tl/` files and translation folders.
-- Supports structured data extraction from formats like JSON and YAML.
-
-### GUI and CLI in the same project
-
-The GUI is built with PyQt6 + QML for day-to-day usage, while the CLI uses the same core pipeline for automation, batch processing, and server workflows.
-
-That shared architecture matters: fixes in extraction, translation safety, and output generation benefit both interfaces.
-
-## Project Architecture
-
-```text
-QML UI
-  -> AppBackend / SettingsBackend
-  -> TranslationPipeline
-  -> Parser / RPYC Reader / Deep Extraction
-  -> Translators / Syntax Guard / Output Formatter
-  -> Exported tl/<lang>/ files + strings.json + runtime hook
-```
-
-Main entry points:
-
-- `run.py` -> GUI launcher
-- `run_cli.py` -> CLI launcher
-- `src/core/translation_pipeline.py` -> orchestration layer
-- `src/core/parser.py` -> extraction engine
-- `src/core/translator.py` and `src/core/ai_translator.py` -> translation engines
-
-## Installation
-
-### Windows
-
-Download the latest packaged build from the [Releases page](https://github.com/Lord0fTurk/RenLocalizer/releases).
-
-- `RenLocalizer.exe` -> GUI
-- `RenLocalizerCLI.exe` -> CLI
-
-### Run from source
+If you prefer executing from source:
 
 ```bash
 git clone https://github.com/Lord0fTurk/RenLocalizer.git
@@ -123,146 +67,37 @@ cd RenLocalizer
 python -m venv .venv
 ```
 
-Windows:
-
+**Windows:**
 ```bash
 .venv\Scripts\activate
-# flexible source install
 pip install -r requirements.txt
-
-# optional: match the exact packaged-build Qt stack
-# pip install -c constraints-release.txt -r requirements.txt
-python run.py
+python run_lite.py
 ```
 
-Linux / macOS:
-
+**Linux / macOS:**
 ```bash
 source .venv/bin/activate
-# flexible source install (CI-smoke-tested across PyQt6 6.6-6.10 on Linux)
 pip install -r requirements.txt
-
-# optional: match the exact packaged-build Qt stack
-# pip install -c constraints-release.txt -r requirements.txt
-python run.py
+python run_lite.py
 ```
 
-CLI launch:
+---
 
-```bash
-python run_cli.py
-```
+## Technical Specifications
 
-## Quick Start
+### GBNF Logit Schema Masking
+For LLMs, the app passes strict schema constraints (`response_format` JSON schema). The API engine uses logit masking to enforce format matching, avoiding markdown code wrappers (` ```json `) or dropped item IDs.
 
-### GUI workflow
+### XML Corruption Checks
+In the event that an LLM returns a corrupted translation or leaks XML tags, the pipeline performs a structural check:
+*   If `<ph id=` or `</ph>` is found in the final restored translation, the string is flagged as a `placeholder_remnant` corruption, rejected, and safely reverted to the original source text to prevent game crashes.
 
-1. Open RenLocalizer.
-2. Select a game folder or executable.
-3. Choose source language, target language, and engine.
-4. Enable optional deep scan / compiled script support if needed.
-5. Start translation.
-6. Review generated files under `game/tl/<language>/`.
+---
 
-### CLI workflow
+## Contributing & Support
 
-Interactive mode:
+Issues, bug reports, and pull requests are welcome. Feel free to open a ticket on the GitHub Issues page.
 
-```bash
-python run_cli.py
-```
-
-Direct command examples:
-
-```bash
-python run_cli.py "C:\Games\MyRenPyGame" --target-lang tr --engine google --mode full
-python run_cli.py "/path/to/game" --target-lang es --engine local_llm --mode translate
-python run_cli.py "/path/to/game" --target-lang ru --engine gemini --deep-scan
-```
-
-## Output Format
-
-RenLocalizer can generate:
-
-- file-based `tl/<language>/*.rpy` translation files
-- `strings.json` for runtime lookups
-- runtime hook scripts for in-game forced translation scenarios
-
-This makes it usable for both conventional Ren'Py localization and more aggressive runtime-assisted patching.
-
-## Configuration
-
-The main configuration lives in `config.json`.
-
-Major configuration groups:
-
-- `translation_settings`
-- `api_keys`
-- `app_settings`
-- `proxy_settings`
-
-Available controls include:
-
-- engine and model selection
-- AI timeout, retries, concurrency, batch size
-- glossary and critical-term files
-- translation type filters
-- deep extraction toggles
-- runtime hook generation
-- proxy configuration
-- external translation memory sources
-
-## Documentation
-
-If you want detailed usage or internal behavior, start here:
-
-- [Wiki Home](https://github.com/Lord0fTurk/RenLocalizer/wiki)
-- [CLI Usage](docs/CLI_USAGE.md)
-- [Details](docs/DETAILS.md)
-- [Advanced Parsing](docs/wiki/Advanced-Parsing.md)
-- [AI Engines](docs/wiki/AI-Engines.md)
-- [External Translation Memory](docs/wiki/External-Translation-Memory.md)
-- [Technical Filtering](docs/wiki/Technical-Filtering.md)
-- [Developer Guide](docs/wiki/Developer-Guide.md)
-
-## Who This Is For
-
-RenLocalizer is especially useful for:
-
-- fan translators working on Ren'Py games
-- developers localizing their own VN projects
-- teams mixing MT + LLM + manual QA workflows
-- users who need offline local-LLM translation
-- projects where placeholder safety matters more than raw speed
-
-## Current Status
-
-- Active version: `2.7.6`
-- Desktop GUI: supported
-- CLI: supported
-- Windows / Linux / macOS: supported
-- Test suite: large multi-file regression coverage
-
-Recent work includes stronger output safety, external translation memory, deeper extraction coverage, better packaging, and Windows HiDPI black-screen hardening for Qt Quick startup.
-
-## Contributing
-
-Issues, bug reports, and pull requests are welcome.
-
-Useful links:
-
-- [Contributing Guide](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Changelog](CHANGELOG.md)
-
-When reporting a bug, include:
-
-- operating system
-- Python version or packaged build version
-- translation engine
-- whether the issue happens in GUI, CLI, or both
-- a minimal sample file if possible
-
-## License
-
-RenLocalizer is licensed under the [GPL-3.0 License](LICENSE).
+*   [Wiki Guide](https://github.com/Lord0fTurk/RenLocalizer/wiki/LITE-RELEASE-GUIDE)
+*   [Contributing Guidelines](CONTRIBUTING.md)
+*   [License](LICENSE) (Licensed under the GPL-3.0 License)

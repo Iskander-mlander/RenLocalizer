@@ -6,8 +6,7 @@ Backend Package
 Python-QML bridge components for Qt Quick UI.
 """
 
-from .app_backend import AppBackend
-from .settings_backend import SettingsBackend
+from .lite_backend import LiteBackend
 
-__all__ = ['AppBackend', 'SettingsBackend']
+__all__ = ['LiteBackend']
 

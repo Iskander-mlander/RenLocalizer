@@ -478,10 +478,14 @@ class RenPyOutputFormatter:
         if self._ANGLE_PLACEHOLDER_RE.search(text_strip):
             return True
 
-        # Skip strings that are likely file system patterns or technical globs
-        if '*' in text_strip and ('/' in text_strip or '\\' in text_strip):
+        # Skip strings that are likely file system patterns or technical globs.
+        # IMPORTANT: Use the tag-stripped version so that Ren'Py closing tags like
+        # {/w}, {/b}, {/color} don't falsely trigger the '/' check when combined
+        # with asterisks (e.g., "{color=#5175ea}*giggle*{/w}" is valid dialogue).
+        _tag_stripped_for_glob = self._TAG_RE.sub('', text_strip)
+        if '*' in _tag_stripped_for_glob and ('/' in _tag_stripped_for_glob or '\\' in _tag_stripped_for_glob):
             return True
-        if re.search(r'\*\*?/\*\*?', text_strip):
+        if re.search(r'\*\*?/\*\*?', _tag_stripped_for_glob):
             return True
             
         # Skip module.attribute references (stricter: multiple dots or technical prefixes)
@@ -575,7 +579,15 @@ class RenPyOutputFormatter:
         if self._SHORT_ALL_CAPS_RE.match(text_strip):
             # Safety: allow very common English words even in ALL_CAPS
             # "OK", "NO" are valid UI labels, but "NOT", "REP", "STR" etc. are game stats
-            _caps_translate_whitelist = {'OK', 'NO', 'ON', 'UP', 'GO', 'OR', 'AN', 'IF', 'BY', 'IN', 'IS', 'DO'}
+            _caps_translate_whitelist = {
+                'OK', 'NO', 'ON', 'UP', 'GO', 'OR', 'AN', 'IF', 'BY', 'IN', 'IS', 'DO',
+                'YES', 'YEP', 'YEA', 'NAH', 'HI', 'HEY', 'BYE', 'AH', 'OH', 'AW', 'OW',
+                'EW', 'OOH', 'AAH', 'HMM', 'HM', 'UM', 'UH', 'WOW', 'YAY', 'BOO', 'YO',
+                'WHO', 'WHY', 'HOW', 'HUH', 'EH', 'WAIT', 'STOP', 'HELP', 'COME', 'LOOK',
+                'WHAT', 'SURE', 'FINE', 'DONE', 'NEXT', 'BACK', 'AWAY', 'HERE', 'OVER',
+                'LEFT', 'GOOD', 'AT', 'TO', 'ME', 'HE', 'SHE', 'US', 'SO', 'AS', 'AM',
+                'BE', 'IT', 'WE', 'MY', 'HIS', 'HER', 'OUR', 'ITS'
+            }
             if text_strip not in _caps_translate_whitelist:
                 return True
         

@@ -253,6 +253,7 @@ class TranslationSettings:
     runtime_string_diagnostics: bool = False  # Write bounded runtime miss diagnostics from the hook
     # NEW: Cache Management (v2.5.3)
     use_global_cache: bool = True       # Global cache (keeps translations in program folder for portability)
+    use_cache: bool = True              # Translation Memory cache enabled
     cache_path: str = "cache"           # Global cache directory name
     # DeepL Settings
     deepl_formality: str = "default"  # default, formal, informal - Hitap şekli (Sen/Siz)

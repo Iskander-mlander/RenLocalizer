@@ -26,6 +26,34 @@ jobs:
           pip install pyinstaller
           pip install -c constraints-release.txt -r requirements.txt
 
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  # ============================================
+  # Windows Build (unchanged — onedir zip)
+  # ============================================
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -c constraints-release.txt -r requirements.txt
+
       - name: Build with PyInstaller
         run: |
           pyinstaller RenLocalizer.spec
@@ -33,13 +61,13 @@ jobs:
       - name: Create archive
         run: |
           cd dist
-          Compress-Archive -Path RenLocalizer -DestinationPath ../RenLocalizer-Windows-x64.zip
+          Compress-Archive -Path RenLocalizer -DestinationPath ../RenLocalizer-LITE-Windows-x64.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: RenLocalizer-Windows-x64.zip
+          path: RenLocalizer-LITE-Windows-x64.zip
 
   # ============================================
   # Linux Build → AppImage
@@ -161,8 +189,8 @@ jobs:
           chmod +x appimagetool
           
           # Build AppImage
-          ARCH=x86_64 ./appimagetool --appimage-extract-and-run RenLocalizer.AppDir RenLocalizer-Linux-x64.AppImage
-          chmod +x RenLocalizer-Linux-x64.AppImage
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run RenLocalizer.AppDir RenLocalizer-LITE-Linux-x64.AppImage
+          chmod +x RenLocalizer-LITE-Linux-x64.AppImage
 
       - name: Install portable launcher script (Linux tar.gz)
         run: |
@@ -176,7 +204,7 @@ jobs:
           import subprocess
           env = dict(os.environ, RENLOCALIZER_QT_SMOKE_TEST="1", APPIMAGE_EXTRACT_AND_RUN="1")
           subprocess.run(
-              ["xvfb-run", "-a", "./RenLocalizer-Linux-x64.AppImage"],
+              ["xvfb-run", "-a", "./RenLocalizer-LITE-Linux-x64.AppImage"],
               env=env,
               check=True,
               timeout=60,
@@ -195,7 +223,7 @@ jobs:
               APPIMAGE_EXTRACT_AND_RUN="1",
           )
           subprocess.run(
-              ["xvfb-run", "-a", "./RenLocalizer-Linux-x64.AppImage"],
+              ["xvfb-run", "-a", "./RenLocalizer-LITE-Linux-x64.AppImage"],
               env=env,
               check=True,
               timeout=60,
@@ -219,20 +247,20 @@ jobs:
       - name: Create tar.gz (Linux Portable)
         run: |
           cd dist
-          tar -czvf ../RenLocalizer-Linux-x64.tar.gz RenLocalizer
+          tar -czvf ../RenLocalizer-LITE-Linux-x64.tar.gz RenLocalizer
           cd ..
 
       - name: Upload artifact (AppImage)
         uses: actions/upload-artifact@v4
         with:
           name: linux-build-appimage
-          path: RenLocalizer-Linux-x64.AppImage
+          path: RenLocalizer-LITE-Linux-x64.AppImage
 
       - name: Upload artifact (tar.gz)
         uses: actions/upload-artifact@v4
         with:
           name: linux-build-targz
-          path: RenLocalizer-Linux-x64.tar.gz
+          path: RenLocalizer-LITE-Linux-x64.tar.gz
 
   # ============================================
   # macOS Build → DMG
@@ -314,13 +342,13 @@ jobs:
             -srcfolder dmg_contents \
             -ov \
             -format UDZO \
-            RenLocalizer-macOS.dmg
+            RenLocalizer-LITE-macOS.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: RenLocalizer-macOS.dmg
+          path: RenLocalizer-LITE-macOS.dmg
 
   # ============================================
   # Create GitHub Release
@@ -355,10 +383,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            RenLocalizer-Windows-x64.zip
-            RenLocalizer-Linux-x64.AppImage
-            RenLocalizer-Linux-x64.tar.gz
-            RenLocalizer-macOS.dmg
+            RenLocalizer-LITE-Windows-x64.zip
+            RenLocalizer-LITE-Linux-x64.AppImage
+            RenLocalizer-LITE-Linux-x64.tar.gz
+            RenLocalizer-LITE-macOS.dmg
           body: ""
           draft: false
           prerelease: false

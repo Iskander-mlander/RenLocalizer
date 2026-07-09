@@ -13,37 +13,16 @@ urllib3>=2.2.0
 chardet>=5.2.0
 charset-normalizer>=3.3.0
 
-# AI Translation Support
-openai>=1.30.0
-google-genai>=1.0.0
-
-
-# Packaging
-# packaging>=23.0 (Removed: Used custom parser instead)
-
-# Performance and Matching
-rapidfuzz>=3.9.0
-
-# Data Management (Excel/CSV)
-pandas>=2.2.0
-openpyxl>=3.1.2
+# AI Translation Engines (OpenAI, DeepSeek, LocalLLM)
+openai>=1.14.0
 
 # RPA Extraction
 unrpa>=2.3.0
 PyYAML>=6.0.1
 
-# RPYC Decompilation (optional, complementary to built-in rpyc_reader)
-# rpycdec is a pip-installable fallback. For best results install unrpyc:
-#   pip install git+https://github.com/CensoredUsername/unrpyc.git
-# If neither is installed, the decompile step is silently skipped.
-rpycdec>=0.1.12  # optional: PyPI fallback for .rpyc decompilation
-
-# Tools Support
-fonttools>=4.50.0  # Required for Font Compatibility tool
-rich>=13.7.0  # Modern CLI terminal interface
+# RPYC Decompilation (optional)
+rpycdec>=0.1.12
 
 # Optional/Platform Specific
 uvloop>=0.19.0; sys_platform != "win32"
-Pillow>=10.4.0  # Required for PyInstaller icon processing
-
-# Offline AI support removed in v2.7.8
+Pillow>=10.4.0

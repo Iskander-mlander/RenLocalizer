@@ -16,17 +16,13 @@ hidden_imports += collect_submodules('requests')
 hidden_imports += collect_submodules('httpx')
 hidden_imports += collect_submodules('urllib3')
 hidden_imports += collect_submodules('PIL')
-hidden_imports += collect_submodules('rapidfuzz')  # Often used for fuzzy matching
 hidden_imports += collect_submodules('packaging')
 hidden_imports += collect_submodules('chardet')
 hidden_imports += collect_submodules('charset_normalizer')
 hidden_imports += collect_submodules('unrpa')
-hidden_imports += collect_submodules('openai')
-hidden_imports += collect_submodules('google.genai')
 hidden_imports += collect_submodules('yaml')
-hidden_imports += collect_submodules('fontTools')
-hidden_imports += collect_submodules('pyparsing')
 hidden_imports += collect_submodules('certifi')
+hidden_imports += collect_submodules('openai')
 # Pandas submodules are too heavy (includes tests, matplotlib, etc). 
 # Basic pandas import is usually enough or handled by auto-analysis.
 # If needed, add only specific submodules manually.
@@ -81,8 +77,7 @@ if sys.platform == 'win32':
 # These are for source-based execution assistance, not required for bundled apps
 if sys.platform != 'win32':
     sh_files = [
-        (os.path.join(project_dir, 'RenLocalizer.sh'), '.'),
-        (os.path.join(project_dir, 'RenLocalizerCLI.sh'), '.')
+        (os.path.join(project_dir, 'RenLocalizer.sh'), '.')
     ]
     # Only add if files exist
     for sh_src, sh_dst in sh_files:
@@ -94,7 +89,7 @@ if sys.platform != 'win32':
 # GUI Application Analysis (RenLocalizer)
 # =========================================================
 a = Analysis(
-    ['run.py'],
+    ['run_lite.py'],
     pathex=[project_dir],
     binaries=binaries_list,
     datas=datas_list,
@@ -131,45 +126,6 @@ exe = EXE(
 )
 
 # =========================================================
-# CLI Application Analysis (RenLocalizerCLI)
-# =========================================================
-b = Analysis(
-    ['run_cli.py'],
-    pathex=[project_dir],
-    binaries=[],
-    datas=[],
-    hiddenimports=hidden_imports,
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=['PyQt5', 'tkinter', 'matplotlib', 'IPython', 'notebook', 'scipy.stats.tests'],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
-pyz_cli = PYZ(b.pure, b.zipped_data, cipher=block_cipher)
-
-exe_cli = EXE(
-    pyz_cli,
-    b.scripts,
-    [],
-    exclude_binaries=True,
-    name='RenLocalizerCLI',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon=os.path.join(project_dir, 'icon.ico') if sys.platform == 'win32' else None
-)
-
-# =========================================================
 # COLLECT (Folder Output)
 # =========================================================
 coll = COLLECT(
@@ -177,11 +133,6 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    
-    exe_cli,
-    b.binaries,
-    b.zipfiles,
-    b.datas,
     
     strip=False,
     upx=True,

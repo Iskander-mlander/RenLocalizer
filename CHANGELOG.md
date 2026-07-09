@@ -1,5 +1,149 @@
 # RenLocalizer Changelog
 
+#### [2.8.6-LITE] - 2026-07-06
+
+### Core: Full AI Translation Engines Integration
+- **Integrated Engines:** OpenAI, DeepSeek (OpenAI-compatible API), and Local LLM (Ollama/LM Studio) engines have been successfully integrated into the Lite release.
+- **Technical Specifications & Optimizations:**
+  - **Decoupled NMT & LLM Protection Pipelines:** Completely decoupled the placeholder protection pipelines for NMT (Google Translate) and AI/LLM engines. Google Translate continues to use Mathematical Unicode Brackets (`⟦N⟧`), while LLMs natively receive tokenizer-friendly XML tag structures (`<ph id="N">...</ph>`) to prevent subword token splitting and attention loss.
+  - **XML Glossary Protection:** Enabled XML-mode glossary protection inside the pipeline, wrapping protected terms in `<ph id="G{n}">{text}</ph>` syntax for AI engines. This ensures glossary terms are preserved contextually inside sentences during LLM translation and successfully restored in the target language.
+  - **XML Mode Integration & Regex Expansion:** Added full support for XML-based tag protection (`xml_mode = True` by default for AI engines), using `<ph id="N">...</ph>` elements. Broadened the XML regex pattern (`ph_pattern`) in `syntax_guard.py` to match alphanumeric IDs (`[A-Za-z0-9_]+` instead of `\d+`) allowing tag names, glossary variables (like `G0`), and variables to be resolved.
+  - **XML Corruption Checks:** Integrated XML tag remnant detection inside `_classify_translation_corruption` to ensure any leaked `<ph>` tags block suspicious outputs from being committed, preventing translation corruption.
+  - **Tokenizer-Friendly ASCII Placeholder Wrapping:** Automatically maps Unicode tokens (like `⟦RLPHxxxx_N⟧`) to simple double-underscored ASCII placeholders (`__PH_N__`) before sending API requests to OpenAI, DeepSeek, and Local LLM engines when XML mode is disabled. This prevents subword splitting issues in LLM tokenizers and significantly enhances model attention stability. Reverts ASCII placeholders back to their original namespaced format upon response delivery using tolerance-based regex.
+  - **Double-Wrapping Prevention:** Fixed a critical bug in `restore_renpy_syntax` where wrapper tag pairs (like `{i}...{/i}`) were double-wrapped (resulting in `{i}{i}...{/i}{/i}`) if the model explicitly included formatting tags in its output. Added a verification check to bypass wrapping if the tag pair is already present in the response text.
+  - **JSON Schema Structured Outputs:** Enforces token-level logit masking constraints (GBNF compiling) on compatible local/cloud engines, preventing syntax structure failures, tag mutations, or conversational commentary.
+  - **Fail-Safe Structured Fallback & Re-Restore:** Automatically falls back to standard text completion if custom local servers throw a `400 Bad Request` on response format constraints. Supports XML-regex parser fallback if JSON decoding fails. Added re-restore syntax resolution directly following Levenshtein/inject recovery to prevent token leaks.
+  - **Levenshtein Placeholder Recovery:** Implements character-level Edit-Distance word alignment to project missing or dropped placeholders (`⟦N⟧`) back to their relative anchor-word positions in translated text.
+  - **Language Code Mapping:** Automatically maps source/target ISO language codes (`en`, `tr`, `es`) to their full English names (`English`, `Turkish`, `Spanish`) inside system prompts to prevent model confusion and improve translation accuracy.
+  - **In-Context Few-Shot Learning:** Injected realistic few-shot translation examples into single and batch system prompts to guide model attention on placeholder positioning and tag preservation.
+  - **Active AI Engine Re-Setup on Save:** `saveSettings()` now automatically triggers background engine re-setup if any AI configuration (model, API key, base URL, etc.) changes, ensuring settings take effect immediately.
+  - **API Response Debug Logging:** Added raw API completion response logging at the debug level inside `_call_api` to facilitate diagnostic tracking.
+  - **Jittered exponential backoff** (safeguards requests against rate limits and HTTP 429).
+  - **Safety filter graceful recovery:** when content filter triggers, the translation is skipped and original text is returned instead of crashing the pipeline.
+  - **Dependency guard:** dynamic `try/except` imports keep the app functional even if `openai` library is missing.
+- **Advanced AI Settings:** All advanced AI parameters from the full version (Temperature, Timeout, Max Tokens, Batch Size, Retry Count, Concurrency, Request Delay, and Custom System Prompt) are exposed via python getters/setters and `Q_PROPERTY` variables to Settings UI. Their values are persisted in `config.json` via `saveSettings`.
+- **DeepSeek Model Updates:** Changed the default DeepSeek model to `deepseek-v4-flash` to prevent issues with the deprecation of the legacy `deepseek-chat` model (scheduled for July 2026).
+- **Affected Files:** `src/core/ai_translator.py`, `src/backend/lite_backend.py`, `src/core/syntax_guard.py`, `src/core/translation_pipeline.py`, `tests/test_placeholder_pipeline_integration.py`
+
+---
+
+### UI/UX: Settings Overlapping Visual Bug Fix & Modernization
+- **Visual Alignment Fix:** AI engine setting inputs were positioned outside the `ScrollView` container inside `settingsPopup`, causing elements to overlap and hide bottom action buttons. AI settings ColumnLayout has been moved inside the scrollable layout to prevent overlapping.
+- **Modern Card Grouping Layout:** Grouped UI settings and AI configurations inside semi-transparent card panels (`Rectangle`) with rounded corners for better structure.
+- **Input Active Focus Style:** TextFields now automatically highlight border in purple (`accentClr`) and thicken when focused, enhancing the overall input feeling.
+- **Wiki Guide & Version Footer:** Added a localized button to directly redirect users to the official RenLocalizer Lite release wiki guide. Integrated a dynamic version string (`liteBackend.version`) in the bottom status bar for immediate version tracking.
+- **Dynamic Multi-Theme Border Colors:** Refactored `borderClr` color token as a multi-theme mapping block to support red, turquoise, green, neon, and light/dark modes dynamically across the interface.
+- **Zero-Dependency Hover Glow Style:** Removed dependency on `Qt5Compat.GraphicalEffects` (and `DropShadow`) entirely to prevent QML loading crashes and ensure zero-dependency, plug-and-play execution. Replaced with dynamic border color transition animations for a premium flat glow look on button hover.
+- **Responsive Log Console Panel:** Restyled `logConsolePanel` background to `inputBg` with dynamic border colors. Contrast-adjusted timestamp text colors to support light/dark modes. Defined `renderType: Text.QtRendering` for list delegates to prevent font blurring or layout shifts on macOS/HiDPI screens.
+- **Affected Files:** `src/gui/qml/lite/LiteMain.qml`
+
+---
+
+### Localization: Settings Multi-Language Support
+- **UI Localization:** All static Turkish labels inside settingsPopup Dialog were replaced with dynamic `liteBackend.uiTrigger` bindings and `getTextWithDefault()` calls.
+- **Translation Keys:** Localization files (`tr.json`, `en.json`) were updated with appropriate keys for AI engine configurations and the `lite_guide_btn` key.
+- **i18n Status Badge Fix:** Integrated `"status_ready"` key across all 8 locales JSON files (`tr.json`, `en.json`, `de.json`, `es.json`, `fr.json`, `ru.json`, `fa.json`, `zh-CN.json`) to prevent the status badge from displaying static Turkish `"Hazır"`.
+- **Dynamic Log Level Prefix:** Localized log prefix tags (`[BİLGİ]`, `[HATA]`, `[UYARI]`) dynamically inside the QML helper function `logPrefix` by binding them to backend dictionary queries and `uiTrigger` state updates.
+- **Affected Files:** `locales/*.json`, `src/gui/qml/lite/LiteMain.qml`
+
+---
+
+### Multi-OS: Platform Paths & Unix Execute Permissions
+- **Cross-Platform Path Conversion:** Refactored `_normalize_path` in `lite_backend.py` to strip quotes and convert QUrls, safely formatting file anchors on Windows (stripping leading slashes) while preserving them on Unix-based OS.
+- **Unix Executable Permissions Checker:** Added `ensure_executable_permissions` Unix/Linux helper utilizing `stat` module inside `run_lite.py` main flow to grant owner execute bits (`chmod +x`) on packaged libraries/scripts (like `unrpa` or `.sh`/`.dylib`/`.so` files) at runtime, preventing macOS Gatekeeper / permission denied crashes.
+- **Affected Files:** `src/backend/lite_backend.py`, `run_lite.py`
+
+---
+
+### Output Formatter: Ren'Py Closing Tag + Asterisk Glob False Positive Fix
+- **Root Cause:** `_should_skip_translation()` in `output_formatter.py` performed a glob-pattern heuristic check: if the text contained both `*` and `/`, it was flagged as a file-system glob and silently skipped. Ren'Py closing tags (`{/w}`, `{/b}`, `{/color}`, `{/size}`, etc.) contain a literal `/` character. Combined with asterisks used for emphasis (*giggle*, *ahem*), this caused valid dialogue lines such as `"Oh, Are you looking for something again? {color=#5175ea}*giggle*{/w}"` to be completely excluded from translation output.
+- **Fix:** The glob check now operates on the Ren'Py-tag-stripped version of the text (`_tag_stripped_for_glob = self._TAG_RE.sub('', text_strip)`). Only if the stripped text still contains `*` and `/` (or `\`) is it flagged as a glob pattern. Ren'Py tags are thus invisible to the check.
+- **Impact:** Any dialogue line containing emphasis markers (`*word*`) inside or adjacent to Ren'Py formatting tags was silently missing from translation output. This was a systematic data loss bug, not a crash.
+- **Regression:** 16 new parametrized tests added to `tests/test_false_positive_filters.py` (`TestRenpyClosingTagGlobFalsePositive`). Original glob detection (real file paths like `images/*/bg.png`) verified to remain intact.
+- **Affected files:** `src/core/output_formatter.py`, `tests/test_false_positive_filters.py`
+
+---
+
+### Output Formatter: ALL_CAPS Whitelist Expansion
+- **Motivation:** Extremely short uppercase dialogue lines and exclamations (e.g. `YES`, `HI`, `BYE`, `OH`, `AH`, `WAIT`, `WHAT`) were flagged as technical abbreviation abbreviations (like `STR`, `DEX`, `CON`) and silently skipped, causing data loss.
+- **Fix:** Broadened the whitelist in `_should_skip_translation` to protect common interjections, responses, and questions from being falsely skipped.
+- **Affected files:** `src/core/output_formatter.py`
+
+---
+
+### Path Manager: Stable Project ID Cache matching
+- **Motivation:** Global translation memory was based on the project's folder name. When updating a game, the folder name typically changes (e.g., `Lust Village 0.1` -> `Lust Village 0.2`), causing the tool to fail to locate previously translated lines in the cache.
+- **Fix:** Implemented `get_project_id` in `path_manager.py` that resolves a stable ID. It checks the game's developer-defined `config.save_directory` / `config.name` inside `game/options.rpy` first, then the game executable name, then root executables, and falls back to a normalized folder name stripped of platform/version numbers.
+- **Affected files:** `src/utils/path_manager.py`, `src/core/translation_pipeline.py`, `src/backend/lite_backend.py`
+
+---
+
+### Update Checker: GitHub Releases Checker Integration
+- **Motivation:** Standardized update checking was missing from the Lite codebase.
+- **Fix:** Added `update_checker.py` to compare version numbers and fetch release details from GitHub API (with HTML releases scrape fallback). Integrated it into `LiteBackend` and added an update popup and manual/auto check settings in QML.
+- **Affected files:** `src/utils/update_checker.py`, `src/backend/lite_backend.py`, `src/gui/qml/lite/LiteMain.qml`
+
+---
+
+### Lite Backend: TL Retranslation Mode (Ren'Py SDK tl/ Directory Support)
+- **Motivation:** Users working with Ren'Py SDK's built-in `generate translations` feature end up with `tl/<lang>/` directories containing dialogue blocks where the translated line is empty (`""`). Previously, RenLocalizer Lite had no way to fill these in without running a full pipeline over the game's source `.rpy` files. The feature is re-enabled for the Lite version using the existing `TLParser` infrastructure.
+- **Implementation:**
+  - `setProjectPath()` now detects when the selected path is a `tl/` directory or a language subfolder inside one. Detection criteria: directory name is `tl`, or parent directory is named `tl`, or the path contains `tl` in its ancestry and holds `.rpy` files without a sibling `game/` folder.
+  - Two new state fields: `_tl_mode: bool` and `_tl_source_path: str`.
+  - `startTranslation()` branches: TL mode → `threading.Thread(_run_tl_retranslation)`, normal mode → `_start_pipeline_translation()`.
+  - `_run_tl_retranslation()`: Uses `TLParser.parse_directory()` to load all `.rpy` files, calls `get_untranslated()` per file, batches originals to Google Translate, builds a `{translation_id: translated_text}` map, and calls `tl_parser.save_translations()` to write results in-place. Progress signals (`stageChanged`, `progressChanged`, `statsReady`) are emitted throughout. Stop is supported via `_tl_stop_requested` flag.
+  - `_start_pipeline_translation()` extracted as a separate private method for clarity.
+  - `stopTranslation()` respects TL mode by setting `_tl_stop_requested` instead of calling `pipeline.stop()`.
+- **Behavior:** Already-translated entries are preserved unchanged. Only empty (`needs_translation()`) entries are filled. Completion summary emitted via `completionSummary` signal with file counts and entry statistics.
+- **Affected files:** `src/backend/lite_backend.py`
+
+---
+
+### Lite UI: Single-page Material Dashboard
+- **Motivation:** The full application had a multi-page sidebar-based navigation shell which loaded heavy components and pages (Cache, Glossary, Tools, etc.) that are unnecessary or disabled in the Google-only Lite version. Additionally, the native Material style's floating placeholder label caused visual overlaps on fixed-height text input fields, the footer warning banner had a circular binding height calculation, and users lacked a way to easily export the log history to the clipboard.
+- **Implementation:** Created a slimmed-down, single-page Material Design dashboard (`LiteMain.qml`) that includes project selection, translation progress bars, statistics panels, a real-time log viewer, and popup menus. Replaced the native `placeholderText` with a custom, non-floating `Label` overlay inside the project path `TextField` to eliminate overlapping bugs. Resolved layout binding loops in the warning banner by converting its height model to a centered layout with vertical alignment and `implicitHeight`. Restored the "📋 Copy Log" button to the transaction log header, allowing users to copy the entire scrollable log history (with timestamps and localized level prefixes) to the clipboard.
+- **Affected files:** `src/gui/qml/lite/LiteMain.qml`
+
+### Lite Launcher: Specialized run_lite.py
+- **Motivation:** Spawning the application needed to bypass the full version's backend loaders, QML routing, and splash screens to optimize start-up time and file size.
+- **Implementation:** Implemented `run_lite.py` as a custom entry point. It sets up DPI scaling, configures platform themes, shows a themed splash screen, handles app relaunch on scenegraph failures, and registers the lightweight `LiteBackend` to the engine.
+- **Affected files:** `run_lite.py`
+
+### Lite Backend: Slimmed QML-Python Bridge
+- **Motivation:** `AppBackend` and `SettingsBackend` in the full version managed complex multithreading, API key validation, local translation databases, and updating subsystems which are not needed for a Lite Google-only wrapper.
+- **Implementation:** Created `LiteBackend` inside `src/backend/lite_backend.py` to handle specialized pipeline execution, dynamic thread counts, request delays, and progress signals.
+- **Affected files:** `src/backend/lite_backend.py`, `src/backend/__init__.py`
+
+### Lite Settings: Dynamic Theme and UI Language Customization
+- **Motivation:** Lite users need to dynamically switch the application interface language and select custom themes directly from a single settings card. Without constraints, the Settings Dialog went off-screen on smaller windows, and the ScrollView rendered a buggy, solid grey horizontal scrollbar overlay that clipped right-aligned ComboBox fields. Additionally, all labels in the Settings modal remained static in Turkish regardless of the selected application language.
+- **Implementation:** Integrated 9 interface languages and 6 custom themes (Dark, Light, Red, Turquoise, Green, Neon) in the modal Settings Popup. Visual theme tokens are bound to `liteBackend.uiTrigger`. Bound all settings headers, slider/switch labels, helper texts, cache management descriptions, and dialog action buttons to `liteBackend.uiTrigger` and `getTextWithDefault()` calls to allow real-time UI localization. Constrained the popup Dialog height using `Math.min(520, root.height * 0.85)` to trigger vertical scrolling on low-resolution displays. Disabled the horizontal scrollbar via `ScrollBar.horizontal.policy: ScrollBar.AlwaysOff` and set the inner column layout's width to `availableWidth - 16` to ensure right-aligned ComboBoxes are never clipped.
+- **Affected files:** `src/gui/qml/lite/LiteMain.qml`, `src/backend/lite_backend.py`, `locales/tr.json`, `locales/en.json`
+
+### Translation Cache: Clear TM and Toggle Switch
+- **Motivation:** Users need to turn the translation memory (TM) cache database on or off (to force fresh translations) and easily purge old translation caches without having to manually delete file hierarchies on disk.
+- **Implementation:** Added `use_cache` parameter to the `TranslationSettings` config and a corresponding switch in the Settings popup. Created a `clearTranslationCache()` backend slot to delete local project cache files (`translation_cache.json`) and the global cache directory for the selected project.
+- **Affected files:** `src/utils/config.py`, `src/backend/lite_backend.py`, `src/gui/qml/lite/LiteMain.qml`
+
+### Cleanup: Deletion of Full Version Artifacts
+- **Motivation:** Packaging size and dependency footprint had to be minimized for the Lite release.
+- **Implementation:** Physically deleted obsolete launcher files, tools, utilities, and QML pages: `run.py`, `run_cli.py`, `src/cli_main.py`, `app_backend.py`, `settings_backend.py`, `project_io.py`, `data_transfer.py`, `translation_crypto.py`, `rpa_packer.py`, `font_injector.py`, `update_checker.py`, and non-lite QML components.
+- **Affected files:** Multiple (all full-version launcher, tools, utilities, and QML directories)
+
+### Core: Surgical Dependency Stubbing
+- **Motivation:** The main parser (`parser.py`) and pipeline (`translation_pipeline.py`) directly import third-party dependent modules like `ai_translator.py` and `pyparse_grammar.py` at compile-time. Completely removing these files would break import chains.
+- **Implementation:** Replaced `ai_translator.py`, `rpyc_reader.py`, `deep_extraction.py`, `renpy_lexer.py`, and `pyparse_grammar.py` with dependency-free python stubs containing empty classes and generator iterators, keeping the imports valid while removing third-party dependencies.
+- **Affected files:** `src/core/ai_translator.py`, `src/core/rpyc_reader.py`, `src/core/deep_extraction.py`, `src/core/renpy_lexer.py`, `src/core/pyparse_grammar.py`
+
+### Dependencies: Pruned requirements.txt and Spec
+- **Motivation:** Eliminating heavy packages from requirements and build specs ensures a compact build and faster CI/CD execution.
+- **Implementation:** Removed `openai`, `google-genai`, `pandas`, `openpyxl`, `fonttools`, `rich`, and `rapidfuzz` from `requirements.txt`. Re-targeted `RenLocalizer.spec` to `run_lite.py` and stripped CLI targets and unused hidden imports.
+- **Affected files:** `requirements.txt`, `RenLocalizer.spec`
+
+### CI/CD: GitHub Workflows Adaptation
+- **Motivation:** Automated testing and release jobs were failing because they referenced deleted test files and legacy CLI launchers.
+- **Implementation:** Configured `.github/workflows/tests.yml` and `release.yml` to target `run_lite.py` for Qt smoke tests. Cleared obsolete test scripts from the test runner command to keep the build green.
+- **Affected files:** `.github/workflows/tests.yml`, `.github/workflows/release.yml`, `RenLocalizer.sh`
+
 ### [2.8.5] - 2026-04-22
 
 > **Note:** DeepL-specific fixes in this release were validated through code analysis and unit tests only — no live API key was available for end-to-end testing. If you encounter any issues with DeepL translations, please open an issue.
