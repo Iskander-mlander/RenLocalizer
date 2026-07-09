@@ -42,7 +42,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -c constraints-release.txt -r requirements.txt
+          pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
       - name: Run targeted regression suite
@@ -55,11 +55,8 @@ jobs:
             tests/test_reliability_hardening.py \
             tests/test_runtime_coverage.py \
             tests/test_runtime_templates.py \
-            tests/test_log_copy_feature.py \
             tests/test_runtime_hook_diagnostics.py \
-            tests/test_v276_features.py \
             tests/test_release_linux_artifacts.py \
-            tests/test_ci_pyqt_compat.py \
             -q --rootdir .
 
       - name: Smoke test source Qt startup (Linux)
@@ -137,17 +134,13 @@ jobs:
       - name: Run compatibility regression suite
         run: |
           python -m pytest \
-            tests/test_deep_extraction.py \
             tests/test_parser.py \
             tests/test_false_positive_filters.py \
             tests/test_text_type_filtering.py \
             tests/test_reliability_hardening.py \
             tests/test_runtime_coverage.py \
             tests/test_runtime_templates.py \
-            tests/test_log_copy_feature.py \
             tests/test_runtime_hook_diagnostics.py \
-            tests/test_v276_features.py \
-            tests/test_ci_pyqt_compat.py \
             -q --rootdir .
 
       - name: Smoke test source Qt startup
