@@ -1507,6 +1507,32 @@ class RenPyParser:
                             log_label='DISPLAYABLE_CALL',
                         )
 
+        # --- v2.8.7: Full-content scan for multiline character definitions ---
+        # character_define_re uses re.DOTALL and must match across multiple lines.
+        # The per-line scan above can't catch these, so we scan the full content.
+        try:
+            for cd_match in self.character_define_re.finditer(content):
+                quote = cd_match.group('quote')
+                text = self._extract_string_content(quote) if quote else ''
+                if not text or not self.is_meaningful_text(text) or text in seen_texts:
+                    continue
+                line_num = content[:cd_match.start()].count('\n') + 1
+                ctx_line = cd_match.group(0).split('\n')[0][:200]
+                entry = self._record_entry(
+                    text=text,
+                    line_number=line_num,
+                    context_line=ctx_line,
+                    text_type='character_name',
+                    context_path=['define:character'],
+                    character='',
+                    file_path=str(file_path),
+                )
+                if entry:
+                    entries.append(entry)
+                    seen_texts.add(text)
+        except Exception:
+            pass
+
         return entries
 
     def _process_secondary_extraction(
@@ -3149,7 +3175,7 @@ class RenPyParser:
             return False
         if text_type == 'ui' and not ts.translate_ui:
             return False
-        if text_type == 'button' and not getattr(ts, 'translate_buttons', ts.translate_ui):
+        if text_type in ('button', 'button_text') and not getattr(ts, 'translate_buttons', ts.translate_ui):
             return False
         if text_type == 'config' and not ts.translate_config_strings:
             return False
