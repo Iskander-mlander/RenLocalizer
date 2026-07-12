@@ -235,6 +235,8 @@ class TranslationSettings:
     local_llm_timeout: int = 300  # Local LLM için ayrı timeout (saniye) - yerel modeller daha yavaş olabilir
     libretranslate_url: str = "http://localhost:5000" # Local LibreTranslate Endpoint
     libretranslate_api_key: str = "" # Optional API key for managed instances
+    custom_endpoint_url: str = "" # Custom translation API endpoint
+    custom_endpoint_api_key: str = "" # Optional API key for custom endpoint
     # Advanced AI Settings
     ai_temperature: float = AI_DEFAULT_TEMPERATURE  # 0.0-1.0, lower = more consistent, higher = more creative
     ai_timeout: int = AI_DEFAULT_TIMEOUT  # seconds, timeout for AI requests
@@ -313,7 +315,7 @@ class TranslationSettings:
         self.ai_request_delay = _safe_float(self.ai_request_delay, 1.5, 0.0, 60.0)
 
         # --- Enum / allowlist checks ---
-        _valid_engines = ("google", "deepl", "openai", "gemini", "local_llm", "libretranslate", "yandex", "pseudo", "opus_mt")
+        _valid_engines = ("google", "deepl", "openai", "gemini", "local_llm", "libretranslate", "custom", "yandex", "pseudo", "opus_mt")
         if self.selected_engine not in _valid_engines:
             self.selected_engine = "google"
         if self.deepl_formality not in ("default", "formal", "informal"):
@@ -958,6 +960,16 @@ class ConfigManager:
         for item in self.get_all_languages():
             name = item['native']
             # Add English name in parens if it differs from native
+            if item['english'].lower() != item['native'].lower():
+                name = f"{item['native']} ({item['english']})"
+            result.append((item['renpy'], name))
+        return result
+
+    def get_source_languages_for_ui(self) -> list:
+        """Get languages for source language UI dropdown, with Auto-detect first."""
+        result = [("auto", "🤖 Auto-detect")]
+        for item in self.get_all_languages():
+            name = item['native']
             if item['english'].lower() != item['native'].lower():
                 name = f"{item['native']} ({item['english']})"
             result.append((item['renpy'], name))

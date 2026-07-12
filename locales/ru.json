@@ -1088,5 +1088,12 @@
   "tools_dashboard_desc": "Use these tools to inspect projects, fix fonts, validate translation output, and package results.",
   "tools_section_automation": "Automation & Packaging",
   "tools_section_core": "Core Utilities",
-  "tools_section_quality": "Font and Validation"
+  "tools_section_quality": "Font and Validation",
+  "libretranslate_url_label": "URL сервера LibreTranslate:",
+  "libretranslate_api_key_label": "API-ключ (необязательно):",
+  "libretranslate_hint": "Docker: docker run -p 5000:5000 libretranslate/libretranslate",
+  "custom_url_label": "URL конечной точки API:",
+  "custom_api_key_label": "API-ключ (необязательно):",
+  "custom_endpoint_hint": "Ожидает формат API, совместимый с LibreTranslate. Подключите свой собственный сервер перевода.",
+  "patreon_btn": "Поддержать на Patreon"
 }

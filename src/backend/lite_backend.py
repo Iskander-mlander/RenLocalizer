@@ -100,6 +100,10 @@ class LiteBackend(QObject):
     openaiBaseUrlChanged     = pyqtSignal()
     localLlmUrlChanged       = pyqtSignal()
     localLlmModelChanged     = pyqtSignal()
+    libretranslateUrlChanged = pyqtSignal()
+    libretranslateApiKeyChanged = pyqtSignal()
+    customEndpointUrlChanged = pyqtSignal()
+    customEndpointApiKeyChanged = pyqtSignal()
     aiTemperatureChanged     = pyqtSignal()
     aiTimeoutChanged         = pyqtSignal()
     aiMaxTokensChanged       = pyqtSignal()
@@ -149,7 +153,8 @@ class LiteBackend(QObject):
         # Lite always forces Google engine back to google; AI engines are allowed
         if self._selected_engine not in (
             TranslationEngine.GOOGLE, TranslationEngine.OPENAI,
-            TranslationEngine.LOCAL_LLM,
+            TranslationEngine.LOCAL_LLM, TranslationEngine.LIBRETRANSLATE,
+            TranslationEngine.CUSTOM,
         ):
             self._selected_engine = TranslationEngine.GOOGLE
 
@@ -166,18 +171,23 @@ class LiteBackend(QObject):
 
         # Google translator'ı her zaman hazırla (fallback)
         threading.Thread(target=self._setup_google_translator, daemon=True).start()
-        # Seçili AI motoru varsa arka planda kur
-        if self._selected_engine != TranslationEngine.GOOGLE:
-            threading.Thread(
-                target=self._setup_ai_translator,
-                args=(self._selected_engine,),
-                daemon=True,
-            ).start()
+        # Seçili motora göre diğer translator'ları kur
+        if self._selected_engine not in (TranslationEngine.GOOGLE,):
+            if self._selected_engine in (TranslationEngine.OPENAI, TranslationEngine.LOCAL_LLM):
+                threading.Thread(
+                    target=self._setup_ai_translator,
+                    args=(self._selected_engine,),
+                    daemon=True,
+                ).start()
+            elif self._selected_engine == TranslationEngine.LIBRETRANSLATE:
+                threading.Thread(target=self._setup_libretranslate, daemon=True).start()
+            elif self._selected_engine == TranslationEngine.CUSTOM:
+                threading.Thread(target=self._setup_custom_endpoint, daemon=True).start()
 
     # ── Private setup ────────────────────────────────────────────────────
 
     def _setup_google_translator(self) -> None:
-        """Yalnızca Google Translate motorunu kurar."""
+        """Google Translate motorunu kurar."""
         try:
             google = GoogleTranslator(
                 proxy_manager=self.proxy_manager,
@@ -188,6 +198,43 @@ class LiteBackend(QObject):
         except Exception as exc:
             self.logger.error("[LiteBackend] Google Translate kurulamadı: %s", exc)
 
+    def _setup_libretranslate(self) -> None:
+        """LibreTranslate motorunu kurar (kullanıcı tanımlı URL veya localhost:5000)."""
+        try:
+            from src.core.translator import LibreTranslateTranslator
+            base_url = getattr(self.config.translation_settings, 'libretranslate_url', 'http://localhost:5000')
+            api_key = getattr(self.config.translation_settings, 'libretranslate_api_key', '')
+            lt = LibreTranslateTranslator(
+                base_url=base_url,
+                api_key=api_key,
+                proxy_manager=self.proxy_manager,
+                config_manager=self.config,
+            )
+            self.translation_manager.add_translator(TranslationEngine.LIBRETRANSLATE, lt)
+            self.logger.info(f"[LiteBackend] LibreTranslate hazır: {base_url}")
+        except Exception as exc:
+            self.logger.error("[LiteBackend] LibreTranslate kurulamadı: %s", exc)
+
+    def _setup_custom_endpoint(self) -> None:
+        """Custom HTTP endpoint translator — herhangi bir çeviri API'sine uyumlu."""
+        try:
+            from src.core.translator import LibreTranslateTranslator
+            base_url = getattr(self.config.translation_settings, 'custom_endpoint_url', '')
+            if not base_url:
+                self.logger.warning("[LiteBackend] Custom endpoint URL boş, Google fallback kullanılacak.")
+                return
+            api_key = getattr(self.config.translation_settings, 'custom_endpoint_api_key', '')
+            ct = LibreTranslateTranslator(
+                base_url=base_url,
+                api_key=api_key,
+                proxy_manager=self.proxy_manager,
+                config_manager=self.config,
+            )
+            self.translation_manager.add_translator(TranslationEngine.CUSTOM, ct)
+            self.logger.info(f"[LiteBackend] Custom endpoint hazır: {base_url}")
+        except Exception as exc:
+            self.logger.error("[LiteBackend] Custom endpoint kurulamadı: %s", exc)
+
     @staticmethod
     def _engine_from_str(engine_str: str) -> TranslationEngine:
         """Safely converts a string engine name to TranslationEngine enum."""
@@ -196,6 +243,8 @@ class LiteBackend(QObject):
             "openai": TranslationEngine.OPENAI,
             "local_llm": TranslationEngine.LOCAL_LLM,
             "deepseek": TranslationEngine.OPENAI,  # DeepSeek routed via OPENAI enum
+            "libretranslate": TranslationEngine.LIBRETRANSLATE,
+            "custom": TranslationEngine.CUSTOM,
         }
         return mapping.get(engine_str.lower(), TranslationEngine.GOOGLE)
 
@@ -351,17 +400,22 @@ class LiteBackend(QObject):
         new_engine = self._engine_from_str(engine_str)
         # Update config so it persists
         self.config.translation_settings.selected_engine = engine_str.lower()
+        self.config.save_config()
         if new_engine == self._selected_engine:
             return
         self._selected_engine = new_engine
         self.selectedEngineChanged.emit(engine_str)
-        # Setup new engine in background if it's an AI engine
-        if new_engine != TranslationEngine.GOOGLE:
-            threading.Thread(
-                target=self._setup_ai_translator,
-                args=(new_engine,),
-                daemon=True,
-            ).start()
+        # Setup new engine in background if not Google (Google always active as fallback)
+        if new_engine not in (TranslationEngine.GOOGLE,):
+            if new_engine in (TranslationEngine.OPENAI, TranslationEngine.LOCAL_LLM):
+                setup_target = self._setup_ai_translator
+            elif new_engine == TranslationEngine.LIBRETRANSLATE:
+                setup_target = self._setup_libretranslate
+            elif new_engine == TranslationEngine.CUSTOM:
+                setup_target = self._setup_custom_endpoint
+            else:
+                return
+            threading.Thread(target=setup_target, daemon=True).start()
 
     @pyqtProperty(str, notify=openaiApiKeyChanged)
     def openaiApiKey(self) -> str:
@@ -407,6 +461,46 @@ class LiteBackend(QObject):
     def localLlmModel(self, val: str) -> None:
         self.config.translation_settings.local_llm_model = val.strip()
         self.localLlmModelChanged.emit()
+
+    # ── LibreTranslate Properties ─────────────────────────────────────────
+
+    @pyqtProperty(str, notify=libretranslateUrlChanged)
+    def libretranslateUrl(self) -> str:
+        return getattr(self.config.translation_settings, "libretranslate_url", "") or "http://localhost:5000"
+
+    @libretranslateUrl.setter
+    def libretranslateUrl(self, val: str) -> None:
+        self.config.translation_settings.libretranslate_url = val.strip()
+        self.libretranslateUrlChanged.emit()
+
+    @pyqtProperty(str, notify=libretranslateApiKeyChanged)
+    def libretranslateApiKey(self) -> str:
+        return getattr(self.config.translation_settings, "libretranslate_api_key", "")
+
+    @libretranslateApiKey.setter
+    def libretranslateApiKey(self, val: str) -> None:
+        self.config.translation_settings.libretranslate_api_key = val.strip()
+        self.libretranslateApiKeyChanged.emit()
+
+    # ── Custom Endpoint Properties ────────────────────────────────────────
+
+    @pyqtProperty(str, notify=customEndpointUrlChanged)
+    def customEndpointUrl(self) -> str:
+        return getattr(self.config.translation_settings, "custom_endpoint_url", "")
+
+    @customEndpointUrl.setter
+    def customEndpointUrl(self, val: str) -> None:
+        self.config.translation_settings.custom_endpoint_url = val.strip()
+        self.customEndpointUrlChanged.emit()
+
+    @pyqtProperty(str, notify=customEndpointApiKeyChanged)
+    def customEndpointApiKey(self) -> str:
+        return getattr(self.config.translation_settings, "custom_endpoint_api_key", "")
+
+    @customEndpointApiKey.setter
+    def customEndpointApiKey(self, val: str) -> None:
+        self.config.translation_settings.custom_endpoint_api_key = val.strip()
+        self.customEndpointApiKeyChanged.emit()
 
     # ── Advanced AI Settings Properties ──────────────────────────────────
 
@@ -660,11 +754,27 @@ class LiteBackend(QObject):
 
     @pyqtSlot(str)
     def setTargetLanguage(self, lang: str) -> None:
-        """Hedef dili ayarlar (config'e kalıcı yazmaz)."""
+        """Hedef dili ayarlar (kalıcı olarak kaydeder)."""
         normalized = self.config.normalize_renpy_language_code(lang)
         self._target_language = normalized
         self.config.translation_settings.target_language = normalized
+        self.config.save_config()
         self.logger.info("[LiteBackend] Hedef dil: %s", normalized)
+
+    @pyqtSlot(result=list)
+    def getSourceLanguages(self) -> list:
+        """Kaynak dil listesini döndürür (Auto-detect + tüm diller)."""
+        languages = []
+        for code, name in self.config.get_source_languages_for_ui():
+            languages.append({"code": code, "name": name})
+        return languages
+
+    @pyqtSlot(str)
+    def setSourceLanguage(self, lang: str) -> None:
+        """Kaynak dili ayarlar."""
+        self.config.translation_settings.source_language = lang.strip() if lang.strip() else "auto"
+        self.config.save_config()
+        self.logger.info("[LiteBackend] Kaynak dil: %s", lang or "auto")
 
     # ── Project Slot ─────────────────────────────────────────────────────
 

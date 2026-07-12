@@ -5,9 +5,15 @@ Encoding helpers to read/write text defensively without crashing on bad bytes.
 import os
 import time
 import tempfile
-import chardet
 from pathlib import Path
 from typing import Optional, Tuple
+
+# charset-normalizer > chardet (daha hızlı, daha doğru)
+try:
+    from charset_normalizer import detect as _detect_encoding
+except ImportError:
+    import chardet as _chardet
+    _detect_encoding = _chardet.detect
 
 
 def read_text_safely(path: Path, preferred: Tuple[str, ...] = ("utf-8-sig", "utf-8")) -> Optional[str]:
@@ -28,7 +34,7 @@ def read_text_safely(path: Path, preferred: Tuple[str, ...] = ("utf-8-sig", "utf
         except UnicodeDecodeError:
             continue
 
-    detected = chardet.detect(raw)
+    detected = _detect_encoding(raw)
     enc = detected.get("encoding") or "utf-8"
     try:
         return raw.decode(enc, errors="replace")

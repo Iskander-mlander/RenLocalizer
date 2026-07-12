@@ -492,8 +492,8 @@ init -999 python:
                 if binary:
                     data = binary.getvalue().decode("utf-8")
             else:
-                with _rl_io.open(json_path, "r", encoding="utf-8") as f:
-                    data = f.read()
+                with _rl_io.open(json_path, "r", encoding="utf-8") as _rl_f:
+                    data = _rl_f.read()
             
             if not data:
                 return False
@@ -889,8 +889,8 @@ init -999 python:
             # Optional diagnostics
             if _renlocalizer_debug:
                 try:
-                    with _rl_io.open(_rl_os.path.join(config.gamedir, "renlocalizer_debug.log"), "a", encoding="utf-8") as f:
-                        f.write(u"[LANG_HOT_SWAP] from {{}} to {{}}\n".format(_rl_loaded_language, new_lang))
+                    with _rl_io.open(_rl_os.path.join(config.gamedir, "renlocalizer_debug.log"), "a", encoding="utf-8") as _rl_f:
+                        _rl_f.write(u"[LANG_HOT_SWAP] from {{}} to {{}}\n".format(_rl_loaded_language, new_lang))
                 except Exception:
                     pass
         
@@ -971,8 +971,8 @@ init -999 python:
                 "stripped": stripped,
                 "active_language": lang,
             }}
-            with _rl_io.open(log_file, "a", encoding="utf-8") as f:
-                f.write(_rl_json.dumps(entry, ensure_ascii=False) + u"\n")
+            with _rl_io.open(log_file, "a", encoding="utf-8") as _rl_f:
+                _rl_f.write(_rl_json.dumps(entry, ensure_ascii=False) + u"\n")
             _rl_runtime_miss_logged.add(dedupe_key)
             _rl_runtime_miss_count += 1
         except Exception:
@@ -1010,11 +1010,11 @@ init 999 python:
 
     # Debug: Print version info
     try:
-        with _rl_io.open(_rl_os.path.join(config.gamedir, "renlocalizer_runtime.log"), "w", encoding="utf-8") as f:
-            f.write(u"RenLocalizer v4.2.0 Runtime Hook Initialized\n")
-            f.write(u"Language: {{}}\n".format(_rl_get_active_language()))
-            f.write(u"Loaded: {{}}\n".format(_rl_loaded))
-            f.write(u"Entries: {{}}\n".format(len(_rl_translations)))
+        with _rl_io.open(_rl_os.path.join(config.gamedir, "renlocalizer_runtime.log"), "w", encoding="utf-8") as _rl_f:
+            _rl_f.write(u"RenLocalizer v4.2.0 Runtime Hook Initialized\n")
+            _rl_f.write(u"Language: {{}}\n".format(_rl_get_active_language()))
+            _rl_f.write(u"Loaded: {{}}\n".format(_rl_loaded))
+            _rl_f.write(u"Entries: {{}}\n".format(len(_rl_translations)))
     except Exception:
         pass
 

@@ -28,10 +28,12 @@ GOOGLE_ENDPOINTS = [
 ]
 
 # Lingva Translate instances (Free Google Translate Proxy)
-# Ordered purely by preference/reliability history
+# NOT: Tum bilinen Lingva instance'lari Eylul 2024 itibariyle olmustur.
+# (lingva.lunar.icu, lingva.ml, ve tum alternatifler 404/timeout donuyor)
+# Lingva fallback guncelleme gerektiginde https://github.com/thedaviddelta/lingva-translate
+# reposundaki "Instances" bolumunden kontrol edilebilir.
 LINGVA_INSTANCES = [
-    "https://lingva.lunar.icu",         # Active
-    "https://lingva.ml",                # Active (official, higher traffic)
+    # Tumu olmus - yeni instance bulunana kadar bos
 ]
 
 # User Agents for rotating requests to avoid bot detection

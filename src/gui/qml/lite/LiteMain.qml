@@ -81,6 +81,7 @@ ApplicationWindow {
     }
     readonly property color txtMain: (currentTheme === "light") ? "#212529" : "#ffffff"
     readonly property color txtSecond: (currentTheme === "light") ? "#495057" : "#aaaaaa"
+    readonly property color txtDim: (currentTheme === "light") ? "#868e96" : "#888888"
     readonly property color accentClr: Material.accent
     readonly property color successClr: "#6bcb77"
     readonly property color warningClr: "#f39c12"
@@ -542,7 +543,9 @@ ApplicationWindow {
                                         { text: "🌐 Google Translate", value: "google" },
                                         { text: "🤖 OpenAI",           value: "openai" },
                                         { text: "🤖 DeepSeek",         value: "deepseek" },
-                                        { text: "💻 Local LLM",        value: "local_llm" }
+                                        { text: "💻 Local LLM",        value: "local_llm" },
+                                        { text: "🔓 LibreTranslate",   value: "libretranslate" },
+                                        { text: "🔗 Custom Endpoint",  value: "custom" }
                                     ]
                                     textRole: "text"
                                     valueRole: "value"
@@ -562,6 +565,72 @@ ApplicationWindow {
                                         color: txtMain
                                         font.pixelSize: 12
                                         verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+                            }
+
+                            // Kaynak dil
+                            ColumnLayout {
+                                spacing: 6
+                                Layout.preferredWidth: 200
+                                Label {
+                                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("source_language", "Kaynak Dil")
+                                    color: txtSecond
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                }
+                                ComboBox {
+                                    id: sourceLangCombo
+                                    Layout.fillWidth: true
+                                    height: 40
+                                    model: liteBackend.getSourceLanguages()
+                                    textRole: "name"
+                                    valueRole: "code"
+                                    Component.onCompleted: currentIndex = indexOfValue("auto")
+                                    onActivated: liteBackend.setSourceLanguage(currentValue)
+                                    background: Rectangle {
+                                        radius: 8
+                                        color: inputBg
+                                        border.color: sourceLangCombo.hovered ? accentClr : borderClr
+                                        border.width: 1
+                                        Behavior on border.color { ColorAnimation { duration: 150 } }
+                                    }
+                                    contentItem: Label {
+                                        leftPadding: 10
+                                        text: sourceLangCombo.displayText
+                                        color: txtMain
+                                        font.pixelSize: 12
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    delegate: ItemDelegate {
+                                        width: sourceLangCombo.width
+                                        contentItem: Label {
+                                            text: model.name + " (" + model.code + ")"
+                                            color: sourceLangCombo.highlightedIndex === index ? accentClr : txtSecond
+                                            font.pixelSize: 11
+                                            leftPadding: 10
+                                        }
+                                        background: Rectangle {
+                                            color: hovered ? Qt.rgba(121/255, 80/255, 242/255, 0.2) : "transparent"
+                                        }
+                                    }
+                                    popup: Popup {
+                                        y: sourceLangCombo.height
+                                        width: sourceLangCombo.width
+                                        implicitHeight: Math.min(contentItem.implicitHeight, 260)
+                                        padding: 1
+                                        contentItem: ListView {
+                                            clip: true
+                                            implicitHeight: contentHeight
+                                            model: sourceLangCombo.delegateModel
+                                            ScrollBar.vertical: ScrollBar {}
+                                        }
+                                        background: Rectangle {
+                                            color: "#252540"
+                                            radius: 8
+                                            border.color: borderClr
+                                            border.width: 1
+                                        }
                                     }
                                 }
                             }
@@ -992,6 +1061,53 @@ ApplicationWindow {
                     }
                 }
 
+                // ── Patreon Destek Butonu ─────────────────────────────────────
+                Button {
+                    id: patreonBtn
+                    Layout.fillWidth: true
+                    height: 42
+
+                    // Pulse glow animation
+                    property real pulse: 0
+                    NumberAnimation on pulse {
+                        from: 0; to: 1; duration: 2000; loops: Animation.Infinite
+                    }
+
+                    contentItem: RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        Label {
+                            text: "❤️"
+                            font.pixelSize: 16
+                            transform: Translate {
+                                y: patreonBtn.pulse * -3
+                                Behavior on y { SpringAnimation { spring: 3; damping: 0.3 } }
+                            }
+                        }
+                        Label {
+                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("patreon_btn", "Support on Patreon")
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: "white"
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: 8
+                        color: parent.down ? Qt.darker("#d9480f", 1.2) : parent.hovered ? "#e8590c" : "#d9480f"
+                        border.color: parent.hovered ? "#ff6b35" : Qt.hsla(0.08 + patreonBtn.pulse * 0.06, 0.8, 0.5, 1)
+                        border.width: parent.hovered ? 2 : 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
+
+                    scale: parent.hovered ? 1.02 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 100 } }
+
+                    onClicked: {
+                        Qt.openUrlExternally("https://www.patreon.com/cw/LordOfTurk")
+                    }
+                }
+
                 Item { height: 8 }
             }
         }
@@ -1236,7 +1352,6 @@ ApplicationWindow {
             delaySlider.value = liteBackend.requestDelay
             batchSlider.value = liteBackend.maxBatchSize
             multiSwitch.checked = liteBackend.useMultiEndpoint
-            lingvaSwitch.checked = liteBackend.enableLingvaFallback
             aggressiveSwitch.checked = liteBackend.aggressiveRetry
             cacheSwitch.checked = liteBackend.useCache
             updateStartupSwitch.checked = liteBackend.checkForUpdatesOnStartup
@@ -1267,7 +1382,18 @@ ApplicationWindow {
         contentItem: ScrollView {
             id: settingsScroll
             clip: true
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+            ScrollBar.vertical: ScrollBar {
+                id: settingsVbar
+                policy: ScrollBar.AsNeeded
+                width: 10
+                interactive: true
+                contentItem: Rectangle {
+                    implicitWidth: 10
+                    implicitHeight: 30
+                    radius: 5
+                    color: settingsVbar.pressed ? accentClr : (settingsVbar.hovered ? Qt.lighter(accentClr, 1.3) : Qt.rgba(1,1,1,0.12))
+                }
+            }
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
             ColumnLayout {
@@ -1470,23 +1596,6 @@ ApplicationWindow {
                     }
                     Switch {
                         id: multiSwitch
-                    }
-                }
-
-                // 5. Lingva Fallback
-                RowLayout {
-                    Layout.fillWidth: true
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
-                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("enable_lingva_fallback_label", "Lingva Fallback"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                        Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_lingva_desc", "Redirect to free Lingva mirrors when main servers return 429.")
-                            color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                        }
-                    }
-                    Switch {
-                        id: lingvaSwitch
                     }
                 }
 
@@ -1742,11 +1851,123 @@ ApplicationWindow {
 
                         }
 
-                        // Gelişmiş AI Ayarları (AI motorları seçiliyken görünür)
+                        // LibreTranslate ayarları
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            visible: engineComboBox.currentValue === "libretranslate"
+
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("libretranslate_url_label", "LibreTranslate Sunucu URL:")
+                                color: txtMain
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            TextField {
+                                id: libretranslateUrlField
+                                Layout.fillWidth: true
+                                placeholderText: "http://localhost:5000"
+                                Component.onCompleted: text = liteBackend.libretranslateUrl
+                                onEditingFinished: liteBackend.libretranslateUrl = text
+                                color: txtMain
+                                background: Rectangle {
+                                    radius: 8
+                                    color: inputBg
+                                    border.color: parent.activeFocus ? accentClr : borderClr
+                                    border.width: parent.activeFocus ? 2 : 1
+                                }
+                            }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("libretranslate_api_key_label", "API Key (opsiyonel):")
+                                color: txtMain
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            TextField {
+                                id: libretranslateKeyField
+                                Layout.fillWidth: true
+                                placeholderText: "····················"
+                                Component.onCompleted: text = liteBackend.libretranslateApiKey
+                                onEditingFinished: liteBackend.libretranslateApiKey = text
+                                echoMode: TextInput.Password
+                                color: txtMain
+                                background: Rectangle {
+                                    radius: 8
+                                    color: inputBg
+                                    border.color: parent.activeFocus ? accentClr : borderClr
+                                    border.width: parent.activeFocus ? 2 : 1
+                                }
+                            }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("libretranslate_hint", "Docker: docker run -p 5000:5000 libretranslate/libretranslate")
+                                color: txtDim
+                                font.pixelSize: 9
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        // Custom Endpoint ayarları
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            visible: engineComboBox.currentValue === "custom"
+
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("custom_url_label", "API Endpoint URL:")
+                                color: txtMain
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            TextField {
+                                id: customUrlField
+                                Layout.fillWidth: true
+                                placeholderText: "http://localhost:5000/translate"
+                                Component.onCompleted: text = liteBackend.customEndpointUrl
+                                onEditingFinished: liteBackend.customEndpointUrl = text
+                                color: txtMain
+                                background: Rectangle {
+                                    radius: 8
+                                    color: inputBg
+                                    border.color: parent.activeFocus ? accentClr : borderClr
+                                    border.width: parent.activeFocus ? 2 : 1
+                                }
+                            }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("custom_api_key_label", "API Key (opsiyonel):")
+                                color: txtMain
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            TextField {
+                                id: customKeyField
+                                Layout.fillWidth: true
+                                placeholderText: "····················"
+                                Component.onCompleted: text = liteBackend.customEndpointApiKey
+                                onEditingFinished: liteBackend.customEndpointApiKey = text
+                                echoMode: TextInput.Password
+                                color: txtMain
+                                background: Rectangle {
+                                    radius: 8
+                                    color: inputBg
+                                    border.color: parent.activeFocus ? accentClr : borderClr
+                                    border.width: parent.activeFocus ? 2 : 1
+                                }
+                            }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("custom_endpoint_hint", "LibreTranslate API formatı bekler. Kendi çeviri sunucunuzu bağlayın.")
+                                color: txtDim
+                                font.pixelSize: 9
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        // Gelişmiş AI Ayarları (sadece AI motorları seçiliyken görünür)
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 12
-                            visible: engineComboBox.currentValue !== "google"
+                            visible: ["openai", "deepseek", "local_llm"].includes(engineComboBox.currentValue)
 
                             // Ayırıcı çizgi
                             Rectangle {
@@ -1975,7 +2196,6 @@ ApplicationWindow {
                     liteBackend.requestDelay = delaySlider.value
                     liteBackend.maxBatchSize = Math.round(batchSlider.value)
                     liteBackend.useMultiEndpoint = multiSwitch.checked
-                    liteBackend.enableLingvaFallback = lingvaSwitch.checked
                     liteBackend.aggressiveRetry = aggressiveSwitch.checked
                     liteBackend.useCache = cacheSwitch.checked
                     liteBackend.checkForUpdatesOnStartup = updateStartupSwitch.checked

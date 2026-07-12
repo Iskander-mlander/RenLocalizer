@@ -42,6 +42,7 @@ class TranslationEngine(Enum):
     GEMINI = "gemini"
     LOCAL_LLM = "local_llm"
     LIBRETRANSLATE = "libretranslate"
+    CUSTOM = "custom"  # Generic HTTP endpoint (LibreTranslate/Argos/any)
     PSEUDO = "pseudo"  # Pseudo-localization for UI testing
 
 
@@ -262,7 +263,9 @@ class GoogleTranslator(BaseTranslator):
         self._endpoint_index = 0
         
         # Start from a random Lingva instance to distribute load / avoid dead first server
-        self._lingva_index = random.randint(0, len(self.lingva_instances) - 1)
+        self._lingva_index = 0
+        if self.lingva_instances:
+            self._lingva_index = random.randint(0, len(self.lingva_instances) - 1)
         
         self._endpoint_health: Dict[str, dict] = {}  # {url: {'fails': int, 'banned_until': float}}
         # Global cooldown: when ANY mirror gets 429, ALL mirrors pause briefly
@@ -348,8 +351,10 @@ class GoogleTranslator(BaseTranslator):
         # (global _endpoint_index + dynamic available list = same mirror repeatedly)
         return random.choice(available)
     
-    def _get_next_lingva(self) -> str:
-        """Round-robin Lingva instance selection."""
+    def _get_next_lingva(self) -> Optional[str]:
+        """Round-robin Lingva instance selection. Returns None if no instances available."""
+        if not self.lingva_instances:
+            return None
         self._lingva_index = (self._lingva_index + 1) % len(self.lingva_instances)
         return self.lingva_instances[self._lingva_index]
     

@@ -1439,25 +1439,18 @@ class TranslationPipeline(QObject):
         
         tl_dir = os.path.join(game_dir, 'tl', self.target_language)
         
-        # Zaten varsa atla - Fakat kaynak dosyalar güncellenmişse tekrar çıkar
-        needs_extract = False
-        if not os.path.isdir(tl_dir) or not self._has_rpy_files(tl_dir):
-            needs_extract = True
-        elif self._needs_re_extraction(game_dir, tl_dir):
-            self.log_message.emit("info", self.config.get_ui_text("pipeline_source_updated", "Source files updated. Re-extracting translations for {lang}...").replace("{lang}", str(self.target_language)))
-            needs_extract = True
-            
-        if needs_extract:
-            success = self._run_translate_command(project_path)
-            
-            if not success and not os.path.isdir(tl_dir):
-                return PipelineResult(
-                    success=False,
-                    message=self.config.get_ui_text("pipeline_translate_failed"),
-                    stage=PipelineStage.ERROR
-                )
-        else:
-            self.log_message.emit("info", self.config.get_ui_text("pipeline_tl_exists_skip").replace("{lang}", str(self.target_language)))
+        # User preference: Always run full extraction so all discovery paths
+        # (source scan + deep scan + RPYC + optional decompile merge) contribute
+        # on every run, even when tl/<lang> already exists.
+        self.log_message.emit("info", "Full extraction mode enabled: running translation template generation on every run.")
+        success = self._run_translate_command(project_path)
+
+        if not success and not os.path.isdir(tl_dir):
+            return PipelineResult(
+                success=False,
+                message=self.config.get_ui_text("pipeline_translate_failed"),
+                stage=PipelineStage.ERROR
+            )
         
         if self.should_stop:
             return self._stopped_result()
@@ -1513,12 +1506,27 @@ class TranslationPipeline(QObject):
                 
                 existing = {e.original_text for t in tl_files for e in t.entries}
                 missing = []
+                # Pre-compiled filter for pure variable/markup strings
+                _var_only_re = re.compile(r'^\[[a-zA-Z_]\w*\]$')
+                _markup_strip_re = re.compile(r'\{[^}]*\}|\[[^\]]*\]')
                 for entries in scan_res.values():
                     for e in entries:
                         txt = e.get('text')
-                        if txt and txt not in existing and len(txt) > 1:
-                            missing.append(e)
-                            existing.add(txt)
+                        if not txt or len(txt) <= 1:
+                            continue
+                        if txt in existing:
+                            continue
+                        # Skip pure Ren'Py variable references (e.g. [page], [player_name])
+                        # These resolve to numbers/variables at runtime and should never be translated.
+                        _stripped = txt.strip()
+                        if _var_only_re.match(_stripped):
+                            continue
+                        # Skip entries that are only markup/tags without actual alphabetic content
+                        _core = _markup_strip_re.sub('', _stripped).strip()
+                        if _core and not re.search(r'[a-zA-Z\u00C0-\u024F]', _core):
+                            continue
+                        missing.append(e)
+                        existing.add(txt)
                 
                 if missing:
                      self.log_message.emit("info", self.config.get_log_text('deep_scan_found', count=len(missing)))
@@ -1615,9 +1623,74 @@ class TranslationPipeline(QObject):
                                             tl_files.append(_ntf)
                                             break
                 else:
-                    self.log_message.emit("debug",
-                        "Unrpyc decompile: no decompiler backend available — skipping. "
-                        "Install unrpyc or rpycdec to enable complementary decompile scanning.")
+                    # No decompiler backend available. As a pragmatic fallback,
+                    # look for a previously-produced tmp/decompile_extract_results.json
+                    # (created by developer debug scripts) and use it to generate
+                    # strings_unrpyc.rpy so users without unrpyc/rpycdec still benefit.
+                    tmp_json = Path('tmp') / 'decompile_extract_results.json'
+                    if tmp_json.is_file():
+                        try:
+                            with tmp_json.open('r', encoding='utf-8') as _f:
+                                _decomp_data = json.load(_f)
+                        except Exception as _je:
+                            self.log_message.emit('warning', self.config.get_log_text(
+                                'unrpyc_decompile_error', default="Unrpyc decompile scan failed: {error}", error=str(_je)))
+                            _decomp_data = {}
+
+                        if _decomp_data:
+                            self.log_message.emit('info', self.config.get_log_text(
+                                'unrpyc_decompile_found', default="Unrpyc (preview data): using {count} file(s) from tmp.", count=len(_decomp_data)))
+                            try:
+                                _parser_uc = RenPyParser(self.config)
+                                # _decomp_data is a mapping file_path -> entries
+                                _scan_uc = _decomp_data
+                                _existing_uc = {e.original_text for t in tl_files for e in t.entries}
+                                _missing_uc = []
+                                for _uc_entries in _scan_uc.values():
+                                    for _uc_e in _uc_entries:
+                                        _txt = _uc_e.get('text')
+                                        if _txt and _txt not in _existing_uc and len(_txt) > 1:
+                                            _missing_uc.append(_uc_e)
+                                            _existing_uc.add(_txt)
+
+                                if _missing_uc:
+                                    self.log_message.emit('info', self.config.get_log_text(
+                                        'unrpyc_decompile_new_strings',
+                                        default="Unrpyc (preview): {count} additional string(s) found.",
+                                        count=len(_missing_uc)))
+                                    _uc_out_dir = os.path.join(tl_path, renpy_lang)
+                                    os.makedirs(_uc_out_dir, exist_ok=True)
+                                    _uc_file = os.path.join(_uc_out_dir, "strings_unrpyc.rpy")
+                                    _uc_lines = [
+                                        "# Strings found via unrpyc decompile (from tmp/decompile_extract_results.json)",
+                                        f"translate {renpy_lang} strings:\n",
+                                    ]
+                                    for _m in _missing_uc:
+                                        _o = (_m.get('text') or '').replace('"', '\\"').replace('\n', '\\n')
+                                        if _m.get('context'):
+                                            _uc_lines.append(f"    # context: {_m.get('context')}")
+                                        _uc_lines.append(f'    old "{_o}"\n    new ""\n')
+                                    try:
+                                        with open(_uc_file, 'w', encoding='utf-8') as _f:
+                                            _f.write('\n'.join(_uc_lines))
+                                        for _ntf in self.tl_parser.parse_directory(_uc_out_dir, renpy_lang):
+                                            if os.path.normcase(_ntf.file_path) == os.path.normcase(_uc_file):
+                                                tl_files.append(_ntf)
+                                                break
+                                    except Exception as _w:
+                                        self.log_message.emit('warning', self.config.get_log_text(
+                                            'unrpyc_decompile_error', default="Unrpyc decompile write failed: {error}", error=str(_w)))
+                            except Exception:
+                                # Defensive: any unexpected error should not stop the pipeline
+                                self.log_message.emit('debug', 'Unrpyc preview merge failed; skipping.')
+                        else:
+                            self.log_message.emit("debug",
+                                "Unrpyc decompile: no decompiler backend available — skipping. "
+                                "Install unrpyc or rpycdec to enable complementary decompile scanning.")
+                    else:
+                        self.log_message.emit("debug",
+                            "Unrpyc decompile: no decompiler backend available — skipping. "
+                            "Install unrpyc or rpycdec to enable complementary decompile scanning.")
             except Exception as _uc_exc:
                 self.log_message.emit("warning",
                     self.config.get_log_text('unrpyc_decompile_error',
@@ -1876,6 +1949,30 @@ class TranslationPipeline(QObject):
         Eğer daha yeni kaynak dosyalar varsa True döndürür ve yeniden extract yapılmasını zorlar.
         """
         try:
+            # One-time compatibility trigger for RPYC reader upgrades:
+            # if RPYC scan is enabled and the current TL folder does not carry
+            # the latest extraction signature, force re-extraction once.
+            rpyc_enabled = bool(
+                getattr(self.config.translation_settings, 'enable_rpyc_reader', False)
+                or getattr(self, 'include_rpyc', False)
+            )
+            if rpyc_enabled:
+                diag_dir = os.path.join(tl_dir, 'diagnostics')
+                sig_path = os.path.join(diag_dir, 'rpyc_extraction_signature.json')
+                expected_sig = 'rpyc_reader_slot12_encoding_fallback_root_filter_v1'
+                try:
+                    if not os.path.exists(sig_path):
+                        self.log_message.emit('info', 'RPYC extraction signature missing. Forcing one-time re-extraction to refresh coverage.')
+                        return True
+                    with open(sig_path, 'r', encoding='utf-8') as sf:
+                        payload = json.load(sf)
+                    if payload.get('signature') != expected_sig:
+                        self.log_message.emit('info', 'RPYC extraction signature outdated. Forcing one-time re-extraction to refresh coverage.')
+                        return True
+                except Exception:
+                    # If signature read fails, stay safe and force one refresh.
+                    return True
+
             tl_mtime = 0
             # tl_dir içindeki dosyaların en yeni deðişme zamanını bul
             for root, dirs, files in os.walk(tl_dir):
@@ -3173,6 +3270,7 @@ init python:
                 include_rpyc=use_rpyc,
                 include_deep_scan=use_deep,
                 recursive=True,
+                exclude_dirs=['tl', 'cache', '__pycache__'],
                 progress_callback=lambda current, total, file_path: self._emit_scan_progress(
                     "Source scan progress",
                     current,
@@ -3285,6 +3383,7 @@ init python:
                 self.log_message.emit("info", self.config.get_log_text('deep_scan_running_short'))
                 deep_results = parser.extract_from_directory_with_deep_scan(
                     game_dir,
+                    exclude_dirs=['tl', 'cache', '__pycache__'],
                     progress_callback=lambda current, total, file_path: self._emit_scan_progress(
                         "Deep scan progress",
                         current,
@@ -3331,6 +3430,41 @@ init python:
                             entry['file_path'] = str(file_path)
                             source_texts.append(entry)
                             existing_texts.add(text)
+
+            # If a decompiler backend is available, run a complementary decompile pass
+            # and parse the generated .rpy files to recover any strings missed by
+            # the rpyc reader. This increases coverage for packed games.
+            try:
+                from src.utils.unrpyc_adapter import UnrpycAdapter
+                import tempfile, shutil
+                adapter = UnrpycAdapter()
+                if adapter.available:
+                    tmpdir = tempfile.mkdtemp(prefix="renlocalizer_unrpyc_")
+                    try:
+                        decompiled = adapter.decompile_directory(game_dir, tmpdir)
+                        if decompiled:
+                            self.log_message.emit('info', f"Decompiled {len(decompiled)} files; parsing decompiled .rpy for extra texts")
+                            decomp_results = parser.extract_combined(
+                                tmpdir,
+                                include_rpy=True,
+                                include_rpyc=False,
+                                include_deep_scan=use_deep,
+                                recursive=True,
+                            )
+                            for file_path, entries in decomp_results.items():
+                                for entry in entries:
+                                    text = entry.get('text')
+                                    if text and text not in existing_texts:
+                                        entry['file_path'] = str(file_path)
+                                        source_texts.append(entry)
+                                        existing_texts.add(text)
+                    finally:
+                        try:
+                            shutil.rmtree(tmpdir)
+                        except Exception:
+                            pass
+            except Exception as exc:
+                self.log_message.emit('warning', self.config.get_log_text('log_decompile_merge_failed', error=str(exc)))
 
             # --- EKSİK OLAN BİRLEŞTİRME KODU BİTİŞİ ---
             
@@ -3518,6 +3652,28 @@ init python:
                     continue
             
             self.log_message.emit("success", f"Successfully created {generated_count} translation files ({total_entries_count} unique strings total).")
+
+            # Write extraction signature so future runs can skip the one-time
+            # compatibility refresh after RPYC reader changes.
+            try:
+                diag_dir = os.path.join(tl_dir, 'diagnostics')
+                os.makedirs(diag_dir, exist_ok=True)
+                sig_path = os.path.join(diag_dir, 'rpyc_extraction_signature.json')
+                save_text_safely(
+                    Path(sig_path),
+                    json.dumps(
+                        {
+                            'signature': 'rpyc_reader_slot12_encoding_fallback_root_filter_v1',
+                            'written_at': int(time.time()),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding='utf-8',
+                )
+            except Exception as sig_err:
+                self.logger.debug(f"Failed to write RPYC extraction signature: {sig_err}")
+
             return True
                 
         except Exception as e:

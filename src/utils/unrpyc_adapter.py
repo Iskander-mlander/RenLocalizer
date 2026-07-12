@@ -71,6 +71,23 @@ def _detect_method() -> Optional[str]:
     # skip the subprocess_module probe entirely when frozen.
     _py = sys.executable
     _is_frozen = getattr(sys, "frozen", False)
+    # Prefer programmatic rpycdec if available (more controllable, runs in-process)
+    try:
+        import rpycdec  # type: ignore[import-untyped]
+        _ = rpycdec.decompile_file if hasattr(rpycdec, "decompile_file") else rpycdec.decompile
+        _METHOD = "rpycdec"
+        logger.debug("unrpyc_adapter: using rpycdec library")
+        return _METHOD
+    except (ImportError, AttributeError):
+        pass
+
+    # 3. Try subprocess: `python -m decompiler` or `unrpyc` script in PATH
+    # IMPORTANT: In a PyInstaller frozen build sys.executable points to the
+    # packaged app itself (e.g. RenLocalizer.exe), not a Python interpreter.
+    # Spawning it with "-m decompiler" would open a second app window, so we
+    # skip the subprocess_module probe entirely when frozen.
+    _py = sys.executable
+    _is_frozen = getattr(sys, "frozen", False)
     if not _is_frozen:
         try:
             result = subprocess.run(
@@ -94,17 +111,6 @@ def _detect_method() -> Optional[str]:
             logger.debug("unrpyc_adapter: using subprocess (unrpyc script)")
             return _METHOD
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        pass
-
-    # 3. Try rpycdec (pip install rpycdec)
-    try:
-        import rpycdec  # type: ignore[import-untyped]
-        # rpycdec may not expose __version__; probe a known callable instead
-        _ = rpycdec.decompile_file if hasattr(rpycdec, "decompile_file") else rpycdec.decompile
-        _METHOD = "rpycdec"
-        logger.debug("unrpyc_adapter: using rpycdec library")
-        return _METHOD
-    except (ImportError, AttributeError):
         pass
 
     _METHOD = ""   # Empty string = "detected, nothing available"

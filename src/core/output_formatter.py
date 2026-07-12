@@ -88,7 +88,7 @@ class RenPyOutputFormatter:
         'nvl_window', 'nvl_button', 'medium', 'touch', 'small',
         'replay_locked',
         # Style & layout properties
-        'show', 'hide', 'unicode', 'left', 'right', 'center',
+        'show', 'hide', 'unicode', 'center',
         'top', 'bottom', 'true', 'false', 'none', 'null', 'auto',
         # Common screen/action identifiers
         'add_post', 'card', 'money_get', 'money_pay', 'mp',
@@ -456,6 +456,12 @@ class RenPyOutputFormatter:
         # "True", "False", "None" are NEVER translatable — they are Python keywords
         if text_strip in ('True', 'False', 'None'):
             return True
+
+        # Known translatable dotted UI labels that look like module.attribute references
+        # e.g. "Q.Save", "Q.Load" — quick menu button text, not code
+        _translatable_dotted_ui = {'Q.Save', 'Q.Load', 'Q.Menu', 'A.Save', 'A.Load', 'S.Save', 'S.Load'}
+        if text_strip in _translatable_dotted_ui:
+            return False
 
         # Skip likely function calls or code-like literals
         if self._FUNC_CALL_RE.match(text_strip):

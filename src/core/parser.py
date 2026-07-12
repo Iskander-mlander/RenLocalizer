@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-import chardet
 from src.utils.encoding import read_text_safely
 import configparser
 import yaml
@@ -59,7 +58,7 @@ STANDARD_RENPY_STRINGS = {
 }
 
 # =============================================================================
-# TEXT TYPE CONSTANTS (v2.6.6 - Eliminates magic strings)
+# TEXT TYPE CONSTANTS (v2.8.7+ - Enhanced classification for button/screen distinction)
 # =============================================================================
 class TextType:
     """Constants for text extraction types - prevents typos and enables IDE autocomplete."""
@@ -76,6 +75,10 @@ class TextType:
     CONFIG_TEXT = 'config_text'
     DEFINE_TEXT = 'define_text'
     EXTEND = 'extend'  # extend "text" — continues previous dialogue line
+    # v2.8.7+ additions for enhanced classification
+    BUTTON_TEXT = 'button_text'  # textbutton "..." action X (UI element)
+    SCREEN_TRANSLATABLE = 'screen_translatable'  # text _(...) in screens (UI text)
+    TOOLTIP_TEXT = 'tooltip_text'  # tooltip "..." in buttons/screens (v8.0+)
 
 # Shared regex pattern for quoted strings (DRY principle)
 # Matches: "text", 'text', r"text", f'text', rf"text", etc.
@@ -97,12 +100,15 @@ class ContextNode:
 class RenPyParser:
     def __init__(self, config_manager=None):
         self.logger = logging.getLogger(__name__)
+        # Backwards-compatible aliases: some callers expect `config` while
+        # others (newer code) reference `config_manager`. Keep both.
         self.config = config_manager
+        self.config_manager = config_manager
         self._long_line_warning_keys: Set[Tuple[str, int, int]] = set()
 
         # Technical terms for filtering
         self.renpy_technical_terms = {
-            'left', 'right', 'center', 'top', 'bottom', 'gui', 'config',
+            'center', 'top', 'bottom', 'gui', 'config',
             'true', 'false', 'none', 'auto', 'png', 'jpg', 'mp3', 'ogg', 'rpy', 'rpyc', 'rpym', 'rpymc',
             'dissolve', 'fade', 'pixellate', 'move', 'moveinright', 'moveoutright',
             'moveinleft', 'moveoutleft', 'moveintop', 'moveouttop', 'moveinbottom', 'moveoutbottom',
@@ -449,7 +455,23 @@ class RenPyParser:
             r'\s*$'
         )
 
-        # 11. Python Text Call: $ renpy.confirm("text"), $ narrator("text"), etc.
+        # 11. Character Definition: define var = Character("Name", ...)
+        # Example: define mc = Character("Ethan", color="00FFCC")
+        # Captures Character, DynamicCharacter, NVLCharacter, ADVCharacter
+        # v2.8.7: NEW - Fix for missing character names in translations
+        self.character_define_re = re.compile(
+            r'^\s*define\s+'
+            r'(?P<var_name>\w+)\s*'
+            r'=\s*'
+            r'(?:Dynamic|NVL|ADV)?Character\s*\(\s*'
+            # Support both plain strings and _() wrapped strings
+            r'(?:_\s*\(\s*)?'  # Optional: _( prefix
+            rf'{_QUOTED_STRING_PATTERN}'
+            r'(?:\s*\))?',  # Optional: ) suffix for _()
+            re.MULTILINE | re.DOTALL
+        )
+
+        # 12. Python Text Call: $ renpy.confirm("text"), $ narrator("text"), etc.
         # Covers Tier-1 API calls from DeepExtractionConfig
         # Note: display_menu excluded — takes a list arg, not a string (handled by AST deep scan)
         # v2.7.2: Expanded to catch custom object methods like gallery.button
@@ -696,65 +718,76 @@ class RenPyParser:
     # ========== END NEW PATTERNS ==========
 
     def _register_patterns(self):
+        # v2.8.7+ PHASE 1: Text Type Classification Enhancement
+        # Pattern Priority: Most specific screen/button patterns FIRST
+        # This fixes button classification (was mixed with translatable_string)
         self.pattern_registry = [
+            # ========================================================================
+            # TIER 1: Screen UI Button Elements (HIGHEST PRIORITY)
+            # These distinguish button text from generic translatable strings
+            # ========================================================================
+            {'regex': self.textbutton_translatable_re, 'type': TextType.BUTTON_TEXT},  # textbutton _("X") - NOW button_text!
+            {'regex': self.textbutton_re, 'type': TextType.BUTTON_TEXT},  # textbutton "X"
+            {'regex': self.tooltip_property_re, 'type': TextType.TOOLTIP_TEXT},  # tooltip "..." in screens (v8.0+)
+            
+            # TIER 2: Screen Text Elements (separated from generic translatable)
+            {'regex': self.screen_text_translatable_re, 'type': TextType.SCREEN_TRANSLATABLE},  # text _("X") in screens
+            {'regex': self.screen_text_re, 'type': 'ui'},  # text/label/tooltip in screens
+            {'regex': self.side_text_re, 'type': 'ui'},
+            
+            # TIER 3: Menu Elements
+            {'regex': self.menu_choice_re, 'type': 'menu'},
+            {'regex': self.menu_title_re, 'type': 'menu'},
+            
+            # TIER 4: Foundation Patterns
             {'regex': self.layout_text_re, 'type': 'layout'},
             {'regex': self.store_text_re, 'type': 'store'},
             {'regex': self.general_define_re, 'type': 'define'},
-            # Most specific patterns first
-            # Combined patterns for better maintainability
             {'regex': self.alt_text_re, 'type': 'alt_text'},
             {'regex': self.input_text_re, 'type': 'input'},
             {'regex': self.notify_re, 'type': 'notify'},
             {'regex': self.confirm_re, 'type': 'confirm'},
             {'regex': self.renpy_input_re, 'type': 'input'},
-            # _() marked screen elements - ALWAYS translatable (check BEFORE general patterns)
-            {'regex': self.textbutton_translatable_re, 'type': 'translatable_string'},
-            {'regex': self.screen_text_translatable_re, 'type': 'translatable_string'},
-            # NEW: Enhanced patterns for better coverage
+            
+            # TIER 5: Function Calls & Dialogue
             {'regex': self.atl_text_re, 'type': 'ui'},           # ATL text blocks
             {'regex': self.renpy_say_re, 'type': 'dialogue'},    # renpy.say() calls
-            {'regex': self.action_text_re, 'type': 'translatable_string'},  # action _(\"text\")
+            {'regex': self.action_text_re, 'type': 'translatable_string'},  # action _("text")
             {'regex': self.caption_re, 'type': 'ui'},            # caption attributes
             {'regex': self.frame_title_re, 'type': 'ui'},        # frame/window titles
             {'regex': self.generic_translatable_re, 'type': 'translatable_string'},  # generic _()
-            # _p() and _() function patterns
             {'regex': self._p_single_re, 'type': 'paragraph'},
             {'regex': self._underscore_re, 'type': 'translatable_string'},
             {'regex': self.define_string_re, 'type': 'define'},
-            # Config/GUI patterns
+            
+            # TIER 6: Config & GUI
             {'regex': self.config_string_re, 'type': 'config'},
             {'regex': self.gui_text_re, 'type': 'gui'},
             {'regex': self.style_property_re, 'type': 'style'},
-            # Screen UI patterns (textbutton before general text)
-            {'regex': self.textbutton_re, 'type': 'button'},
-            {'regex': self.screen_text_re, 'type': 'ui'},
-            {'regex': self.side_text_re, 'type': 'ui'},
-            # Menu patterns
-            {'regex': self.menu_choice_re, 'type': 'menu'},
-            {'regex': self.menu_title_re, 'type': 'menu'},
-            # Python/renpy functions
+            
+            # TIER 7: Python & Ren'Py Functions
             {'regex': self.python_renpy_re, 'type': 'renpy_func'},
             {'regex': self.renpy_function_re, 'type': 'renpy_func'},
-            # Dialogue patterns (most general - last)
+            
+            # TIER 8: Dialogue Patterns (Most General - Last)
             {'regex': self.char_dialog_re, 'type': 'dialogue', 'character_group': 'char'},
             {'regex': self.extend_re, 'type': TextType.EXTEND},
             {'regex': self.narrator_re, 'type': 'dialogue'},
             {'regex': self.gui_variable_re, 'type': 'gui'},
-            # REMOVED: renpy_show_re
-            # Actions now handled in Secondary Pass (v2.6.4)
             
-            
-            # V2.6.7: NEW PATTERNS FROM REN'PY DOCUMENTATION RESEARCH
+            # V2.6.7+: Extended Patterns
             {'regex': self.double_underscore_re, 'type': TextType.IMMEDIATE_TRANSLATION},  # __("text")
             {'regex': self.python_translatable_re, 'type': 'translatable_string'},  # Python block _()
             {'regex': self.nvl_dialogue_re, 'type': TextType.DIALOGUE},  # NVL mode dialogue
             {'regex': self.image_text_overlay_re, 'type': TextType.SCREEN_TEXT},  # image = Text("text")
             
-            # NEW v2.4.1 patterns
+            # V2.4.1+: Additional Patterns
             {'regex': self.default_translatable_re, 'type': 'translatable_string'},
             {'regex': self.show_screen_re, 'type': 'ui'},
-            # V2.7.1: Deep Extraction patterns
+            
+            # V2.7.1+: Deep Extraction Patterns
             {'regex': self.bare_define_string_re, 'type': TextType.DEFINE_TEXT, 'deep_extract': True},
+            {'regex': self.character_define_re, 'type': 'character_name', 'deep_extract': False},
             {'regex': self.bare_default_string_re, 'type': TextType.DEFINE_TEXT, 'deep_extract': True},
             {'regex': self.python_text_call_re, 'type': TextType.RENPY_FUNC},
         ]
@@ -771,7 +804,7 @@ class RenPyParser:
         ]
 
         self.renpy_technical_terms = {
-            'left', 'right', 'center', 'top', 'bottom', 'gui', 'config',
+            'center', 'top', 'bottom', 'gui', 'config',
             'true', 'false', 'none', 'auto', 'png', 'jpg', 'mp3', 'ogg',
             'dissolve', 'fade', 'pixellate', 'move', 'moveinright', 'moveoutright',
             'zoom', 'alpha', 'xalign', 'yalign', 'xpos', 'ypos', 'xanchor', 'yanchor',
@@ -2363,7 +2396,21 @@ class RenPyParser:
             return None
 
         processed_text, placeholder_map = self.preserve_placeholders(text)
-        
+
+        # For texts with disambiguation tags where meaningful content is very short,
+        # strip {#...} tags before translation so the engine can translate the core text.
+        # After translation, the disambiguation tag is restored from placeholder_map.
+        _disambig_stripped_text = None
+        if '{#' in text:
+            _bare_text = re.sub(r'\{#[^}]+\}', '', text).strip()
+            if _bare_text and _bare_text != text:
+                _bare_placeholder_text, _bare_map = self.preserve_placeholders(_bare_text)
+                _core_content = re.sub(r'⟦[^⟧]+⟧', '', _bare_placeholder_text).strip()
+                if _core_content and len(_core_content) <= 4:
+                    processed_text = _bare_placeholder_text
+                    placeholder_map = _bare_map
+                    _disambig_stripped_text = _bare_text
+
         # Context-based type correction: if context_path indicates screen/menu,
         # override generic types like 'dialogue' with the correct category.
         # This prevents screen/menu text from being misclassified as dialogue
@@ -2417,6 +2464,7 @@ class RenPyParser:
             'confidence': confidence,
             'confidence_band': confidence_band(confidence),
             'translation_id': translation_id,  # v2.8.3: Ren'Py-compatible ID
+            '_disambig_stripped_text': _disambig_stripped_text,
         }
 
     def _is_python_context(self, context_path: List[str]) -> bool:
@@ -2608,7 +2656,8 @@ class RenPyParser:
         if any(text_lower.endswith(ext) for ext in self.file_extensions):
             return False
 
-        if len(text.strip()) < 2:
+        # Allow single-character UI text that is explicitly translatable (e.g. _("<"), _(">"))
+        if len(text.strip()) < 2 and text.strip() not in '<>{}[]()^v↑↓←→':
             return False
         text_strip = text.strip()
 
@@ -2828,7 +2877,9 @@ class RenPyParser:
                 # structure itself needs translation for some languages.
                 has_renpy_interpolation = bool(re.search(r'\[[^\]]+\]', text_strip))
                 if not has_renpy_interpolation and alpha_count < min_alpha:
-                    return False
+                    # Allow single non-alpha UI text characters (e.g. _("<"), _(">"))
+                    if len(text_strip) != 1 or text_strip not in '<>{}[]()^v↑↓←→':
+                        return False
         except Exception:
             pass
 
@@ -2876,7 +2927,7 @@ class RenPyParser:
         if text_strip.lower() in nvl_commands:
             return False
 
-        return any(ch.isalpha() for ch in text) and len(text.strip()) >= 2
+        return (any(ch.isalpha() for ch in text) or (text_strip in '<>{}[]()^v↑↓←→')) and len(text.strip()) >= 1
 
     def get_context_line(self) -> str:
         """Returns the current line being processed for context-aware filtering."""
@@ -3037,7 +3088,7 @@ class RenPyParser:
             'nvl_window', 'nvl_button', 'medium', 'touch', 'small',
             'replay_locked',
             # Style & layout properties
-            'show', 'hide', 'unicode', 'left', 'right', 'center', 
+            'show', 'hide', 'unicode', 'center', 
             'top', 'bottom', 'true', 'false', 'none', 'null', 'auto',
             # Common screen/action identifiers
             'add_post', 'card', 'money_get', 'money_pay', 'mp',
@@ -3073,9 +3124,11 @@ class RenPyParser:
         if re.match(r'^v?\d+\.\d+(\.\d+)?([a-z])?$', text_lower):
             return False
         
-        # Skip single character strings (often used as separators or bullets)
+        # Single non-alpha character: only reject common bullet/separator characters,
+        # allow bracket/paren/navigation chars that may be legitimate UI text (e.g. _("<"), _(">"))
         if len(text_strip) == 1 and not text_strip.isalpha():
-            return False
+            if text_strip in '•·–—‖|¦':
+                return False
         
         # Skip if it's just Ren'Py tags/variables with no actual text
         # e.g., "{font=something}[variable]{/font}" with no human-readable text
@@ -4041,6 +4094,14 @@ class RenPyParser:
         if re.match(r'^#[0-9a-fA-F]{3,8}$', text.strip()):
             return False
         
+        # Saf Ren'Py değişken referansları — çevrilemez (örn: [page], [player])
+        _ts = text.strip()
+        if re.match(r'^\[[a-zA-Z_]\w*\]$', _ts):
+            return False
+        # Sadece markup/tag içeren, alfabetik içeriği olmayan stringler
+        _bare = re.sub(r'\{[^}]*\}|\[[^\]]*\]', '', _ts).strip()
+        if _bare and not re.search(r'[a-zA-Z\u00C0-\u024F]', _bare):
+            return False
         # Label/screen/transform isimleri
         if 'label' in context_lower or 'jump' in context_lower or 'call' in context_lower:
             if re.match(r'^[a-z_][a-z0-9_]*$', text.strip()):
@@ -4084,9 +4145,8 @@ class RenPyParser:
         found_key: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Deep scan sonucu için entry oluştur"""
-        
         processed_text, placeholder_map = self.preserve_placeholders(text)
-        
+
         text_type = 'deep_scan'
         if in_python:
             text_type = 'python_string'
@@ -4196,7 +4256,8 @@ class RenPyParser:
                 entries = self.extract_with_deep_scan(rpy_file, include_deep_scan, include_ast_scan=include_deep_scan)
                 results[rpy_file] = entries
             except Exception as exc:
-                self.logger.error("Error in deep scan for %s: %s", rpy_file, exc)
+                # Log full traceback to aid debugging of decompiled inputs
+                self.logger.exception("Error in deep scan for %s: %s", rpy_file, exc)
                 results[rpy_file] = []
             if index % 5 == 0:
                 time.sleep(0.001)
@@ -4264,7 +4325,7 @@ class RenPyParser:
         """
         try:
             from .rpyc_reader import extract_texts_from_rpyc_directory
-            return extract_texts_from_rpyc_directory(directory, recursive)
+            return extract_texts_from_rpyc_directory(directory, recursive=recursive, config_manager=self.config_manager)
         except ImportError:
             self.logger.warning("rpyc_reader module not available")
             return {}
