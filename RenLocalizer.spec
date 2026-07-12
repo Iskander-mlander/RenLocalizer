@@ -181,3 +181,24 @@ coll_cli = COLLECT(
     upx_exclude=[],
     name='RenLocalizerCLI',
 )
+
+# =========================================================
+# Post-build: Merge CLI into GUI folder (single folder release)
+# =========================================================
+import shutil
+import os as _os
+
+_cli_dir = _os.path.join(project_dir, 'dist', 'RenLocalizerCLI')
+_gui_dir = _os.path.join(project_dir, 'dist', 'RenLocalizer')
+
+if _os.path.isdir(_cli_dir) and _os.path.isdir(_gui_dir):
+    # Copy CLI executable into GUI folder
+    for f in _os.listdir(_cli_dir):
+        if f.lower().startswith('renlocalizercli'):
+            src = _os.path.join(_cli_dir, f)
+            dst = _os.path.join(_gui_dir, f)
+            shutil.copy2(src, dst)
+            print(f"[BUILD] Merged {f} into RenLocalizer/")
+    # Remove separate CLI folder
+    shutil.rmtree(_cli_dir)
+    print("[BUILD] Removed RenLocalizerCLI/ — single folder release ready")
