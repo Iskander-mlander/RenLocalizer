@@ -1038,7 +1038,7 @@
   "unrpa_desc": "Utilice el sistema moderno y rápido UnRPA para extraer archivos .rpa en juegos Ren'Py (compatible con Ren'Py 8.x).",
   "unrpa_title": "Herramientas de Archivo RPA",
   "update_available_message": "Hay una nueva versión disponible: {latest} (actual: {current}).\n¿Abrir la página de lanzamientos?",
-  "update_available_title": "Actualización disponible",
+  "update_available_title": "🚀 New Version Available",
   "update_check_failed": "Fallo al buscar actualizaciones: {error}",
   "update_check_no_update": "Está utilizando la última versión.",
   "update_check_title": "Búsqueda de actualizaciones",
@@ -1204,5 +1204,10 @@
   "glossary_dlg_target_placeholder": "e.g. Karakter Adı",
   "glossary_dlg_import": "📥 Import Glossary",
   "glossary_dlg_export": "📤 Export Glossary",
-  "tip_native_limitation": "Tip: Some games build UI text at runtime (quest + \"(?)\" buttons, NPC schedules, Python f-strings). Native TLID captures static text only. If parts of the interface stay untranslated, switch to Standard mode and re-translate."
+  "tip_native_limitation": "Tip: Some games build UI text at runtime (quest + \"(?)\" buttons, NPC schedules, Python f-strings). Native TLID captures static text only. If parts of the interface stay untranslated, switch to Standard mode and re-translate.",
+  "btn_font_inject": "Download & Inject Google Font",
+  "update_available_msg": "New Version: ",
+  "update_available_click": "Press OK to download.",
+  "log_copied_clipboard": "Log copied to clipboard!",
+  "cache_no_project": "No project selected to clear cache."
 }

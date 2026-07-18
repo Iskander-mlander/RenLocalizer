@@ -168,7 +168,7 @@ exe_cli = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,                          # No icon for CLI
+    icon=os.path.join(project_dir, 'icon.ico') if sys.platform == 'win32' else None,
 )
 
 coll_cli = COLLECT(

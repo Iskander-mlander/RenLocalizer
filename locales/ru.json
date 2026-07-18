@@ -1039,7 +1039,7 @@
   "unrpa_desc": "Извлекайте архивы .rpa быстро (совместимо с Ren'Py 8.x).",
   "unrpa_title": "Архивы RPA",
   "update_available_message": "Доступна версия {latest} (сейчас {current}). Открыть страницу?",
-  "update_available_title": "Доступно обновление",
+  "update_available_title": "🚀 New Version Available",
   "update_check_failed": "Не удалось проверить обновления: {error}",
   "update_check_no_update": "Вы используете последнюю версию.",
   "update_check_title": "Проверка обновлений",
@@ -1205,5 +1205,10 @@
   "glossary_dlg_target_placeholder": "e.g. Karakter Adı",
   "glossary_dlg_import": "📥 Import Glossary",
   "glossary_dlg_export": "📤 Export Glossary",
-  "tip_native_limitation": "Tip: Some games build UI text at runtime (quest + \"(?)\" buttons, NPC schedules, Python f-strings). Native TLID captures static text only. If parts of the interface stay untranslated, switch to Standard mode and re-translate."
+  "tip_native_limitation": "Tip: Some games build UI text at runtime (quest + \"(?)\" buttons, NPC schedules, Python f-strings). Native TLID captures static text only. If parts of the interface stay untranslated, switch to Standard mode and re-translate.",
+  "btn_font_inject": "Download & Inject Google Font",
+  "update_available_msg": "New Version: ",
+  "update_available_click": "Press OK to download.",
+  "log_copied_clipboard": "Log copied to clipboard!",
+  "cache_no_project": "No project selected to clear cache."
 }

@@ -105,6 +105,13 @@ ApplicationWindow {
 
         function onLogMessage(level, message) {
             appendLog(level, message)
+            // Show toast for toolbox operations and key events
+            if (message.indexOf("✅") === 0 && (message.indexOf("Font") >= 0 || message.indexOf("Lint") >= 0 || message.indexOf("terms") >= 0 || message.indexOf("imported") >= 0 || message.indexOf("exported") >= 0 || message.indexOf("filled") >= 0 || message.indexOf("translated") >= 0))
+                showToast(message.replace("✅ ", ""), "success")
+            else if (message.indexOf("⚠️") === 0 && (message.indexOf("failed") >= 0 || message.indexOf("not found") >= 0))
+                showToast(message.replace("⚠️ ", ""), "warning")
+            else if (message.indexOf("🔤") === 0 || message.indexOf("🩺") === 0 || message.indexOf("📚") === 0)
+                showToast(message, "info")
         }
 
         function onProgressChanged(current, total, text) {
@@ -140,7 +147,7 @@ ApplicationWindow {
                 showToast(liteBackend.getTextWithDefault("translation_completed", "Çeviri tamamlandı!"), "success")
             } else {
                 stageLabel.text = liteBackend.getTextWithDefault("stage_error", "Hata")
-                showToast(liteBackend.getTextWithDefault("pipeline_translate_failed", "Çeviri başarısız") + ": " + message, "error")
+                showToast(liteBackend.getTextWithDefault("pipeline_translate_failed", "Translation failed") + ": " + message, "error")
             }
         }
 
@@ -1359,7 +1366,7 @@ ApplicationWindow {
                                     lines.push(item.ts + " [" + item.level.toUpperCase() + "] " + item.message)
                                 }
                                 liteBackend.copyToClipboard(lines.join("\n"))
-                                showToast("Log panoya kopyalandı!", "info")
+                                showToast(liteBackend.getTextWithDefault("log_copied_clipboard", "Log copied to clipboard!"), "info")
                             }
                             background: Rectangle { radius: 8; color: clrCard; border.color: clrCardBorder; border.width: 1 }
                             contentItem: Label { text: parent.text; color: clrTxt; font.pixelSize: 12; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
@@ -1468,7 +1475,7 @@ ApplicationWindow {
                         Button {
                             height: 42
                             Layout.preferredWidth: Math.max(260, implicitContentWidth + 36)
-                            text: liteBackend.uiTrigger, "🔽 " + liteBackend.getTextWithDefault("btn_font_inject", "Google Fonts'tan Font İndir ve Enjekte Et")
+                            text: liteBackend.uiTrigger, "🔽 " + liteBackend.getTextWithDefault("btn_font_inject", "Download & Inject Google Font")
                             onClicked: liteBackend.runToolFontInject()
                             background: Rectangle {
                                 radius: 10; color: parent.hovered ? clrCardHover : clrInput
@@ -1728,10 +1735,10 @@ ApplicationWindow {
     Dialog {
         id: updateDialog
         anchors.centerIn: parent; width: Math.min(480, root.width * 0.8)
-        title: "🚀 Yeni Sürüm Mevcut"; modal: true
+        title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("update_available_title", "🚀 New Version Available"); modal: true
         property string latestVersion: ""; property string releaseUrl: ""
         standardButtons: Dialog.Ok | Dialog.Cancel
-        contentItem: Label { text: "Yeni Sürüm: " + updateDialog.latestVersion + "\nHemen indirmek için Tamam'a tıklayın."; color: clrTxt; wrapMode: Text.Wrap }
+        contentItem: Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("update_available_msg", "New Version: ") + updateDialog.latestVersion + "\n" + liteBackend.getTextWithDefault("update_available_click", "Press OK to download."); color: clrTxt; wrapMode: Text.Wrap }
         onAccepted: if(releaseUrl) Qt.openUrlExternally(releaseUrl)
     }
 

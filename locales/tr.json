@@ -1067,7 +1067,7 @@
   "unrpa_desc": "Ren'Py oyunlarındaki .rpa arşivlerini açmak için modern ve hızlı UnRPA sistemini kullanın (Ren'Py 8.x uyumlu).",
   "unrpa_title": "RPA Arşiv Araçları",
   "update_available_message": "Yeni sürüm mevcut: {latest} (şu an: {current}).\nSürüm sayfası açılsın mı?",
-  "update_available_title": "Güncelleme Var",
+  "update_available_title": "🚀 Yeni Sürüm Mevcut",
   "update_check_failed": "Güncelleme kontrolü başarısız: {error}",
   "update_check_no_update": "En son sürümü kullanıyorsunuz.",
   "update_check_title": "Güncelleme Kontrolü",
@@ -1213,5 +1213,10 @@
   "glossary_dlg_target_placeholder": "örn. Character Name",
   "glossary_dlg_import": "📥 Sözlük İçe Aktar",
   "glossary_dlg_export": "📤 Sözlük Dışa Aktar",
-  "tip_native_limitation": "İpucu: Bazı oyunlar arayüz metinlerini runtime'da birleştirir (görev + \"(?)\" butonlar, NPC takvimleri, Python f-string'ler). Native TLID sadece statik metinleri yakalar. Arayüzün bazı kısımları çevrilmezse Standard moda geçip tekrar çevirin."
+  "tip_native_limitation": "İpucu: Bazı oyunlar arayüz metinlerini runtime'da birleştirir (görev + \"(?)\" butonlar, NPC takvimleri, Python f-string'ler). Native TLID sadece statik metinleri yakalar. Arayüzün bazı kısımları çevrilmezse Standard moda geçip tekrar çevirin.",
+  "btn_font_inject": "Google Font İndir & Enjekte Et",
+  "update_available_msg": "Yeni Sürüm: ",
+  "update_available_click": "İndirmek için Tamama basın.",
+  "log_copied_clipboard": "Log panoya kopyalandı!",
+  "cache_no_project": "Önbelleği temizlemek için proje seçilmedi."
 }
