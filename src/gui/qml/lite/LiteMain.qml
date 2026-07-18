@@ -292,7 +292,7 @@ ApplicationWindow {
                     ColumnLayout {
                         spacing: 2
                         Label {
-                            text: "RenLocalizer"
+                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("app_title", "RenLocalizer")
                             font.pixelSize: 18; font.bold: true; color: clrTxt
                             font.letterSpacing: 0.5
                         }
@@ -730,10 +730,11 @@ ApplicationWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.leftMargin: 24; Layout.rightMargin: 24
-                        height: ntTipLabel.implicitHeight + 14; radius: 8
+                        Layout.preferredHeight: ntTipLayout.implicitHeight + 16; radius: 8
                         visible: liteBackend.outputMode === "native"
                         color: Qt.rgba(245, 158, 11, 0.08); border.color: Qt.rgba(245, 158, 11, 0.2); border.width: 1
                         RowLayout {
+                            id: ntTipLayout
                             anchors.fill: parent; anchors.margins: 8; spacing: 8
                             Label { text: "⚠️"; font.pixelSize: 14 }
                             Label {
@@ -901,7 +902,7 @@ ApplicationWindow {
 
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 22; spacing: 14
-                            Label { text: "🖥️ " + liteBackend.getTextWithDefault("settings_section_ui", "Arayüz & Sistem Ayarları"); font.pixelSize: 16; font.bold: true; color: clrAccent }
+                            Label { text: liteBackend.uiTrigger, "🖥️ " + liteBackend.getTextWithDefault("settings_section_ui", "Arayüz & Sistem Ayarları"); font.pixelSize: 16; font.bold: true; color: clrAccent }
 
                             RowLayout {
                                 Layout.fillWidth: true
@@ -935,7 +936,7 @@ ApplicationWindow {
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
                             anchors.margins: 22; spacing: 18
 
-                            Label { text: "📦 " + liteBackend.getTextWithDefault("settings_section_output", "Çıktı Üretim Modu & Çeviri Belleği (Output & TM Cache)"); font.pixelSize: 16; font.bold: true; color: clrAccent }
+                            Label { text: liteBackend.uiTrigger, "📦 " + liteBackend.getTextWithDefault("settings_section_output", "Çıktı Üretim Modu & Çeviri Belleği (Output & TM Cache)"); font.pixelSize: 16; font.bold: true; color: clrAccent }
 
                             // KATMAN 1: GÖRSEL ÇİFT BUTONLU SEGMENTED SEÇİCİ (STRINGS vs NATIVE TLID)
                             ColumnLayout {
@@ -991,7 +992,7 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
-                                    Layout.fillWidth: true; height: descLabel.implicitHeight + 16
+                                    Layout.fillWidth: true; Layout.preferredHeight: descLayout.implicitHeight + 16
                                     radius: 8; color: Qt.rgba(1, 1, 1, 0.03); border.color: clrCardBorder; border.width: 1
                                     RowLayout {
                                         id: descLayout; anchors.fill: parent; anchors.margins: 8; spacing: 8
@@ -1008,10 +1009,12 @@ ApplicationWindow {
 
                                 // Tip: when to use Standard mode
                                 Rectangle {
-                                    Layout.fillWidth: true; height: tipLabel.implicitHeight + 14
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: tipLayout.implicitHeight + 16
                                     radius: 8; color: Qt.rgba(245, 158, 11, 0.08); border.color: Qt.rgba(245, 158, 11, 0.2); border.width: 1
                                     visible: liteBackend.outputMode === "native"
                                     RowLayout {
+                                        id: tipLayout
                                         anchors.fill: parent; anchors.margins: 8; spacing: 8
                                         Label { text: "⚠️"; font.pixelSize: 14 }
                                         Label {
@@ -1042,8 +1045,8 @@ ApplicationWindow {
 
                                 Button {
                                     Layout.preferredWidth: 220; height: 40
-                                    text: "🧹 " + liteBackend.getTextWithDefault("lite_clear_cache_btn", "Çeviri Belleğini (TM) Temizle")
-                                    onClicked: if (liteBackend.clearTranslationCache()) showToast("Çeviri belleği temizlendi.", "success")
+                                    text: liteBackend.uiTrigger, "🧹 " + liteBackend.getTextWithDefault("lite_clear_cache_btn", "Çeviri Belleğini (TM) Temizle")
+                                    onClicked: if (liteBackend.clearTranslationCache())                             showToast(liteBackend.getTextWithDefault("cache_cleared_toast", "Translation cache cleared."), "success")
                                     background: Rectangle { radius: 8; color: parent.hovered ? "#991B1B" : "#7F1D1D"; border.color: "#B91C1C"; border.width: 1 }
                                     contentItem: Label { text: parent.text; color: "white"; font.bold: true; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                 }
@@ -1060,18 +1063,18 @@ ApplicationWindow {
 
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 22; spacing: 16
-                            Label { text: "⚡ " + liteBackend.getTextWithDefault("settings_section_perf", "Performans & Bağlantı Parametreleri"); font.pixelSize: 16; font.bold: true; color: clrAccent }
+                            Label { text: liteBackend.uiTrigger, "⚡ " + liteBackend.getTextWithDefault("settings_section_perf", "Performans & Bağlantı Parametreleri"); font.pixelSize: 16; font.bold: true; color: clrAccent }
 
                             RowLayout {
                                 Layout.fillWidth: true
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 6
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_concurrency_label", "Concurrent Threads") + ": " + Math.round(threadsSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_concurrency_label", "Concurrent Threads") + ": " + Math.round(threadsSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                     Slider { id: threadsSlider; Layout.fillWidth: true; from: 1; to: 32; stepSize: 1; value: liteBackend.maxConcurrentThreads; onMoved: liteBackend.maxConcurrentThreads = value }
                                 }
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 6
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_delay_label", "Request Delay") + ": " + delaySlider.value.toFixed(2) + "s"; color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_delay_label", "Request Delay") + ": " + delaySlider.value.toFixed(2) + "s"; color: clrTxt; font.bold: true; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                     Slider { id: delaySlider; Layout.fillWidth: true; from: 0.0; to: 3.0; stepSize: 0.05; value: liteBackend.requestDelay; onMoved: liteBackend.requestDelay = value }
                                 }
                             }
@@ -1080,7 +1083,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 6
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_batch_label", "Batch Size") + ": " + Math.round(batchSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_batch_label", "Batch Size") + ": " + Math.round(batchSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                     Slider { id: batchSlider; Layout.fillWidth: true; from: 10; to: 500; stepSize: 10; value: liteBackend.maxBatchSize; onMoved: liteBackend.maxBatchSize = value }
                                 }
                                 RowLayout {

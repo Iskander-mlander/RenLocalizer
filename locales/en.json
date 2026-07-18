@@ -498,7 +498,7 @@
   "multi_endpoint_tooltip": "Sends parallel requests to multiple Google Translate servers, uses fastest response",
   "nav_about": "About",
   "nav_cache": "Translation Reuse",
-  "nav_glossary": "📚 Glossary",
+  "nav_glossary": "Glossary",
   "nav_home": "Home",
   "nav_help_label": "Help & Project",
   "nav_settings": "Settings & AI",
@@ -1085,7 +1085,7 @@
   "use_cache_label": "Use Translation Memory",
   "use_external_tm": "External Translation Memory",
   "lite_clear_cache_desc": "Clears cached translation records for the selected project. Useful to restart translation from scratch.",
-  "lite_clear_cache_btn": "🧹 Clear Translation Memory",
+  "lite_clear_cache_btn": "Clear Translation Memory",
   "lite_save_btn": "💾 Save",
   "lite_close_btn": "Close",
   "nav_dashboard": "Dashboard",
@@ -1174,7 +1174,7 @@
   "lite_cache_desc": "Remembers previously translated lines and skips re-translation.",
   "mode_strings_btn": "📋 Standard (strings.json)",
   "mode_native_btn": "⚡ Native TLID",
-  "nav_toolbox": "🛠️ Toolbox",
+  "nav_toolbox": "Toolbox",
   "toolbox_title": "RenLocalizer Toolbox",
   "toolbox_subtitle": "Essential utilities to inject universal fonts, run syntax checks, and extract project glossaries.",
   "tool_font_title": "Font Injection & Helper",
@@ -1240,5 +1240,9 @@
   "log_lint_starting": "🩺 Ren'Py Lint scanner running...",
   "log_glossary_extracting": "📚 Extracting glossary terms...",
   "log_empty_terms_none": "No empty terms to fill.",
-  "log_tl_folder_detected": "🔄 TL folder detected — Retranslation mode active. Only empty translations will be filled, existing translations will be preserved."
+  "log_tl_folder_detected": "🔄 TL folder detected — Retranslation mode active. Only empty translations will be filled, existing translations will be preserved.",
+  "cache_cleared_toast": "Translation cache cleared.",
+  "engine_local_llm": "🖥️ Local LLM (Ollama / LM Studio)",
+  "source_lang_auto": "🤖 Auto-detect",
+  "ai_prompt_placeholder": "Translate the following Ren'Py visual novel dialogue accurately while keeping tags..."
 }

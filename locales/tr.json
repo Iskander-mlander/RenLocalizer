@@ -498,7 +498,7 @@
   "multi_endpoint_tooltip": "Birden fazla Google Çeviri sunucusuna paralel istek gönderir, en hızlı yanıtı alır",
   "nav_about": "Hakkında",
   "nav_cache": "Çeviri Tekrar Kullanımı",
-  "nav_glossary": "📚 Sözlük",
+  "nav_glossary": "Sözlük",
   "nav_home": "Ana Sayfa",
   "nav_help_label": "Yardım & Proje",
   "nav_settings": "Ayarlar & AI",
@@ -1125,7 +1125,7 @@
   "lite_use_cache_label": "Çeviri Belleğini (TM) Kullan",
   "lite_use_cache_desc": "Önceden çevrilmiş satırları hafızadan okur, böylece Google sınırlarına takılmadan anında çeviriyi tamamlar.",
   "lite_clear_cache_desc": "Seçili projenin önbelleğe alınmış eski çeviri kayıtlarını temizler. Çeviriyi sıfırdan başlatmak için kullanabilirsiniz.",
-  "lite_clear_cache_btn": "🧹 Çeviri Belleğini Temizle",
+  "lite_clear_cache_btn": "Çeviri Belleğini Temizle",
   "lite_save_btn": "💾 Kaydet",
   "lite_close_btn": "Kapat",
   "nav_dashboard": "Kontrol Paneli",
@@ -1186,7 +1186,7 @@
   "lite_cache_desc": "Daha önce çevrilen satırları hatırlar ve tekrar çevirmez.",
   "mode_strings_btn": "📋 Standart (strings.json)",
   "mode_native_btn": "⚡ Yerel TLID",
-  "nav_toolbox": "🛠️ Araç Kutusu",
+  "nav_toolbox": "Araç Kutusu",
   "toolbox_title": "RenLocalizer Araç Kutusu (Toolbox)",
   "toolbox_subtitle": "Görsel roman çevirilerini kusursuzlaştırmak, font hatalarını çözmek ve sözlük oluşturmak için hayat kurtaran altın araçlar.",
   "tool_font_title": "Font Değiştirici ve Enjektör (Font Helper)",
@@ -1240,5 +1240,9 @@
   "log_lint_starting": "🩺 Ren'Py Lint tarayıcı çalıştırılıyor...",
   "log_glossary_extracting": "📚 Sözlük terimleri çıkarılıyor...",
   "log_empty_terms_none": "Doldurulacak boş terim yok.",
-  "log_tl_folder_detected": "🔄 TL klasörü tespit edildi — Yeniden çeviri modu aktif. Sadece boş çeviriler doldurulacak, mevcut çeviriler korunacak."
+  "log_tl_folder_detected": "🔄 TL klasörü tespit edildi — Yeniden çeviri modu aktif. Sadece boş çeviriler doldurulacak, mevcut çeviriler korunacak.",
+  "cache_cleared_toast": "Çeviri belleği temizlendi.",
+  "engine_local_llm": "🖥️ Yerel LLM (Ollama / LM Studio)",
+  "source_lang_auto": "🤖 Otomatik Tespit",
+  "ai_prompt_placeholder": "Ren'Py görsel roman diyaloğunu etiketleri koruyarak doğru şekilde çevir..."
 }

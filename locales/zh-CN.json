@@ -475,7 +475,7 @@
   "multi_endpoint_tooltip": "向多个 Google 翻译服务器发送并行请求，使用最快的响应",
   "nav_about": "关于",
   "nav_cache": "翻译复用",
-  "nav_glossary": "📚 术语表",
+  "nav_glossary": "术语表",
   "nav_home": "家",
   "nav_help_label": "帮助与项目",
   "nav_settings": "设置",
@@ -1156,7 +1156,7 @@
   "lite_cache_desc": "记住先前翻译的行并跳过重新翻译。",
   "mode_strings_btn": "📋 标准 (strings.json)",
   "mode_native_btn": "⚡ 原生TLID",
-  "nav_toolbox": "🛠️ 工具箱",
+  "nav_toolbox": "工具箱",
   "toolbox_title": "RenLocalizer工具箱",
   "toolbox_subtitle": "注入通用字体、运行语法检查和提取项目词汇表的基本实用程序。",
   "tool_font_title": "字体注入与帮助",
@@ -1171,7 +1171,7 @@
   "deepseek_url_label": "DeepSeek API URL：",
   "google_no_key_desc": "已选择Google Translate — 无需API密钥。",
   "lite_ai_settings_title": "🤖 AI引擎设置",
-  "lite_clear_cache_btn": "🧹 清除翻译记忆",
+  "lite_clear_cache_btn": "清除翻译记忆",
   "lite_clear_cache_desc": "清除所选项目的缓存翻译记录。有助于从头开始重新翻译。",
   "lite_close_btn": "关闭",
   "lite_guide_btn": "打开RenLocalizer Lite Wiki指南",
@@ -1239,5 +1239,9 @@
   "log_lint_starting": "🩺 Ren'Py Lint扫描器正在运行...",
   "log_glossary_extracting": "📚 正在提取词汇表术语...",
   "log_empty_terms_none": "没有需要填充的空术语。",
-  "log_tl_folder_detected": "🔄 检测到TL文件夹 — 重新翻译模式已激活。仅填充空翻译，现有翻译将被保留。"
+  "log_tl_folder_detected": "🔄 检测到TL文件夹 — 重新翻译模式已激活。仅填充空翻译，现有翻译将被保留。",
+  "cache_cleared_toast": "Translation cache cleared.",
+  "engine_local_llm": "🖥️ Local LLM (Ollama / LM Studio)",
+  "source_lang_auto": "🤖 Auto-detect",
+  "ai_prompt_placeholder": "Translate the following Ren'Py visual novel dialogue accurately while keeping tags..."
 }
