@@ -626,14 +626,18 @@ ApplicationWindow {
                                     ComboBox {
                                         id: engineComboBox
                                         Layout.fillWidth: true; height: 40
-                                        model: [
-                                            {"id": "google", "name": "🌐 Google Translate (" + liteBackend.getTextWithDefault("engine_desc_google", "Primary / Free") + ")"},
-                                            {"id": "openai", "name": "🤖 OpenAI / GPT-4o (" + liteBackend.getTextWithDefault("engine_desc_ai", "AI Engine") + ")"},
-                                            {"id": "local_llm", "name": "🖥️ Local LLM (Ollama / LM Studio)"},
-                                            {"id": "deepseek", "name": "🧠 DeepSeek AI (" + liteBackend.getTextWithDefault("engine_desc_deepseek", "Fast / Economic") + ")"},
-                                            {"id": "libretranslate", "name": "📖 LibreTranslate (" + liteBackend.getTextWithDefault("engine_desc_local", "Self-hosted") + ")"},
-                                            {"id": "custom", "name": "🔗 Custom Endpoint (" + liteBackend.getTextWithDefault("engine_desc_custom", "Custom API") + ")"}
-                                        ]
+                                        function engineModel() {
+                                            liteBackend.uiTrigger // Re-eval on language change
+                                            return [
+                                                {"id": "google", "name": "🌐 Google Translate (" + liteBackend.getTextWithDefault("engine_desc_google", "Primary / Free") + ")"},
+                                                {"id": "openai", "name": "🤖 OpenAI / GPT-4o (" + liteBackend.getTextWithDefault("engine_desc_ai", "AI Engine") + ")"},
+                                                {"id": "local_llm", "name": "🖥️ Local LLM (Ollama / LM Studio)"},
+                                                {"id": "deepseek", "name": "🧠 DeepSeek AI (" + liteBackend.getTextWithDefault("engine_desc_deepseek", "Fast / Economic") + ")"},
+                                                {"id": "libretranslate", "name": "📖 LibreTranslate (" + liteBackend.getTextWithDefault("engine_desc_local", "Self-hosted") + ")"},
+                                                {"id": "custom", "name": "🔗 Custom Endpoint (" + liteBackend.getTextWithDefault("engine_desc_custom", "Custom API") + ")"}
+                                            ]
+                                        }
+                                        model: engineModel()
                                         textRole: "name"; valueRole: "id"
                                         Component.onCompleted: currentIndex = indexOfValue(liteBackend.selectedEngine || "google")
                                         onActivated: { liteBackend.setSelectedEngine(currentValue); liteBackend.refreshUI() }
