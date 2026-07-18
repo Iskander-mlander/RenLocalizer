@@ -104,22 +104,40 @@ def get_effective_batch_size(requested: int, engine: Any) -> int:
     return min(requested_int, cap) if cap is not None else requested_int
 
 
+def _build_ui_lang_map() -> dict[str, str]:
+    """Build a mapping from locale codes to available UI language codes."""
+    return {
+        "tr": "tr", "az": "tr",
+        "en": "en",
+        "de": "de",
+        "fr": "fr",
+        "es": "es",
+        "ru": "ru",
+        "fa": "fa",
+        "zh": "zh-CN",
+        "ja": "ja",
+    }
+
 def detect_system_language() -> str:
     """Detect the system language and return appropriate UI language code."""
+    lang_map = _build_ui_lang_map()
     try:
         # Method 1: Windows locale detection
-        if os.name == 'nt':  # Windows
+        if os.name == 'nt':
             try:
                 import ctypes
-                # Get user default UI language
                 lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
-                # Primary language mask
                 primary_lang = lang_id & 0x3FF
 
+                _WIN_LANG_MAP = {
+                    0x09: "en", 0x07: "de", 0x0C: "fr",
+                    0x0A: "es", 0x19: "ru", 0x29: "fa",
+                    0x04: "zh-CN", 0x11: "ja",
+                }
                 if primary_lang in TURKIC_PRIMARY_LANG_IDS:
                     return 'tr'
-                if primary_lang == 0x09:  # English
-                    return 'en'
+                if primary_lang in _WIN_LANG_MAP:
+                    return _WIN_LANG_MAP[primary_lang]
             except Exception:
                 pass
 
@@ -130,8 +148,8 @@ def detect_system_language() -> str:
                 if _is_turkic_locale(system_locale):
                     return 'tr'
                 lang_part = system_locale.split('_')[0].lower()
-                if lang_part == 'en':
-                    return 'en'
+                if lang_part in lang_map:
+                    return lang_map[lang_part]
         except Exception:
             pass
 
@@ -143,14 +161,13 @@ def detect_system_language() -> str:
                     continue
                 if _is_turkic_locale(env_value):
                     return 'tr'
-                if 'en' in env_value:
-                    return 'en'
+                for code, ui_code in lang_map.items():
+                    if code in env_value:
+                        return ui_code
         except Exception:
             pass
 
-        # Default to English if detection fails
         return 'en'
-
     except Exception:
         return 'en'
 
@@ -546,6 +563,7 @@ class ConfigManager:
             "fr": "fr",
             "ru": "ru",
             "zh-cn": "zh-CN",  # lowercase version for case-insensitive matching
+            "ja": "ja",
         }
         
         try:
@@ -594,6 +612,41 @@ class ConfigManager:
     
     def _get_fallback_translations(self) -> Dict[str, Dict[str, Any]]:
         """Fallback translations if JSON files are not available."""
+        _en_core = {
+            'app_title': 'RenLocalizer',
+            'file_menu': 'File',
+            'help_menu': 'Help',
+            'about': 'About',
+            'info': 'Info',
+            'settings': 'Settings',
+            'exit': 'Exit',
+            'start': 'Start',
+            'stop': 'Stop',
+            'save': 'Save',
+            'cancel': 'Cancel',
+            'ok': 'OK',
+            'close': 'Close',
+            'error': 'Error',
+            'warning': 'Warning',
+            'success': 'Success',
+            'update_checking': 'Checking for updates...',
+            'check_updates_now_label': 'Check Now:',
+            'check_updates_now_button': 'Check',
+            'check_updates_now_tooltip': 'Check for updates right now',
+            'update_available_title': 'Update Available',
+            'update_available_message': 'A new version is available: {latest} (current: {current}).\nOpen the releases page?',
+            'update_up_to_date': 'You are up to date (v{current}).',
+            'update_check_failed': 'Update check failed: {error}',
+            'update_check_unavailable': 'Update check is not available.',
+            'update_open_release': 'Open Releases Page',
+            'update_later': 'Later',
+            'info_dialog': {
+                'title': 'Program Information Center',
+                'tabs': {
+                    'formats': 'Output Formats'
+                }
+            }
+        }
         return {
             'tr': {
                 'app_title': 'RenLocalizer',
@@ -601,6 +654,17 @@ class ConfigManager:
                 'help_menu': 'Yardım',
                 'about': 'Hakkında',
                 'info': 'Bilgi',
+                'settings': 'Ayarlar',
+                'exit': 'Çıkış',
+                'start': 'Başlat',
+                'stop': 'Durdur',
+                'save': 'Kaydet',
+                'cancel': 'İptal',
+                'ok': 'Tamam',
+                'close': 'Kapat',
+                'error': 'Hata',
+                'warning': 'Uyarı',
+                'success': 'Başarılı',
                 'update_checking': 'Güncellemeler kontrol ediliyor...',
                 'check_updates_now_label': 'Şimdi Kontrol:',
                 'check_updates_now_button': 'Kontrol Et',
@@ -619,30 +683,14 @@ class ConfigManager:
                     }
                 }
             },
-            'en': {
-                'app_title': 'RenLocalizer',
-                'file_menu': 'File',
-                'help_menu': 'Help',
-                'about': 'About',
-                'info': 'Info',
-                'update_checking': 'Checking for updates...',
-                'check_updates_now_label': 'Check Now:',
-                'check_updates_now_button': 'Check',
-                'check_updates_now_tooltip': 'Check for updates right now',
-                'update_available_title': 'Update Available',
-                'update_available_message': 'A new version is available: {latest} (current: {current}).\nOpen the releases page?',
-                'update_up_to_date': 'You are up to date (v{current}).',
-                'update_check_failed': 'Update check failed: {error}',
-                'update_check_unavailable': 'Update check is not available.',
-                'update_open_release': 'Open Releases Page',
-                'update_later': 'Later',
-                'info_dialog': {
-                    'title': 'Program Information Center',
-                    'tabs': {
-                        'formats': 'Output Formats'
-                    }
-                }
-            }
+            'en': _en_core,
+            'de': dict(_en_core),
+            'fr': dict(_en_core),
+            'es': dict(_en_core),
+            'ru': dict(_en_core),
+            'fa': dict(_en_core),
+            'zh-CN': dict(_en_core),
+            'ja': dict(_en_core),
         }
     
     def load_config(self) -> bool:

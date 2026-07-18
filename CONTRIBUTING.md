@@ -16,6 +16,14 @@ When you contribute here, you aren't just writing code—you are helping thousan
 
 ---
 
+> [!NOTE]
+> **Arch Linux / Python 3.14 note:** `aiohttp` ≥ 3.14 may crash on startup with a circular import error (`cannot import name 'hdrs'`). To fix, edit `venv/lib/python3.14/site-packages/aiohttp/__init__.py`:
+> - Remove `from . import hdrs as hdrs` from the top
+> - In the existing `__getattr__` at the bottom, add `hdrs` to the `global` statement and handle it before the gunicorn workers
+> This is a Python 3.14 import-system regression; upstream will likely fix it in a future release.
+
+---
+
 ## 🛠️ 3. Development Setup
 
 ### 📦 Quick Start

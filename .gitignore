@@ -1,0 +1,17 @@
+opencode.jsonc
+AGENTS.md
+
+# Python
+__pycache__/
+.ruff_cache/
+*.pyc
+*.pyo
+.env
+venv/
+*.egg-info/
+*.egg
+dist/
+
+# IDE
+.vscode/
+.idea/
