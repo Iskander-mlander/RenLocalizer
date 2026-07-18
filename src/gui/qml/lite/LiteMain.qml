@@ -159,8 +159,8 @@ ApplicationWindow {
             appendLog("success",
                 "📊 " + liteBackend.getTextWithDefault("original_text", "Toplam") + ": " + total +
                 " | " + liteBackend.getTextWithDefault("completed", "Çevrildi") + ": " + translated +
-                " | " + liteBackend.getTextWithDefault("untranslated", "Kalan") + ": " + untranslated +
-                " | " + liteBackend.getTextWithDefault("ratio", "Oran") + ": " + successRate.toFixed(1) + "%"
+                " | " + liteBackend.getTextWithDefault("untranslated", "Remaining") + ": " + untranslated +
+                " | " + liteBackend.getTextWithDefault("ratio", "Ratio") + ": " + successRate.toFixed(1) + "%"
             )
         }
 
@@ -227,10 +227,10 @@ ApplicationWindow {
         id: fileDialog
         title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("select_game_exe_title", "Oyun EXE Dosyasını Seç")
         nameFilters: Qt.platform.os === "windows"
-            ? [liteBackend.getTextWithDefault("renpy_games_filter", "Ren'Py Oyunları") + " (*.exe)",
-               liteBackend.getTextWithDefault("all_files_filter", "Tüm dosyalar") + " (*)"]
-            : [liteBackend.getTextWithDefault("shell_scripts_filter", "Shell scriptleri") + " (*.sh)",
-               liteBackend.getTextWithDefault("all_files_filter", "Tüm dosyalar") + " (*)"]
+            ? [liteBackend.getTextWithDefault("renpy_games_filter", "Ren'Py Games") + " (*.exe)",
+               liteBackend.getTextWithDefault("all_files_filter", "All files") + " (*)"]
+            : [liteBackend.getTextWithDefault("shell_scripts_filter", "Shell scripts") + " (*.sh)",
+               liteBackend.getTextWithDefault("all_files_filter", "All files") + " (*)"]
         onAccepted: {
             var raw = selectedFile.toString()
             liteBackend.setProjectPath(raw)
@@ -1722,7 +1722,7 @@ ApplicationWindow {
     Dialog {
         id: completionDialog
         anchors.centerIn: parent; width: Math.min(540, root.width * 0.85)
-        title: "🎉 Çeviri ve Derleme Özet Raporu"; modal: true
+        title: liteBackend.getTextWithDefault("completion_summary_title", "🎉 Translation and Build Summary Report"); modal: true
         property string summaryText: ""; property string outputPath: ""; property string diagPath: ""
         standardButtons: Dialog.Ok
         contentItem: ColumnLayout {

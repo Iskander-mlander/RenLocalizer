@@ -67,52 +67,66 @@ class LiteBackend(QObject):
     """
 
     # ── Signals (QML tarafından dinlenir) ────────────────────────────────
-    logMessage         = pyqtSignal(str, str, arguments=["level", "message"])
-    progressChanged    = pyqtSignal(int, int, str, arguments=["current", "total", "text"])
-    stageChanged       = pyqtSignal(str, str, arguments=["stage", "displayName"])
+    logMessage = pyqtSignal(str, str, arguments=["level", "message"])
+    progressChanged = pyqtSignal(int, int, str, arguments=["current", "total", "text"])
+    stageChanged = pyqtSignal(str, str, arguments=["stage", "displayName"])
     translationStarted = pyqtSignal()
     translationFinished = pyqtSignal(bool, str, arguments=["success", "message"])
-    statsReady         = pyqtSignal(int, int, int, arguments=["total", "translated", "untranslated"])
-    completionSummary  = pyqtSignal(
-        str, str, str, str, int,
-        arguments=["title", "message", "outputPath", "diagnosticPath", "reviewNoteCount"],
+    statsReady = pyqtSignal(
+        int, int, int, arguments=["total", "translated", "untranslated"]
     )
-    warningMessage     = pyqtSignal(str, str, arguments=["title", "message"])
-    updateAvailable    = pyqtSignal(str, str, str, arguments=["currentVersion", "latestVersion", "releaseUrl"])
+    completionSummary = pyqtSignal(
+        str,
+        str,
+        str,
+        str,
+        int,
+        arguments=[
+            "title",
+            "message",
+            "outputPath",
+            "diagnosticPath",
+            "reviewNoteCount",
+        ],
+    )
+    warningMessage = pyqtSignal(str, str, arguments=["title", "message"])
+    updateAvailable = pyqtSignal(
+        str, str, str, arguments=["currentVersion", "latestVersion", "releaseUrl"]
+    )
     updateCheckFinished = pyqtSignal(bool, str, arguments=["hasUpdate", "message"])
-    glossaryChanged     = pyqtSignal()
+    glossaryChanged = pyqtSignal()
     # ── Settings Signals (QML Two-way bindings) ────────────────────────
-    maxThreadsChanged       = pyqtSignal()
-    requestDelayChanged     = pyqtSignal()
-    maxBatchSizeChanged     = pyqtSignal()
-    multiEndpointChanged    = pyqtSignal()
-    lingvaFallbackChanged   = pyqtSignal()
-    aggressiveRetryChanged  = pyqtSignal()
-    useCacheChanged         = pyqtSignal()
-    uiTriggerChanged        = pyqtSignal()
-    languageChanged         = pyqtSignal(str)
-    themeChanged            = pyqtSignal(str)
-    enableRpycReaderChanged  = pyqtSignal()
-    enableDeepScanChanged    = pyqtSignal()
-    selectedEngineChanged    = pyqtSignal(str)
-    openaiApiKeyChanged      = pyqtSignal()
-    openaiModelChanged       = pyqtSignal()
-    openaiBaseUrlChanged     = pyqtSignal()
-    localLlmUrlChanged       = pyqtSignal()
-    localLlmModelChanged     = pyqtSignal()
+    maxThreadsChanged = pyqtSignal()
+    requestDelayChanged = pyqtSignal()
+    maxBatchSizeChanged = pyqtSignal()
+    multiEndpointChanged = pyqtSignal()
+    lingvaFallbackChanged = pyqtSignal()
+    aggressiveRetryChanged = pyqtSignal()
+    useCacheChanged = pyqtSignal()
+    uiTriggerChanged = pyqtSignal()
+    languageChanged = pyqtSignal(str)
+    themeChanged = pyqtSignal(str)
+    enableRpycReaderChanged = pyqtSignal()
+    enableDeepScanChanged = pyqtSignal()
+    selectedEngineChanged = pyqtSignal(str)
+    openaiApiKeyChanged = pyqtSignal()
+    openaiModelChanged = pyqtSignal()
+    openaiBaseUrlChanged = pyqtSignal()
+    localLlmUrlChanged = pyqtSignal()
+    localLlmModelChanged = pyqtSignal()
     libretranslateUrlChanged = pyqtSignal()
     libretranslateApiKeyChanged = pyqtSignal()
     customEndpointUrlChanged = pyqtSignal()
     customEndpointApiKeyChanged = pyqtSignal()
-    aiTemperatureChanged     = pyqtSignal()
-    aiTimeoutChanged         = pyqtSignal()
-    aiMaxTokensChanged       = pyqtSignal()
-    aiBatchSizeChanged       = pyqtSignal()
-    aiRetryCountChanged      = pyqtSignal()
-    aiConcurrencyChanged     = pyqtSignal()
-    aiRequestDelayChanged    = pyqtSignal()
+    aiTemperatureChanged = pyqtSignal()
+    aiTimeoutChanged = pyqtSignal()
+    aiMaxTokensChanged = pyqtSignal()
+    aiBatchSizeChanged = pyqtSignal()
+    aiRetryCountChanged = pyqtSignal()
+    aiConcurrencyChanged = pyqtSignal()
+    aiRequestDelayChanged = pyqtSignal()
     aiCustomSystemPromptChanged = pyqtSignal()
-    outputModeChanged         = pyqtSignal()
+    outputModeChanged = pyqtSignal()
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -141,7 +155,9 @@ class LiteBackend(QObject):
         self.config.translation_settings.enable_unrpyc_decompile = False
         # ── State ────────────────────────────────────────────────────────
         self._project_path: str = self.config.app_settings.last_input_directory or ""
-        self._target_language: str = self.config.translation_settings.target_language or "turkish"
+        self._target_language: str = (
+            self.config.translation_settings.target_language or "turkish"
+        )
         self._is_translating: bool = False
         self._ui_trigger: bool = False
         # TL retranslation mode (Ren'Py SDK-generated tl/ directory)
@@ -153,8 +169,10 @@ class LiteBackend(QObject):
         self._selected_engine: TranslationEngine = self._engine_from_str(cfg_engine)
         # Lite always forces Google engine back to google; AI engines are allowed
         if self._selected_engine not in (
-            TranslationEngine.GOOGLE, TranslationEngine.OPENAI,
-            TranslationEngine.LOCAL_LLM, TranslationEngine.LIBRETRANSLATE,
+            TranslationEngine.GOOGLE,
+            TranslationEngine.OPENAI,
+            TranslationEngine.LOCAL_LLM,
+            TranslationEngine.LIBRETRANSLATE,
             TranslationEngine.CUSTOM,
         ):
             self._selected_engine = TranslationEngine.GOOGLE
@@ -174,7 +192,10 @@ class LiteBackend(QObject):
         threading.Thread(target=self._setup_google_translator, daemon=True).start()
         # Seçili motora göre diğer translator'ları kur
         if self._selected_engine not in (TranslationEngine.GOOGLE,):
-            if self._selected_engine in (TranslationEngine.OPENAI, TranslationEngine.LOCAL_LLM):
+            if self._selected_engine in (
+                TranslationEngine.OPENAI,
+                TranslationEngine.LOCAL_LLM,
+            ):
                 threading.Thread(
                     target=self._setup_ai_translator,
                     args=(self._selected_engine,),
@@ -183,7 +204,9 @@ class LiteBackend(QObject):
             elif self._selected_engine == TranslationEngine.LIBRETRANSLATE:
                 threading.Thread(target=self._setup_libretranslate, daemon=True).start()
             elif self._selected_engine == TranslationEngine.CUSTOM:
-                threading.Thread(target=self._setup_custom_endpoint, daemon=True).start()
+                threading.Thread(
+                    target=self._setup_custom_endpoint, daemon=True
+                ).start()
 
     # ── Private setup ────────────────────────────────────────────────────
 
@@ -203,15 +226,24 @@ class LiteBackend(QObject):
         """LibreTranslate motorunu kurar (kullanıcı tanımlı URL veya localhost:5000)."""
         try:
             from src.core.translator import LibreTranslateTranslator
-            base_url = getattr(self.config.translation_settings, 'libretranslate_url', 'http://localhost:5000')
-            api_key = getattr(self.config.translation_settings, 'libretranslate_api_key', '')
+
+            base_url = getattr(
+                self.config.translation_settings,
+                "libretranslate_url",
+                "http://localhost:5000",
+            )
+            api_key = getattr(
+                self.config.translation_settings, "libretranslate_api_key", ""
+            )
             lt = LibreTranslateTranslator(
                 base_url=base_url,
                 api_key=api_key,
                 proxy_manager=self.proxy_manager,
                 config_manager=self.config,
             )
-            self.translation_manager.add_translator(TranslationEngine.LIBRETRANSLATE, lt)
+            self.translation_manager.add_translator(
+                TranslationEngine.LIBRETRANSLATE, lt
+            )
             self.logger.info(f"[LiteBackend] LibreTranslate hazır: {base_url}")
         except Exception as exc:
             self.logger.error("[LiteBackend] LibreTranslate kurulamadı: %s", exc)
@@ -220,11 +252,18 @@ class LiteBackend(QObject):
         """Custom HTTP endpoint translator — herhangi bir çeviri API'sine uyumlu."""
         try:
             from src.core.translator import LibreTranslateTranslator
-            base_url = getattr(self.config.translation_settings, 'custom_endpoint_url', '')
+
+            base_url = getattr(
+                self.config.translation_settings, "custom_endpoint_url", ""
+            )
             if not base_url:
-                self.logger.warning("[LiteBackend] Custom endpoint URL boş, Google fallback kullanılacak.")
+                self.logger.warning(
+                    "[LiteBackend] Custom endpoint URL boş, Google fallback kullanılacak."
+                )
                 return
-            api_key = getattr(self.config.translation_settings, 'custom_endpoint_api_key', '')
+            api_key = getattr(
+                self.config.translation_settings, "custom_endpoint_api_key", ""
+            )
             ct = LibreTranslateTranslator(
                 base_url=base_url,
                 api_key=api_key,
@@ -257,7 +296,10 @@ class LiteBackend(QObject):
             api_key = self.config.api_keys.openai_api_key or ""
             if engine == TranslationEngine.OPENAI:
                 # Check if this is DeepSeek (openai_base_url points to deepseek)
-                base_url = getattr(self.config.translation_settings, "openai_base_url", "") or ""
+                base_url = (
+                    getattr(self.config.translation_settings, "openai_base_url", "")
+                    or ""
+                )
                 if "deepseek" in base_url.lower():
                     translator = DeepSeekTranslator(
                         api_key=api_key,
@@ -292,6 +334,7 @@ class LiteBackend(QObject):
     @pyqtProperty(str, constant=True)
     def version(self) -> str:
         return self._version
+
     @pyqtProperty(bool, notify=translationStarted)
     def isTranslating(self) -> bool:
         return self._is_translating
@@ -299,6 +342,7 @@ class LiteBackend(QObject):
     @pyqtProperty(bool, notify=uiTriggerChanged)
     def uiTrigger(self) -> bool:
         return self._ui_trigger
+
     # ── Settings Properties (Two-way binding support) ──────────────────
     @pyqtProperty(int, notify=maxThreadsChanged)
     def maxConcurrentThreads(self) -> int:
@@ -411,11 +455,15 @@ class LiteBackend(QObject):
         # Setup new engine in background if not Google (Google always active as fallback)
         if new_engine not in (TranslationEngine.GOOGLE,):
             if new_engine in (TranslationEngine.OPENAI, TranslationEngine.LOCAL_LLM):
-                threading.Thread(target=self._setup_ai_translator, args=(new_engine,), daemon=True).start()
+                threading.Thread(
+                    target=self._setup_ai_translator, args=(new_engine,), daemon=True
+                ).start()
             elif new_engine == TranslationEngine.LIBRETRANSLATE:
                 threading.Thread(target=self._setup_libretranslate, daemon=True).start()
             elif new_engine == TranslationEngine.CUSTOM:
-                threading.Thread(target=self._setup_custom_endpoint, daemon=True).start()
+                threading.Thread(
+                    target=self._setup_custom_endpoint, daemon=True
+                ).start()
 
     @pyqtProperty(str, notify=openaiApiKeyChanged)
     def openaiApiKey(self) -> str:
@@ -446,7 +494,10 @@ class LiteBackend(QObject):
 
     @pyqtProperty(str, notify=localLlmUrlChanged)
     def localLlmUrl(self) -> str:
-        return getattr(self.config.translation_settings, "local_llm_url", "") or "http://localhost:11434/v1"
+        return (
+            getattr(self.config.translation_settings, "local_llm_url", "")
+            or "http://localhost:11434/v1"
+        )
 
     @localLlmUrl.setter
     def localLlmUrl(self, val: str) -> None:
@@ -455,7 +506,10 @@ class LiteBackend(QObject):
 
     @pyqtProperty(str, notify=localLlmModelChanged)
     def localLlmModel(self) -> str:
-        return getattr(self.config.translation_settings, "local_llm_model", "") or "llama3.2"
+        return (
+            getattr(self.config.translation_settings, "local_llm_model", "")
+            or "llama3.2"
+        )
 
     @localLlmModel.setter
     def localLlmModel(self, val: str) -> None:
@@ -466,7 +520,10 @@ class LiteBackend(QObject):
 
     @pyqtProperty(str, notify=libretranslateUrlChanged)
     def libretranslateUrl(self) -> str:
-        return getattr(self.config.translation_settings, "libretranslate_url", "") or "http://localhost:5000"
+        return (
+            getattr(self.config.translation_settings, "libretranslate_url", "")
+            or "http://localhost:5000"
+        )
 
     @libretranslateUrl.setter
     def libretranslateUrl(self, val: str) -> None:
@@ -564,7 +621,9 @@ class LiteBackend(QObject):
 
     @aiRequestDelay.setter
     def aiRequestDelay(self, val: float) -> None:
-        self.config.translation_settings.ai_request_delay = max(0.0, min(float(val), 60.0))
+        self.config.translation_settings.ai_request_delay = max(
+            0.0, min(float(val), 60.0)
+        )
         self.aiRequestDelayChanged.emit()
 
     @pyqtProperty(str, notify=aiCustomSystemPromptChanged)
@@ -588,13 +647,13 @@ class LiteBackend(QObject):
         self.config.save_config()
         self.outputModeChanged.emit()
 
-
     # ── Utility Slots ────────────────────────────────────────────────────
 
     @pyqtSlot(str)
     def copyToClipboard(self, text: str) -> None:
         """Copies the given text to system clipboard."""
         from PyQt6.QtGui import QGuiApplication
+
         clipboard = QGuiApplication.clipboard()
         if clipboard:
             clipboard.setText(text)
@@ -633,15 +692,18 @@ class LiteBackend(QObject):
     def clearTranslationCache(self) -> bool:
         """Seçili projenin yerel ve genel çeviri belleklerini (cache) temizler."""
         if not self._project_path:
-            self.logMessage.emit("warning", self._t("cache_no_project", "No project selected to clear cache."))
+            self.logMessage.emit(
+                "warning",
+                self._t("cache_no_project", "No project selected to clear cache."),
+            )
             return False
-            
+
         try:
             # 1. Clear memory cache in translation manager
             self.translation_manager._cache.clear()
             self.translation_manager.cache_hits = 0
             self.translation_manager.cache_misses = 0
-            
+
             # Resolve actual project root directory and EXE path
             if os.path.isfile(self._project_path):
                 project_dir = os.path.dirname(self._project_path)
@@ -649,33 +711,59 @@ class LiteBackend(QObject):
             else:
                 project_dir = self._project_path
                 exe_path = None
-                
+
             from src.utils.path_manager import get_project_id
+
             project_name = get_project_id(project_dir, exe_path)
-                
+
             # 2. Local cache deletion: <project_path>/game/tl/<lang>/translation_cache.json
             if self._target_language:
-                local_cache = os.path.join(self._project_path, 'game', 'tl', self._target_language, "translation_cache.json")
+                local_cache = os.path.join(
+                    self._project_path,
+                    "game",
+                    "tl",
+                    self._target_language,
+                    "translation_cache.json",
+                )
                 if os.path.exists(local_cache):
                     try:
                         os.remove(local_cache)
-                        self.logMessage.emit("info", f"Local project cache removed: {os.path.basename(local_cache)}")
+                        self.logMessage.emit(
+                            "info",
+                            f"Local project cache removed: {os.path.basename(local_cache)}",
+                        )
                     except Exception as ex:
-                        self.logMessage.emit("warning", f"Could not remove local cache: {ex}")
-            
+                        self.logMessage.emit(
+                            "warning", f"Could not remove local cache: {ex}"
+                        )
+
             # 3. Global project cache deletion: <data_dir>/cache/<project_name>/
-            base_cache_dir = os.path.join(self.config.data_dir, getattr(self.config.translation_settings, 'cache_path', 'cache'))
+            base_cache_dir = os.path.join(
+                self.config.data_dir,
+                getattr(self.config.translation_settings, "cache_path", "cache"),
+            )
             global_project_cache = os.path.join(base_cache_dir, project_name)
-            
+
             if os.path.exists(global_project_cache):
                 import shutil
+
                 try:
                     shutil.rmtree(global_project_cache)
-                    self.logMessage.emit("info", f"Global cache for project '{project_name}' removed.")
+                    self.logMessage.emit(
+                        "info", f"Global cache for project '{project_name}' removed."
+                    )
                 except Exception as ex:
-                    self.logMessage.emit("warning", f"Could not remove global cache folder: {ex}")
-                    
-            self.logMessage.emit("info", "Translation memory (cache) cleared successfully.")
+                    self.logMessage.emit(
+                        "warning", f"Could not remove global cache folder: {ex}"
+                    )
+
+            self.logMessage.emit(
+                "info",
+                self._t(
+                    "log_cache_cleared",
+                    "Translation memory (cache) cleared successfully.",
+                ),
+            )
             return True
         except Exception as e:
             self.logger.exception("Failed to clear translation cache")
@@ -723,6 +811,7 @@ class LiteBackend(QObject):
     def setUILanguage(self, lang_code: str) -> None:
         try:
             from src.utils.config import Language
+
             lang = Language(lang_code)
             self.config.load_locale(lang)
             self.config.save_config()
@@ -736,10 +825,19 @@ class LiteBackend(QObject):
     def getAvailableThemes(self) -> list:
         return [
             {"code": "dark", "name": self.config.get_ui_text("theme_dark", "🌙 Dark")},
-            {"code": "light", "name": self.config.get_ui_text("theme_light", "☀️ Light")},
+            {
+                "code": "light",
+                "name": self.config.get_ui_text("theme_light", "☀️ Light"),
+            },
             {"code": "red", "name": self.config.get_ui_text("theme_red", "🔴 Red")},
-            {"code": "turquoise", "name": self.config.get_ui_text("theme_turquoise", "🔵 Turquoise")},
-            {"code": "green", "name": self.config.get_ui_text("theme_green", "🌿 Green")},
+            {
+                "code": "turquoise",
+                "name": self.config.get_ui_text("theme_turquoise", "🔵 Turquoise"),
+            },
+            {
+                "code": "green",
+                "name": self.config.get_ui_text("theme_green", "🌿 Green"),
+            },
             {"code": "neon", "name": self.config.get_ui_text("theme_neon", "🌈 Neon")},
         ]
 
@@ -788,7 +886,9 @@ class LiteBackend(QObject):
     @pyqtSlot(str)
     def setSourceLanguage(self, lang: str) -> None:
         """Kaynak dili ayarlar."""
-        self.config.translation_settings.source_language = lang.strip() if lang.strip() else "auto"
+        self.config.translation_settings.source_language = (
+            lang.strip() if lang.strip() else "auto"
+        )
         self.config.save_config()
         self.logger.info("[LiteBackend] Kaynak dil: %s", lang or "auto")
 
@@ -812,15 +912,17 @@ class LiteBackend(QObject):
         # If the user selected a tl/ directory or a language subfolder inside tl/,
         # activate TL retranslation mode (fill empty translations in-place).
         norm = os.path.normpath(path)
-        path_parts = norm.replace('\\', '/').split('/')
+        path_parts = norm.replace("\\", "/").split("/")
         is_tl_folder = (
-            os.path.basename(norm).lower() == 'tl'
-            or (len(path_parts) >= 2 and path_parts[-2].lower() == 'tl')
+            os.path.basename(norm).lower() == "tl"
+            or (len(path_parts) >= 2 and path_parts[-2].lower() == "tl")
             or (
                 os.path.isdir(path)
-                and any(f.lower().endswith('.rpy') for _, _, fs in os.walk(path) for f in fs)
-                and not os.path.isdir(os.path.join(path, 'game'))
-                and 'tl' in norm.lower().replace('\\', '/').split('/')
+                and any(
+                    f.lower().endswith(".rpy") for _, _, fs in os.walk(path) for f in fs
+                )
+                and not os.path.isdir(os.path.join(path, "game"))
+                and "tl" in norm.lower().replace("\\", "/").split("/")
             )
         )
 
@@ -829,8 +931,10 @@ class LiteBackend(QObject):
             self._tl_source_path = path
             self.logMessage.emit(
                 "info",
-                "🔄 TL klasörü tespit edildi — Retranslation modu aktif. "
-                "Sadece boş çeviriler doldurulacak, mevcut çeviriler korunacak."
+                self._t(
+                    "log_tl_folder_detected",
+                    "🔄 TL folder detected — Retranslation mode active. Only empty translations will be filled, existing translations will be preserved.",
+                ),
             )
             return
 
@@ -843,9 +947,18 @@ class LiteBackend(QObject):
                 game_dir = alt
 
         if os.path.isdir(game_dir):
-            self.logMessage.emit("info", "✅ Valid Ren'Py project detected.")
+            self.logMessage.emit(
+                "info",
+                self._t("log_project_detected", "✅ Valid Ren'Py project detected."),
+            )
         else:
-            self.logMessage.emit("warning", "⚠️ game/ folder not found. Please select a valid Ren'Py project directory.")
+            self.logMessage.emit(
+                "warning",
+                self._t(
+                    "log_game_folder_missing",
+                    "⚠️ game/ folder not found. Please select a valid Ren'Py project directory.",
+                ),
+            )
 
     @pyqtSlot(result=str)
     def getLastProjectPath(self) -> str:
@@ -857,7 +970,12 @@ class LiteBackend(QObject):
     def startTranslation(self) -> None:
         """Çeviri pipeline'ını başlatır (normal veya TL retranslation modu)."""
         if not self._project_path:
-            self.logMessage.emit("error", "❌ Please select a game folder or EXE first.")
+            self.logMessage.emit(
+                "error",
+                self._t(
+                    "log_select_game", "❌ Please select a game folder or EXE first."
+                ),
+            )
             return
 
         if self._is_translating:
@@ -894,7 +1012,10 @@ class LiteBackend(QObject):
             self.pipeline.finished.connect(self._on_pipeline_finished)
             self.pipeline.show_warning.connect(self._on_show_warning)
 
-            self.logMessage.emit("info", "🚀 Translation starting...")
+            self.logMessage.emit(
+                "info",
+                self._t("log_translation_starting", "🚀 Translation starting..."),
+            )
 
             # Worker thread'de pipeline'ı çalıştır
             self.pipeline_worker = PipelineWorker(self.pipeline)
@@ -912,10 +1033,14 @@ class LiteBackend(QObject):
         if self._tl_mode:
             # TL retranslation modunda thread'i durdur
             self._tl_stop_requested = True
-            self.logMessage.emit("warning", "⏹ Stop request sent...")
+            self.logMessage.emit(
+                "warning", self._t("log_stop_requested", "⏹ Stop request sent...")
+            )
         elif self.pipeline and self._is_translating:
             self.pipeline.stop()
-            self.logMessage.emit("warning", "⏹ Stop request sent...")
+            self.logMessage.emit(
+                "warning", self._t("log_stop_requested", "⏹ Stop request sent...")
+            )
 
     def _run_tl_retranslation(self) -> None:
         """
@@ -936,7 +1061,9 @@ class LiteBackend(QObject):
             tl_path = self._tl_source_path
             lang = self._target_language
 
-            self.stageChanged.emit("parsing", "📂 TL Dosyaları Taranıyor")
+            self.stageChanged.emit(
+                "parsing", self._t("stage_parsing", "📂 Scanning TL Files")
+            )
             self.logMessage.emit("info", f"🔍 Scanning TL folder: {tl_path}")
 
             # parse_directory: tl/lang/ klasörünü parse et.
@@ -949,10 +1076,11 @@ class LiteBackend(QObject):
                 # ama tl_path=tl/lang/ ise zaten bu klasörü dener.
                 # İkinci deneme: tl_path'i doğrudan parse etmeye çalış.
                 import os
+
                 rpy_files = []
                 for root, _, fnames in os.walk(tl_path):
                     for fname in fnames:
-                        if fname.lower().endswith('.rpy'):
+                        if fname.lower().endswith(".rpy"):
                             rpy_files.append(os.path.join(root, fname))
                 if rpy_files:
                     for fpath in rpy_files:
@@ -961,28 +1089,38 @@ class LiteBackend(QObject):
                             tl_files.append(tf)
 
             if not tl_files:
-                self.logMessage.emit("error", "❌ No .rpy files found in TL folder.")
+                self.logMessage.emit(
+                    "error",
+                    self._t("log_no_rpy_files", "❌ No .rpy files found in TL folder."),
+                )
                 self._is_translating = False
                 self.translationFinished.emit(False, "TL dosyası bulunamadı.")
                 return
 
             stats = get_translation_stats(tl_files)
-            total_entries = stats['total']
-            untranslated = stats['untranslated']
+            total_entries = stats["total"]
+            untranslated = stats["untranslated"]
 
             self.logMessage.emit(
                 "info",
                 f"📊 {len(tl_files)} dosya, {total_entries} giriş, "
-                f"{untranslated} çeviri bekliyor, {stats['translated']} zaten çevrilmiş."
+                f"{untranslated} çeviri bekliyor, {stats['translated']} zaten çevrilmiş.",
             )
 
             if untranslated == 0:
-                self.logMessage.emit("success", "✅ All translations already completed.")
-                self.statsReady.emit(total_entries, stats['translated'], 0)
+                self.logMessage.emit(
+                    "success",
+                    self._t(
+                        "log_all_translated", "✅ All translations already completed."
+                    ),
+                )
+                self.statsReady.emit(total_entries, stats["translated"], 0)
                 self.completionSummary.emit(
                     "✅ Çeviri Tamamlandı",
                     "Tüm girişler zaten çevrilmiş durumda.",
-                    tl_path, "", 0
+                    tl_path,
+                    "",
+                    0,
                 )
                 self._is_translating = False
                 self.translationFinished.emit(True, "Zaten çevrilmiş.")
@@ -993,7 +1131,10 @@ class LiteBackend(QObject):
 
             google = self.translation_manager.translators.get(TranslationEngine.GOOGLE)
             if not google:
-                self.logMessage.emit("error", "❌ Google Translate not ready.")
+                self.logMessage.emit(
+                    "error",
+                    self._t("log_google_not_ready", "❌ Google Translate not ready."),
+                )
                 self._is_translating = False
                 self.translationFinished.emit(False, "Google Translate hazır değil.")
                 return
@@ -1001,7 +1142,10 @@ class LiteBackend(QObject):
             processed = 0
             for tl_file in tl_files:
                 if self._tl_stop_requested:
-                    self.logMessage.emit("warning", "⏹ Translation stopped.")
+                    self.logMessage.emit(
+                        "warning",
+                        self._t("log_translation_stopped", "⏹ Translation stopped."),
+                    )
                     break
 
                 untranslated_entries = tl_file.get_untranslated()
@@ -1017,16 +1161,27 @@ class LiteBackend(QObject):
                         target_lang=lang,
                     )
                 except Exception as exc:
-                    self.logMessage.emit("warning", f"⚠️ Translation error ({os.path.basename(tl_file.file_path)}): {exc}")
+                    self.logMessage.emit(
+                        "warning",
+                        f"⚠️ Translation error ({os.path.basename(tl_file.file_path)}): {exc}",
+                    )
                     total_failed += len(texts)
                     processed += len(texts)
-                    self.progressChanged.emit(processed, untranslated, f"Hata: {os.path.basename(tl_file.file_path)}")
+                    self.progressChanged.emit(
+                        processed,
+                        untranslated,
+                        f"Hata: {os.path.basename(tl_file.file_path)}",
+                    )
                     continue
 
                 # ID → translated_text sözlüğü oluştur
                 translations: dict[str, str] = {}
                 for entry, result in zip(untranslated_entries, results):
-                    translated = getattr(result, 'translated_text', None) or getattr(result, 'text', None) or ""
+                    translated = (
+                        getattr(result, "translated_text", None)
+                        or getattr(result, "text", None)
+                        or ""
+                    )
                     if translated:
                         translations[entry.translation_id] = translated
                         translations[entry.original_text] = translated  # fallback key
@@ -1036,8 +1191,9 @@ class LiteBackend(QObject):
 
                 processed += len(texts)
                 self.progressChanged.emit(
-                    processed, untranslated,
-                    f"Çevriliyor: {os.path.basename(tl_file.file_path)}"
+                    processed,
+                    untranslated,
+                    f"Çevriliyor: {os.path.basename(tl_file.file_path)}",
                 )
 
                 # ── 3. Kaydet ────────────────────────────────────────────
@@ -1046,15 +1202,19 @@ class LiteBackend(QObject):
                     if success:
                         total_saved += 1
                     else:
-                        self.logMessage.emit("warning", f"⚠️ Save failed: {tl_file.file_path}")
+                        self.logMessage.emit(
+                            "warning", f"⚠️ Save failed: {tl_file.file_path}"
+                        )
                         total_failed += 1
 
             # ── 4. Özet ──────────────────────────────────────────────────
-            self.stageChanged.emit("completed", "✅ Tamamlandı")
+            self.stageChanged.emit(
+                "completed", self._t("stage_completed", "✅ Completed")
+            )
             self.statsReady.emit(
                 total_entries,
-                stats['translated'] + total_translated,
-                max(0, untranslated - total_translated)
+                stats["translated"] + total_translated,
+                max(0, untranslated - total_translated),
             )
 
             msg = (
@@ -1064,9 +1224,7 @@ class LiteBackend(QObject):
             )
             self.logMessage.emit("success", f"✅ TL Retranslation completed: {msg}")
             self.completionSummary.emit(
-                "✅ TL Retranslation Tamamlandı",
-                msg,
-                tl_path, "", 0
+                "✅ TL Retranslation Tamamlandı", msg, tl_path, "", 0
             )
             self._is_translating = False
             self.translationFinished.emit(True, msg)
@@ -1076,7 +1234,6 @@ class LiteBackend(QObject):
             self.logMessage.emit("error", f"❌ TL retranslation error: {exc}")
             self._is_translating = False
             self.translationFinished.emit(False, str(exc))
-
 
     # ── Pipeline Signal Handlers ─────────────────────────────────────────
 
@@ -1139,11 +1296,20 @@ class LiteBackend(QObject):
             # AI engine settings
             selected_engine_str = self._selected_engine.value
             openai_key = self.config.api_keys.openai_api_key or ""
-            openai_model = self.config.translation_settings.openai_model or "gpt-4o-mini"
-            openai_base_url = getattr(self.config.translation_settings, "openai_base_url", "") or ""
-            local_llm_url = getattr(self.config.translation_settings, "local_llm_url", "") or ""
-            local_llm_model = getattr(self.config.translation_settings, "local_llm_model", "") or "llama3.2"
-            
+            openai_model = (
+                self.config.translation_settings.openai_model or "gpt-4o-mini"
+            )
+            openai_base_url = (
+                getattr(self.config.translation_settings, "openai_base_url", "") or ""
+            )
+            local_llm_url = (
+                getattr(self.config.translation_settings, "local_llm_url", "") or ""
+            )
+            local_llm_model = (
+                getattr(self.config.translation_settings, "local_llm_model", "")
+                or "llama3.2"
+            )
+
             # Gelişmiş AI Ayarları
             ai_temp = self.config.translation_settings.ai_temperature
             ai_timeo = self.config.translation_settings.ai_timeout
@@ -1198,7 +1364,9 @@ class LiteBackend(QObject):
                 self.translation_manager.max_batch_size = batch_size
                 self.translation_manager.use_cache = cache_enabled
                 # Manager altındaki Google translator'ı güncelle
-                google_translator = self.translation_manager.translators.get(TranslationEngine.GOOGLE)
+                google_translator = self.translation_manager.translators.get(
+                    TranslationEngine.GOOGLE
+                )
                 if google_translator:
                     google_translator.multi_q_concurrency = threads
                     google_translator.max_texts_per_slice = batch_size
@@ -1215,7 +1383,10 @@ class LiteBackend(QObject):
                         daemon=True,
                     ).start()
 
-            self.logMessage.emit("success", "💾 Settings saved successfully.")
+            self.logMessage.emit(
+                "success",
+                self._t("log_settings_saved", "💾 Settings saved successfully."),
+            )
         except Exception as exc:
             self.logger.exception("[LiteBackend] saveSettings error")
             self.logMessage.emit("error", f"❌ Settings save failed: {exc}")
@@ -1225,31 +1396,42 @@ class LiteBackend(QObject):
         """Yeni güncellemeleri denetler (asenkron)."""
         if not manual and not self.config.app_settings.check_for_updates:
             return
-        
+
         msg = self.config.get_ui_text("update_checking", "Checking for updates...")
         self.logMessage.emit("info", f"🔍 {msg}")
-        threading.Thread(target=self._check_updates_thread, args=(manual,), daemon=True).start()
+        threading.Thread(
+            target=self._check_updates_thread, args=(manual,), daemon=True
+        ).start()
 
     def _check_updates_thread(self, manual: bool) -> None:
         try:
             from src.utils.update_checker import check_for_updates
+
             result = check_for_updates(self._version)
             if result.update_available:
-                log_msg = self.config.get_ui_text("log_update_available", "Update available: {version}").replace("{version}", result.latest_version)
+                log_msg = self.config.get_ui_text(
+                    "log_update_available", "Update available: {version}"
+                ).replace("{version}", result.latest_version)
                 self.logMessage.emit("success", f"🔔 {log_msg}")
                 self.updateAvailable.emit(
                     result.current_version,
                     result.latest_version,
                     result.release_url,
                 )
-                self.updateCheckFinished.emit(True, f"Update found: {result.latest_version}")
+                self.updateCheckFinished.emit(
+                    True, f"Update found: {result.latest_version}"
+                )
             else:
-                msg = self.config.get_ui_text("update_check_no_update", "You are up to date.")
+                msg = self.config.get_ui_text(
+                    "update_check_no_update", "You are up to date."
+                )
                 if manual:
                     self.logMessage.emit("info", f"ℹ️ {msg}")
                 self.updateCheckFinished.emit(False, msg)
         except Exception as exc:
-            err_msg = self.config.get_ui_text("log_update_check_failed", "Update check failed: {error}").replace("{error}", str(exc))
+            err_msg = self.config.get_ui_text(
+                "log_update_check_failed", "Update check failed: {error}"
+            ).replace("{error}", str(exc))
             self.logMessage.emit("error", f"❌ {err_msg}")
             self.updateCheckFinished.emit(False, f"Update Check Failed: {exc}")
 
@@ -1258,17 +1440,30 @@ class LiteBackend(QObject):
     def runToolFontHelper(self) -> None:
         """Run font compatibility check."""
         if not self._project_path or not os.path.exists(self._project_path):
-            self.logMessage.emit("error", "❌ Please select a valid game folder or EXE first.")
+            self.logMessage.emit(
+                "error", "❌ Please select a valid game folder or EXE first."
+            )
             return
-        self.logMessage.emit("info", "🔤 Font compatibility check starting...")
+        self.logMessage.emit(
+            "info",
+            self._t(
+                "log_font_check_starting", "🔤 Font compatibility check starting..."
+            ),
+        )
         threading.Thread(target=self._run_font_helper_thread, daemon=True).start()
 
     def _run_font_helper_thread(self) -> None:
         try:
             from src.tools.font_helper import check_font_for_project
-            target_lang = getattr(self.config.translation_settings, 'target_language', 'turkish')
+
+            target_lang = getattr(
+                self.config.translation_settings, "target_language", "turkish"
+            )
             check_font_for_project(self._project_path, target_lang)
-            self.logMessage.emit("success", "✅ Font check completed successfully.")
+            self.logMessage.emit(
+                "success",
+                self._t("log_font_check_done", "✅ Font check completed successfully."),
+            )
         except Exception as e:
             self.logMessage.emit("error", f"❌ Font helper error: {e}")
 
@@ -1276,20 +1471,31 @@ class LiteBackend(QObject):
     def runToolFontInject(self) -> None:
         """Download and inject Google Fonts."""
         if not self._project_path or not os.path.exists(self._project_path):
-            self.logMessage.emit("error", "❌ Please select a valid game folder or EXE first.")
+            self.logMessage.emit(
+                "error", "❌ Please select a valid game folder or EXE first."
+            )
             return
-        self.logMessage.emit("info", "🔤 Downloading and injecting font from Google Fonts...")
+        self.logMessage.emit(
+            "info", "🔤 Downloading and injecting font from Google Fonts..."
+        )
         threading.Thread(target=self._run_font_inject_thread, daemon=True).start()
 
     def _run_font_inject_thread(self) -> None:
         try:
             from src.tools.font_injector import inject_font
-            target_lang = getattr(self.config.translation_settings, 'target_language', 'turkish')
+
+            target_lang = getattr(
+                self.config.translation_settings, "target_language", "turkish"
+            )
             result = inject_font(self._project_path, target_lang)
             if result.get("success"):
-                self.logMessage.emit("success", f"✅ Font injected: {result.get('font', '?')}")
+                self.logMessage.emit(
+                    "success", f"✅ Font injected: {result.get('font', '?')}"
+                )
             else:
-                self.logMessage.emit("warning", f"⚠️ Font injection failed: {result.get('message', '?')}")
+                self.logMessage.emit(
+                    "warning", f"⚠️ Font injection failed: {result.get('message', '?')}"
+                )
         except Exception as e:
             self.logMessage.emit("error", f"❌ Font injection error: {e}")
 
@@ -1297,21 +1503,35 @@ class LiteBackend(QObject):
     def runToolRenpyLint(self) -> None:
         """Run Ren'Py lint on game project."""
         if not self._project_path or not os.path.exists(self._project_path):
-            self.logMessage.emit("error", "❌ Please select a valid game project first.")
+            self.logMessage.emit(
+                "error", "❌ Please select a valid game project first."
+            )
             return
-        self.logMessage.emit("info", "🩺 Ren'Py Lint scanner running...")
+        self.logMessage.emit(
+            "info", self._t("log_lint_starting", "🩺 Ren'Py Lint scanner running...")
+        )
         threading.Thread(target=self._run_renpy_lint_thread, daemon=True).start()
 
     def _run_renpy_lint_thread(self) -> None:
         try:
             from src.tools.renpy_lint import run_renpy_lint
+
             report = run_renpy_lint(self._project_path)
             if report is None:
-                self.logMessage.emit("warning", "⚠️ Ren'Py SDK not found — lint could not run. Make sure Ren'Py is installed.")
+                self.logMessage.emit(
+                    "warning",
+                    "⚠️ Ren'Py SDK not found — lint could not run. Make sure Ren'Py is installed.",
+                )
             elif report.ok:
-                self.logMessage.emit("success", f"✅ Lint passed: {report.files_scanned} files, {report.translate_blocks} blocks, {report.old_new_pairs} pairs.")
+                self.logMessage.emit(
+                    "success",
+                    f"✅ Lint passed: {report.files_scanned} files, {report.translate_blocks} blocks, {report.old_new_pairs} pairs.",
+                )
             else:
-                self.logMessage.emit("warning", f"⚠️ Lint: {report.errors} errors, {report.warnings} warnings\n{report.summary()}")
+                self.logMessage.emit(
+                    "warning",
+                    f"⚠️ Lint: {report.errors} errors, {report.warnings} warnings\n{report.summary()}",
+                )
         except Exception as e:
             self.logMessage.emit("error", f"❌ Ren'Py Lint error: {e}")
 
@@ -1319,18 +1539,29 @@ class LiteBackend(QObject):
     def runToolGlossaryExtractor(self) -> None:
         """Extract glossary terms from project."""
         if not self._project_path or not os.path.exists(self._project_path):
-            self.logMessage.emit("error", "❌ Please select a valid game project first.")
+            self.logMessage.emit(
+                "error", "❌ Please select a valid game project first."
+            )
             return
-        self.logMessage.emit("info", "📚 Extracting glossary terms...")
-        threading.Thread(target=self._run_glossary_extractor_thread, daemon=True).start()
+        self.logMessage.emit(
+            "info",
+            self._t("log_glossary_extracting", "📚 Extracting glossary terms..."),
+        )
+        threading.Thread(
+            target=self._run_glossary_extractor_thread, daemon=True
+        ).start()
 
     def _run_glossary_extractor_thread(self) -> None:
         try:
             from src.tools.glossary_extractor.extractor import GlossaryExtractor
+
             extractor = GlossaryExtractor()
-            terms = extractor.extract_from_directory(self._project_path, min_occurrence=3)
+            terms = extractor.extract_from_directory(
+                self._project_path, min_occurrence=3
+            )
             out_json = os.path.join(self._project_path, "glossary.json")
             import json
+
             with open(out_json, "w", encoding="utf-8") as f:
                 json.dump(terms, f, ensure_ascii=False, indent=2)
             for term in terms:
@@ -1338,7 +1569,10 @@ class LiteBackend(QObject):
                     self.config.glossary[term] = ""
             self.config.save_glossary()
             self.glossaryChanged.emit()
-            self.logMessage.emit("success", f"✅ {len(terms)} terms extracted and saved to 'glossary.json'.")
+            self.logMessage.emit(
+                "success",
+                f"✅ {len(terms)} terms extracted and saved to 'glossary.json'.",
+            )
         except Exception as e:
             self.logMessage.emit("error", f"❌ Glossary extractor error: {e}")
 
@@ -1347,7 +1581,7 @@ class LiteBackend(QObject):
     @pyqtProperty(list, notify=glossaryChanged)
     def glossaryList(self) -> list:
         """QML için sözlük listesi döndürür."""
-        if hasattr(self.config, 'glossary') and self.config.glossary:
+        if hasattr(self.config, "glossary") and self.config.glossary:
             return [{"source": k, "target": v} for k, v in self.config.glossary.items()]
         return []
 
@@ -1356,7 +1590,7 @@ class LiteBackend(QObject):
         """Sözlüğe yeni terim ekle."""
         if not source.strip():
             return
-        if not hasattr(self.config, 'glossary'):
+        if not hasattr(self.config, "glossary"):
             self.config.glossary = {}
         self.config.glossary[source.strip()] = target.strip()
         self.config.save_glossary()
@@ -1365,7 +1599,7 @@ class LiteBackend(QObject):
     @pyqtSlot(str)
     def removeGlossaryItem(self, source: str) -> None:
         """Sözlükten terim sil."""
-        if hasattr(self.config, 'glossary') and source in self.config.glossary:
+        if hasattr(self.config, "glossary") and source in self.config.glossary:
             del self.config.glossary[source]
             self.config.save_glossary()
             self.glossaryChanged.emit()
@@ -1373,19 +1607,26 @@ class LiteBackend(QObject):
     @pyqtSlot()
     def translateEmptyGlossary(self) -> None:
         """Boş hedef alanlarını Google Translate ile çevir."""
-        threading.Thread(target=self._translate_empty_glossary_thread, daemon=True).start()
+        threading.Thread(
+            target=self._translate_empty_glossary_thread, daemon=True
+        ).start()
 
     def _translate_empty_glossary_thread(self) -> None:
         try:
-            if not hasattr(self.config, 'glossary'):
+            if not hasattr(self.config, "glossary"):
                 return
             empty_keys = [k for k, v in self.config.glossary.items() if not v]
             if not empty_keys:
-                self.logMessage.emit("info", "✅ All glossary terms already have translations.")
+                self.logMessage.emit(
+                    "info", "✅ All glossary terms already have translations."
+                )
                 return
 
-            self.logMessage.emit("info", f"🌐 Translating {len(empty_keys)} empty terms via Google...")
+            self.logMessage.emit(
+                "info", f"🌐 Translating {len(empty_keys)} empty terms via Google..."
+            )
             from src.core.translator import GoogleTranslator
+
             translator = GoogleTranslator(self.config)
             count = 0
             for key in empty_keys:
@@ -1399,18 +1640,22 @@ class LiteBackend(QObject):
                 except Exception:
                     pass
                 if count % 10 == 0 and count > 0:
-                    self.logMessage.emit("info", f"🌐 Translated: {count}/{len(empty_keys)}")
+                    self.logMessage.emit(
+                        "info", f"🌐 Translated: {count}/{len(empty_keys)}"
+                    )
 
             self.config.save_glossary()
             self.glossaryChanged.emit()
-            self.logMessage.emit("success", f"✅ {count} glossary terms translated and saved.")
+            self.logMessage.emit(
+                "success", f"✅ {count} glossary terms translated and saved."
+            )
         except Exception as e:
             self.logMessage.emit("error", f"❌ Glossary translation failed: {e}")
 
     @pyqtSlot()
     def fillEmptyGlossaryWithSource(self) -> None:
         """Fill empty targets with source text."""
-        if not hasattr(self.config, 'glossary'):
+        if not hasattr(self.config, "glossary"):
             return
         count = 0
         for k, v in self.config.glossary.items():
@@ -1420,16 +1665,21 @@ class LiteBackend(QObject):
         if count > 0:
             self.config.save_glossary()
             self.glossaryChanged.emit()
-            self.logMessage.emit("success", f"✅ {count} empty terms filled with source text.")
+            self.logMessage.emit(
+                "success", f"✅ {count} empty terms filled with source text."
+            )
         else:
-            self.logMessage.emit("info", "No empty terms to fill.")
+            self.logMessage.emit(
+                "info", self._t("log_empty_terms_none", "No empty terms to fill.")
+            )
 
     @pyqtSlot(str)
     def exportGlossary(self, filepath: str) -> None:
         """Export glossary to JSON/XLSX/CSV."""
         try:
             from src.utils.data_transfer import export_glossary_to_file
-            glossary = getattr(self.config, 'glossary', {})
+
+            glossary = getattr(self.config, "glossary", {})
             export_glossary_to_file(glossary, filepath)
             self.logMessage.emit("success", f"📤 Glossary exported to: {filepath}")
         except Exception as e:
@@ -1440,8 +1690,9 @@ class LiteBackend(QObject):
         """Import glossary from JSON/XLSX/CSV."""
         try:
             from src.utils.data_transfer import import_glossary_from_file
+
             imported = import_glossary_from_file(filepath)
-            if not hasattr(self.config, 'glossary'):
+            if not hasattr(self.config, "glossary"):
                 self.config.glossary = {}
             new_count = 0
             updated_count = 0
@@ -1455,6 +1706,8 @@ class LiteBackend(QObject):
                     new_count += 1
             self.config.save_glossary()
             self.glossaryChanged.emit()
-            self.logMessage.emit("success", f"📥 Imported: {new_count} new, {updated_count} updated.")
+            self.logMessage.emit(
+                "success", f"📥 Imported: {new_count} new, {updated_count} updated."
+            )
         except Exception as e:
             self.logMessage.emit("error", f"❌ Import error: {e}")
