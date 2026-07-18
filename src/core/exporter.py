@@ -6,6 +6,9 @@ File-by-File Exporter for RenLocalizer
 Reads translations from strings.json and converts them into standard 
 Ren'Py translation (.rpy) files. Useful for translators who prefer classic 
 file structures instead of runtime JSON injection.
+
+In Native TLID mode, dynamic texts (containing {variable} patterns from
+Python f-strings) are excluded — they're handled by the micro runtime hook.
 """
 
 import os
@@ -17,6 +20,26 @@ from src.utils.encoding import save_text_safely
 
 logger = logging.getLogger(__name__)
 
+# Known Ren'Py text tags — anything else in {braces} is a Python variable
+_RENPY_TAG_NAMES = frozenset({
+    'b', 'i', 'u', 's', 'plain', 'color', 'font', 'size', 'cps',
+    'nw', 'fast', 'w', 'p', 'a', 'image', 'alpha', 'k', 'rt', 'rb',
+    'space', 'vspace', 'outlinecolor',
+})
+
+
+def _has_dynamic_variables(text: str) -> bool:
+    """Return True if text contains Python {variable} patterns (not Ren'Py tags)."""
+    braced = re.findall(r'\{([^}]+)\}', text)
+    if not braced:
+        return False
+    for b in braced:
+        # {/b} → strip '/', {color=#fff} → take 'color'
+        tag_name = b.lstrip('/').split('=')[0].strip().lower()
+        if tag_name not in _RENPY_TAG_NAMES:
+            return True
+    return False
+
 def _resolve_game_dir(project_path: str) -> str:
     """Accept either the project root or the game directory itself."""
     normalized_path = os.path.normpath(project_path)
@@ -25,10 +48,13 @@ def _resolve_game_dir(project_path: str) -> str:
     return os.path.join(normalized_path, "game")
 
 
-def export_strings_to_rpy(project_path: str, target_lang: str) -> bool:
+def export_strings_to_rpy(project_path: str, target_lang: str, skip_dynamic: bool = False) -> bool:
     """
     Reads translations and exports them as standard Ren'Py translation blocks.
     Accepts either the project root or the game directory itself.
+    
+    If skip_dynamic is True, texts with Python {variable} patterns are excluded
+    (they're handled by the micro runtime hook in Native TLID mode).
     """
     game_dir = _resolve_game_dir(project_path)
     tl_dir = os.path.join(game_dir, "tl", target_lang)
@@ -89,13 +115,19 @@ def export_strings_to_rpy(project_path: str, target_lang: str) -> bool:
         ]
         
         count = 0
+        skipped_dynamic = 0
         for orig, trans in export_mapping.items():
             if not orig or not trans: continue
+            if skip_dynamic and _has_dynamic_variables(orig):
+                skipped_dynamic += 1
+                continue
             safe_orig = orig.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\t', '\\t')
             safe_trans = trans.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\t', '\\t')
             lines.append(f'    old "{safe_orig}"\n    new "{safe_trans}"\n')
             count += 1
             
+        if skipped_dynamic > 0:
+            logger.info(f"Skipped {skipped_dynamic} dynamic texts (handled by micro hook)")
         if count > 0:
             save_text_safely(Path(export_file_path), "\n".join(lines), encoding='utf-8-sig', newline='\n')
             logger.info(f"Exported {count} unique strings to {export_file_path}")

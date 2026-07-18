@@ -33,13 +33,13 @@ jobs:
       - name: Create archive
         run: |
           cd dist
-          Compress-Archive -Path RenLocalizer -DestinationPath ../RenLocalizer-LITE-Windows-x64.zip
+          Compress-Archive -Path RenLocalizer -DestinationPath ../RenLocalizer-Windows-x64.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: RenLocalizer-LITE-Windows-x64.zip
+          path: RenLocalizer-Windows-x64.zip
 
   # ============================================
   # Linux Build → AppImage
@@ -141,8 +141,8 @@ jobs:
           ./appimagetool --appimage-extract
           
           # Build AppImage using extracted tool (avoids FUSE error)
-          ARCH=x86_64 ./squashfs-root/AppRun RenLocalizer.AppDir RenLocalizer-LITE-Linux-x64.AppImage
-          chmod +x RenLocalizer-LITE-Linux-x64.AppImage
+          ARCH=x86_64 ./squashfs-root/AppRun RenLocalizer.AppDir RenLocalizer-Linux-x64.AppImage
+          chmod +x RenLocalizer-Linux-x64.AppImage
 
       - name: Install portable launcher script (Linux tar.gz)
         run: |
@@ -153,14 +153,14 @@ jobs:
         run: |
           export RENLOCALIZER_QT_SMOKE_TEST="1"
           export APPIMAGE_EXTRACT_AND_RUN="1"
-          xvfb-run -a ./RenLocalizer-LITE-Linux-x64.AppImage
+          xvfb-run -a ./RenLocalizer-Linux-x64.AppImage
 
       - name: Smoke test AppImage startup (Linux software fallback)
         run: |
           export RENLOCALIZER_QT_SMOKE_TEST="1"
           export RENLOCALIZER_QT_RENDER_MODE="software"
           export APPIMAGE_EXTRACT_AND_RUN="1"
-          xvfb-run -a ./RenLocalizer-LITE-Linux-x64.AppImage
+          xvfb-run -a ./RenLocalizer-Linux-x64.AppImage
 
       - name: Smoke test portable launcher (Linux tar.gz payload)
         run: |
@@ -170,20 +170,20 @@ jobs:
       - name: Create tar.gz (Linux Portable)
         run: |
           cd dist
-          tar -czvf ../RenLocalizer-LITE-Linux-x64.tar.gz RenLocalizer
+          tar -czvf ../RenLocalizer-Linux-x64.tar.gz RenLocalizer
           cd ..
 
       - name: Upload artifact (AppImage)
         uses: actions/upload-artifact@v4
         with:
           name: linux-build-appimage
-          path: RenLocalizer-LITE-Linux-x64.AppImage
+          path: RenLocalizer-Linux-x64.AppImage
 
       - name: Upload artifact (tar.gz)
         uses: actions/upload-artifact@v4
         with:
           name: linux-build-targz
-          path: RenLocalizer-LITE-Linux-x64.tar.gz
+          path: RenLocalizer-Linux-x64.tar.gz
 
   # ============================================
   # macOS Build → DMG
@@ -244,13 +244,13 @@ jobs:
             -srcfolder dmg_contents \
             -ov \
             -format UDZO \
-            RenLocalizer-LITE-macOS.dmg
+            RenLocalizer-macOS.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: RenLocalizer-LITE-macOS.dmg
+          path: RenLocalizer-macOS.dmg
 
   # ============================================
   # Create GitHub Release
@@ -285,10 +285,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            RenLocalizer-LITE-Windows-x64.zip
-            RenLocalizer-LITE-Linux-x64.AppImage
-            RenLocalizer-LITE-Linux-x64.tar.gz
-            RenLocalizer-LITE-macOS.dmg
+            RenLocalizer-Windows-x64.zip
+            RenLocalizer-Linux-x64.AppImage
+            RenLocalizer-Linux-x64.tar.gz
+            RenLocalizer-macOS.dmg
           body: ""
           draft: false
           prerelease: false

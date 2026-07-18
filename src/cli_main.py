@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-RenLocalizer LITE CLI Main Module
+RenLocalizer CLI Main Module
 Modern terminal interface powered by Rich
 """
 
@@ -112,7 +112,7 @@ ENGINE_MAP = {
 def print_banner():
     if not RICH_AVAILABLE:
         print(f"\n{'=' * 60}")
-        print(f"       RenLocalizer LITE CLI v{VERSION}")
+        print(f"       RenLocalizer CLI v{VERSION}")
         print(f"       Ren'Py Game Translation Tool")
         print(f"{'=' * 60}")
         return
@@ -124,7 +124,7 @@ def print_banner():
         "║   ██╔══██╗██╔════╝████╗  ██║                      ║",
         "║   ██████╔╝█████╗  ██╔██╗ ██║                      ║",
         "║   ██╔══██╗██╔══╝  ██║╚██╗██║                      ║",
-        "║   ██║  ██║███████╗██║ ╚████║  LOCALIZER LITE      ║",
+        "║   ██║  ██║███████╗██║ ╚████║  LOCALIZER           ║",
         "║   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝                     ║",
         "║                                                   ║",
         f"║   CLI v{VERSION:<10s}  Ren'Py Translation Tool     ║",
@@ -631,7 +631,7 @@ def interactive_mode() -> dict:
             clear_screen(); print_banner()
             if RICH_AVAILABLE:
                 help_text = (
-                    f"[bold {BRAND_PRIMARY}]RenLocalizer LITE[/] automatically translates Ren'Py visual novels.\n\n"
+                    f"[bold {BRAND_PRIMARY}]RenLocalizer[/] automatically translates Ren'Py visual novels.\n\n"
                     f"[bold {BRAND_ACCENT}]ENGINES[/]\n"
                     f"  [bold]Google Translate[/] — Fast, free, 13 mirrors\n"
                     f"  [bold]OpenAI / DeepSeek[/] — API key required, best quality\n"
@@ -647,7 +647,7 @@ def interactive_mode() -> dict:
             else:
                 print("""
   HELP ───────────────────────────────────
-  RenLocalizer LITE CLI translates Ren'Py games.
+  RenLocalizer CLI translates Ren'Py games.
   
   ENGINES: Google, OpenAI, DeepSeek, Local LLM, LibreTranslate, Custom
   
@@ -672,7 +672,7 @@ def interactive_mode() -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description=f"RenLocalizer LITE CLI v{VERSION} — Ren'Py Game Translation Tool",
+        description=f"RenLocalizer CLI v{VERSION} — Ren'Py Game Translation Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
@@ -708,7 +708,7 @@ def main() -> int:
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
     parser.add_argument("--interactive", "-i", action="store_true", help="Run in interactive menu mode")
     parser.add_argument("--deep-scan", "-d", action="store_true", help="Enable deep scanning")
-    parser.add_argument("--version", action="version", version=f"RenLocalizer LITE CLI v{VERSION}")
+    parser.add_argument("--version", action="version", version=f"RenLocalizer CLI v{VERSION}")
 
     args = parser.parse_args()
 

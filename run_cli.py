@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-RenLocalizer LITE CLI Launcher
+RenLocalizer CLI Launcher
 Cross-platform headless command line interface
 """
 

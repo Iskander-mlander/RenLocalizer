@@ -22,7 +22,7 @@ from enum import Enum
 from pathlib import Path
 import shutil  # En tepeye ekleyin
 from src.utils.encoding import normalize_to_utf8_sig, read_text_safely, save_text_safely
-from src.core.runtime_hook_template import render_runtime_hook
+from src.core.runtime_hook_template import render_runtime_hook, render_runtime_hook_native
 
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
@@ -1530,24 +1530,14 @@ class TranslationPipeline(QObject):
                 
                 if missing:
                      self.log_message.emit("info", self.config.get_log_text('deep_scan_found', count=len(missing)))
-                     deepscan_dir = os.path.join(tl_path, renpy_lang)
-                     os.makedirs(deepscan_dir, exist_ok=True)
-                     d_file = os.path.join(deepscan_dir, "strings_deepscan.rpy")
                      
-                     lines = ["# Deep Scan generated translations", f"translate {renpy_lang} strings:\n"]
+                     if not hasattr(self, '_native_deepscan_entries'):
+                         self._native_deepscan_entries = []
                      for m in missing:
-                         o = m['text'].replace('"', '\\"').replace('\n', '\\n')
-                         if m.get('context'): lines.append(f"    # context: {m['context']}")
-                         lines.append(f'    old "{o}"\n    new ""\n')
-                         
-                     with open(d_file, 'w', encoding="utf-8") as f:
-                         f.write('\n'.join(lines))
-                         
-                     # Add new file to pipeline processing
-                     for ntf in self.tl_parser.parse_directory(deepscan_dir, renpy_lang):
-                         if os.path.normcase(ntf.file_path) == os.path.normcase(d_file):
-                             tl_files.append(ntf)
-                             break
+                         m_text = m.get('text', '')
+                         if m_text and len(m_text) > 1:
+                             self._native_deepscan_entries.append(m)
+                     self.log_message.emit('info', f"Deep scan: {len(missing)} entries reserved for pipeline injection (no separate .rpy file).")
             except Exception as e:
                 self.log_message.emit("warning", self.config.get_log_text('deep_scan_error', error=str(e)))
 
@@ -1730,6 +1720,45 @@ class TranslationPipeline(QObject):
         all_entries = []
         for tl_file in tl_files:
             all_entries.extend(tl_file.get_untranslated())
+        
+        # v2.8.8: Native TLID mode — inject UI entries directly into translation
+        # pipeline without writing translate strings: blocks (prevents Ren'Py
+        # native translate from emptying UI text before the runtime hook can act).
+        use_native = getattr(self.config.translation_settings, 'output_mode', 'strings') == 'native'
+        if use_native:
+            existing_texts = {e.original_text for e in all_entries}
+            ui_injected = 0
+            
+            # Collect from both regular UI entries and deep scan entries
+            native_sources = []
+            if hasattr(self, '_native_ui_entries') and self._native_ui_entries:
+                native_sources.append(('UI', self._native_ui_entries))
+            if hasattr(self, '_native_deepscan_entries') and self._native_deepscan_entries:
+                native_sources.append(('deep scan', self._native_deepscan_entries))
+            
+            for source_name, source_list in native_sources:
+                for e_data in source_list:
+                    text = e_data.get('text', '')
+                    if not text or text in existing_texts:
+                        continue
+                    entry = TranslationEntry(
+                        original_text=text,
+                        translated_text="",
+                        file_path=e_data.get('file_path', '_native_ui.rpy'),
+                        line_number=e_data.get('line_number', 0) or 1,
+                        entry_type='string',
+                        translation_id=TLParser.make_translation_id(
+                            e_data.get('file_path', '_native_ui.rpy'),
+                            e_data.get('line_number', 0) or 1,
+                            text
+                        )
+                    )
+                    all_entries.append(entry)
+                    existing_texts.add(text)
+                    ui_injected += 1
+            
+            if ui_injected:
+                self.log_message.emit('info', f"Injected {ui_injected} native UI/deepscan entries into translation pipeline.")
 
         # Initialize diagnostic report
         try:
@@ -1839,6 +1868,22 @@ class TranslationPipeline(QObject):
                             self.diagnostic_report.mark_written(fp, tid)
                     except Exception:
                         pass
+        
+        # After saving all .rpy files, remove stale .rpyc files so Ren'Py
+        # recompiles from the updated .rpy instead of loading old bytecode.
+        try:
+            rpyc_removed = 0
+            for root, dirs, files in os.walk(tl_dir):
+                for fname in files:
+                    if fname.lower().endswith('.rpyc'):
+                        rpy_path = os.path.join(root, fname[:-1])
+                        if os.path.exists(rpy_path):
+                            os.remove(os.path.join(root, fname))
+                            rpyc_removed += 1
+            if rpyc_removed:
+                self.log_message.emit('info', f"Removed {rpyc_removed} stale .rpyc files to force Ren'Py recompile.")
+        except Exception as rpyc_err:
+            self.logger.debug(f"Failed to clean .rpyc files: {rpyc_err}")
         
         # 6.5. Atomik segment çevirileri strings.json'a zaten ekleniyor (extra_translations)
         # ve runtime hook Layer 1/2 tarafından eşleştiriliyor.
@@ -2446,12 +2491,23 @@ class TranslationPipeline(QObject):
             
             if mapping:
                 json_path = os.path.join(lang_dir, "strings.json")
+                # Separate dynamic {{variable}} texts for micro hook template matching
+                try:
+                    from src.core.exporter import _has_dynamic_variables
+                    dynamic_entries = {k: v for k, v in mapping.items() if _has_dynamic_variables(k)}
+                except Exception:
+                    dynamic_entries = {}
+                payload = {
+                    "translations": mapping,
+                    "dynamic": dynamic_entries,
+                }
                 save_text_safely(
                     Path(json_path),
-                    json.dumps(mapping, ensure_ascii=False, indent=4),
+                    json.dumps(payload, ensure_ascii=False, indent=4),
                     encoding='utf-8',
                 )
-                self.log_message.emit('info', self.config.get_log_text('log_strings_json_generated', count=len(mapping)))
+                dyn_msg = f" ({len(dynamic_entries)} dynamic)" if dynamic_entries else ""
+                self.log_message.emit('info', self.config.get_log_text('log_strings_json_generated', count=len(mapping)) + dyn_msg)
                 return len(mapping)
         except Exception as e:
             self.logger.warning(f"Failed to generate strings.json: {e}")
@@ -2505,7 +2561,23 @@ class TranslationPipeline(QObject):
             reverse_lang_map = {v.lower(): k for k, v in RENPY_TO_API_LANG.items()}
             renpy_lang = reverse_lang_map.get(target_lang.lower(), target_lang)
             
-            if should_exist:
+            use_native = getattr(self.config.translation_settings, 'output_mode', 'strings') == 'native'
+            
+            if use_native:
+                # Native TLID mode: auto-export handles all static texts via
+                # translate strings: blocks. No runtime hook needed — pure native.
+                # Python {variable} f-string texts are not covered; switch to
+                # Standard mode if the game has heavy dynamic UI text.
+                if hook_path.exists():
+                    os.remove(hook_path)
+                hook_pyc_rm = game_dir / (hook_filename + "c")
+                if hook_pyc_rm.exists():
+                    try:
+                        os.remove(hook_pyc_rm)
+                    except Exception:
+                        pass
+                self.log_message.emit('info', self.config.get_ui_text("log_hook_removed").replace("{filename}", hook_filename))
+            elif should_exist:
                 content = render_runtime_hook(
                     renpy_lang,
                     runtime_string_diagnostics=getattr(
@@ -2515,12 +2587,25 @@ class TranslationPipeline(QObject):
                     ),
                 )
                 save_text_safely(hook_path, content, encoding="utf-8")
+                # Delete stale .rpyc to force Ren'Py to load new hook
+                hook_pyc_std = game_dir / (hook_filename + "c")
+                if hook_pyc_std.exists():
+                    try:
+                        os.remove(hook_pyc_std)
+                    except Exception:
+                        pass
                 self.log_message.emit('info', self.config.get_ui_text("log_hook_installed").replace("{filename}", hook_filename))
             else:
                 # Remove if it exists
                 if hook_path.exists():
                     os.remove(hook_path)
-                    self.log_message.emit('info', self.config.get_ui_text("log_hook_removed").replace("{filename}", hook_filename))
+                hook_pyc_rm = game_dir / (hook_filename + "c")
+                if hook_pyc_rm.exists():
+                    try:
+                        os.remove(hook_pyc_rm)
+                    except Exception:
+                        pass
+                self.log_message.emit('info', self.config.get_ui_text("log_hook_removed").replace("{filename}", hook_filename))
                     
         except Exception as e:
             self.logger.warning(f"Failed to manage runtime hook: {e}")
@@ -3330,11 +3415,13 @@ init python:
                     valid_entries = []
                     for entry in entries:
                         txt = entry.get('text', '')
-                        # Engine strings in common are usually UI: "Quit", "Are you sure?", etc.
-                        # If it has heavy punctuation, glob markers, or looks like code, skip it.
-                        if re.search(r'[\\#\[\](){}|*+?^$]', txt): 
-                             if len(txt) > 10 or re.search(r'\*\*?/\*\*?|\.[a-z0-9]+$', txt):
-                                 continue
+                        # Filter out technical entries: file paths (/*/ *.ext), regex, code patterns
+                        # Keep UI texts that just happen to have ? or \n
+                        if re.search(r'[\\#\[\](){}|*+^$]', txt):
+                            if re.search(r'\*\.\w+|\.\.\/|\\[a-z]', txt):
+                                continue
+                        if re.search(r'[{}]', txt) and len(txt) > 10:
+                            continue
                         
                         # Skip common technical words that are not UI
                         if txt.lower().strip() in parser.renpy_technical_terms:
@@ -3354,9 +3441,11 @@ init python:
                         for file_path, entries in rpyc_results.items():
                             for entry in entries:
                                 txt = entry.get('text', '')
-                                if re.search(r'[\\#\[\](){}|*+?^$]', txt):
-                                    if len(txt) > 10 or re.search(r'\*\*?/\*\*?|\.[a-z0-9]+$', txt):
+                                if re.search(r'[\\#\[\](){}|*+^$]', txt):
+                                    if re.search(r'\*\.\w+|\.\.\/|\\[a-z]', txt):
                                         continue
+                                if re.search(r'[{}]', txt) and len(txt) > 10:
+                                    continue
                                 if txt.lower().strip() in parser.renpy_technical_terms:
                                     continue
 
@@ -3552,6 +3641,17 @@ init python:
                     elif not existing.get('is_deep_scan') and entry.get('is_deep_scan'):
                         seen_map[text] = entry
 
+            # v2.8.8: In native TLID mode, capture UI entries for direct translation
+            # pipeline injection instead of writing them to translate strings: blocks.
+            use_native = getattr(self.config.translation_settings, 'output_mode', 'strings') == 'native'
+            if use_native:
+                self._native_ui_entries = [
+                    e for e in seen_map.values()
+                    if e.get('text_type', '') not in ('dialogue', 'narration', 'extend', 'bubble_dialogue', 'nvl_dialogue')
+                ]
+                if self._native_ui_entries:
+                    self.log_message.emit('info', f"Native TLID: {len(self._native_ui_entries)} UI entries reserved for runtime hook translation.")
+            
             # 4. Group strings by file for separate .rpy generation
             # Ren'Py allows multiple 'translate strings:' blocks across different files.
             # To avoid duplicates (which cause Ren'Py to crash), we MUST only define each string ONCE.
@@ -3611,7 +3711,11 @@ init python:
                 if self.should_stop: return False
                 
                 try:
-                    content = self._generate_all_strings_file(entries, game_dir, lang_name=renpy_lang)
+                    use_native = getattr(self.config.translation_settings, 'output_mode', 'strings') == 'native'
+                    if use_native:
+                        content = self._generate_native_tlid_content(entries, game_dir, lang_name=renpy_lang)
+                    else:
+                        content = self._generate_all_strings_file(entries, game_dir, lang_name=renpy_lang)
                     if not content: continue
                     
                     full_path = os.path.normpath(os.path.join(tl_dir, rel_path))
@@ -3806,6 +3910,125 @@ init python:
                 pass
 
         return '\n'.join(header + lines)
+
+    def _generate_native_tlid_content(self, entries: List[dict], game_dir: str, lang_name: str = None) -> str:
+        """
+        Generate native TLID format output for dialogues + strings: for UI text.
+        
+        Dialogue format:       translate <lang> <label>_<hash>:\n    # who "text"\n    who ""
+        UI/String format:      translate <lang> strings:\n    old "text"\n    new ""
+        
+        Both formats coexist in the same file — Ren'Py handles them together.
+        """
+        import hashlib
+        target_lang = lang_name or self.target_language
+        formatter = RenPyOutputFormatter()
+        
+        lines = []
+        lines.append("# Translation strings file")
+        lines.append("# Auto-generated by RenLocalizer")
+        lines.append("# Native TLID + String Translation format")
+        lines.append("")
+        
+        # Track TLID collisions for serial suffix
+        seen_tlids: Dict[str, int] = {}
+        # Track text deduplication
+        seen_texts: set = set()
+        entries_added = 0
+        skipped = 0
+        
+        dialogue_entries = []
+        string_entries = []
+        
+        for entry in entries:
+            text = entry.get('text', '')
+            if not text or formatter._should_skip_translation(text):
+                skipped += 1
+                continue
+            if text in seen_texts:
+                continue
+            seen_texts.add(text)
+            
+            text_type = entry.get('text_type', '')
+            if text_type in ('dialogue', 'narration', 'extend', 'bubble_dialogue', 'nvl_dialogue'):
+                dialogue_entries.append(entry)
+            else:
+                string_entries.append(entry)
+        
+        # --- Generate Native TLID blocks for dialogues ---
+        if dialogue_entries:
+            for entry in dialogue_entries:
+                text = entry.get('text', '')
+                who = entry.get('character', '')
+                file_path = entry.get('file_path', '')
+                
+                # Compute TLID hash from reconstructed source line
+                source_line = f'{who} "{text}"' if who else f'"{text}"'
+                # Escape \n \t \r for proper Ren'Py escaping
+                escaped_source = source_line.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                tlid_hash = hashlib.md5((source_line + '\r\n').encode('utf-8')).hexdigest()[:8]
+                
+                # Get label context
+                label = 'start'
+                ctx = entry.get('context', '')
+                ctx_path = entry.get('context_path', [])
+                
+                if ctx and 'label:' in str(ctx):
+                    for part in str(ctx).split('/'):
+                        if part.startswith('label:'):
+                            label = part.replace('label:', '')
+                            break
+                elif ctx_path:
+                    for p in ctx_path:
+                        if p.lower().startswith('label:'):
+                            label = p.replace('label:', '').replace('Label:', '')
+                            break
+                
+                # Handle collision
+                base_tlid = f'{label}_{tlid_hash}'
+                if base_tlid in seen_tlids:
+                    seen_tlids[base_tlid] += 1
+                    tlid = f'{base_tlid}_{seen_tlids[base_tlid]}'
+                else:
+                    seen_tlids[base_tlid] = 0
+                    tlid = base_tlid
+                
+                # Source info
+                if file_path:
+                    try:
+                        rel = os.path.relpath(file_path, game_dir)
+                    except ValueError:
+                        rel = file_path
+                    lines.append(f"# {rel}")
+                
+                lines.append(f"translate {target_lang} {tlid}:")
+                lines.append("")
+                lines.append(f'    # {escaped_source}')
+                lines.append(f'    {who or "mc"} ""' if who else '    ""')
+                
+                # Cache lookup for translation
+                cached = ""
+                if self.translation_manager:
+                    api_target = RENPY_TO_API_LANG.get(self.target_language, self.target_language)
+                    api_source = RENPY_TO_API_LANG.get(self.source_language, self.source_language)
+                    cache_key = (self.engine.value, api_source, api_target, text)
+                    cached_res = self.translation_manager._cache.get(cache_key)
+                    if cached_res and cached_res.success:
+                        cached = self._escape_rpy_string(cached_res.translated_text)
+                
+                if cached:
+                    lines.append(f'    {who or "mc"} "{cached}"' if who else f'    "{cached}"')
+                
+                lines.append("")
+                entries_added += 1
+        
+        if not entries_added:
+            return ""
+        
+        if skipped and self.logger:
+            self.logger.debug("Native TLID: %d technical entries skipped", skipped)
+        
+        return '\n'.join(lines)
     
     def _protect_glossary_terms(self, text: str, xml_mode: bool = False) -> Tuple[str, Dict[str, str]]:
         """Sözlük terimlerini Unicode bracket placeholder veya XML tag ile korur ve karşılıklarını saklar.

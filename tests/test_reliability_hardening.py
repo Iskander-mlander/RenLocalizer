@@ -285,6 +285,7 @@ def test_generate_strings_json_skips_corrupt_entries_and_adds_hotkey_variants(tm
     )
 
     mapping = json.loads((lang_dir / "strings.json").read_text(encoding="utf-8"))
+    mapping = mapping["translations"] if isinstance(mapping, dict) and "translations" in mapping else mapping
     skipped = json.loads(
         (lang_dir / "diagnostics" / "strings_json_skipped_corruptions.json").read_text(encoding="utf-8")
     )
@@ -318,6 +319,7 @@ def test_generate_strings_json_adds_plain_alias_for_angle_wrapped_strings(tmp_pa
     pipeline._generate_strings_json([tl_file], str(lang_dir))
 
     mapping = json.loads((lang_dir / "strings.json").read_text(encoding="utf-8"))
+    mapping = mapping["translations"] if isinstance(mapping, dict) and "translations" in mapping else mapping
     plain_key = "At the Valkoran Academy I once posed for development of a new Spacesuit."
     assert mapping[plain_key] == "Valkoran Akademisi'nde yeni bir uzay kıyafeti geliştirilmesi için bir zamanlar poz vermiştim."
 
@@ -359,6 +361,7 @@ def test_generate_strings_json_adds_visible_text_aliases(tmp_path: Path) -> None
     pipeline._generate_strings_json([tl_file], str(lang_dir))
 
     mapping = json.loads((lang_dir / "strings.json").read_text(encoding="utf-8"))
+    mapping = mapping["translations"] if isinstance(mapping, dict) and "translations" in mapping else mapping
     assert mapping["I won't say goodbye..."] == "Vedalaşmayacağım..."
     assert mapping["I won’t say goodbye..."] == "Vedalaşmayacağım..."
     assert mapping["I won't say goodbye…"] == "Vedalaşmayacağım..."
@@ -401,6 +404,8 @@ def test_generate_strings_json_adds_visible_fragment_aliases(tmp_path: Path) -> 
     pipeline._generate_strings_json([tl_file], str(lang_dir))
 
     mapping = json.loads((lang_dir / "strings.json").read_text(encoding="utf-8"))
+    mapping = mapping["translations"] if isinstance(mapping, dict) and "translations" in mapping else mapping
+    mapping = mapping["translations"] if isinstance(mapping, dict) and "translations" in mapping else mapping
     key = "The continuation of this story is being created right now. So I won't say goodbye."
     and_key = "And the continuation of this story is being created right now. So I won't say goodbye."
     assert mapping[key] == "Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
@@ -480,6 +485,7 @@ def test_generate_strings_json_adds_runtime_observed_aliases(tmp_path: Path) -> 
     pipeline._generate_strings_json([tl_file], str(lang_dir))
 
     mapping = json.loads((lang_dir / "strings.json").read_text(encoding="utf-8"))
+    mapping = mapping["translations"] if isinstance(mapping, dict) and "translations" in mapping else mapping
     observed_key = "And the continuation of this story is being created right now. So I won't say goodbye."
     assert mapping[observed_key] == "And Bu hikayenin devamı şu anda hazırlanıyor. Bu yüzden vedalaşmayacağım."
 

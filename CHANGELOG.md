@@ -1,7 +1,35 @@
 # RenLocalizer Changelog
 
-# RenLocalizer Changelog
+#### [2.8.8] - 2026-07-17
 
+> **🎨 UI — Card-Based Dashboard & Sidebar Navigation:** The entire interface was rebuilt around a 230px fixed left sidebar with five navigation tabs: Dashboard, Settings & AI, Log Console, Glossary, and Toolbox. The right content area uses glassmorphism cards with neon accents, micro-animations, and a glowing turquoise-to-blue gradient action button. The output mode selector was redesigned as a two-button segmented toggle (`📋 Standard` / `⚡ Native TLID` with a `💎 Recommended` badge) with plain-language descriptions for each mode. All settings, logs, and tools are now full-page scrollable views with consistent spacing.
+
+> **⚡ Native TLID Output Mode — New & Now Default:** A brand new translation mode that uses Ren'Py's own translate system instead of a Python runtime hook. Dialogues get `translate <lang> <label>_<hash>:` blocks (verified 97.1% match against Ren'Py SDK output on 18K+ identifiers). All UI, menu, and screen text is auto-exported as `translate <lang> strings:` blocks via `zz_rl_exported_<lang>.rpy`. A compact micro hook handles the remaining edge case — Python `{variable}` f-string texts — using O(1) dict lookup with template matching, without blocking the native system. **Standard mode** stays available for games with heavy runtime text concatenation (quest markers, screen-assembled UI).
+
+> **📚 Glossary Management — New Full Page:** A dedicated sidebar tab for terminology management. Features: add/delete terms, import/export in three formats (JSON/CSV/XLSX via new `data_transfer.py`), batch translate empty terms via Google, fill source from original, and auto-extract from project files. Terms are protected across all translation engines through the existing pipeline integration.
+
+> **🔤 Google Font Injector — New Toolbox Tool:** Downloads Unicode-compatible fonts from Google Fonts and injects them into the game using Ren'Py's `renpy.text.font.get_font` runtime hook — works even when fonts are hardcoded. Language-specific ordered fallback candidates: Turkish → Noto Sans/Inter/Open Sans, plus Arabic, Persian, Hebrew, CJK, Cyrillic, Thai, and Vietnamese.
+
+> **🔧 Fixes & Improvements:**
+> - **Ren'Py common UI texts** (confirm dialogs, save/load prompts, quit warnings) now properly extracted from `renpy/common/` — previously filtered out due to `?` in question texts
+> - **Deep scan** expanded from 7 to 60+ translatable key patterns covering quest systems, character bios, chat messages, schedules, inventories, achievements, tutorials, journals, and screen UI elements
+> - **Toast notifications** no longer truncate text — removed `elide`, added word wrap with dynamic height
+> - **Page spacing** unified across all views — Log, Glossary, and Dashboard now have consistent 24px margins
+> - **Toolbox cards** fixed (were rendering at 0px), **Font Helper** and **Ren'Py Lint** backends corrected (wrong arguments, incorrect return types)
+> - **Settings persistence** restored — engine and language selections now properly saved to disk
+> - **ALL_CAPS whitelist** expanded from ~60 to ~180 entries — common words like SAVE, LOAD, PLAY, HARD, EASY no longer silently skipped
+> - **8 locale files** synchronized — 21 missing keys added, Native TLID descriptions and glossary strings fully localized
+> - **`-LITE` branding** removed from all files, release artifact names simplified, wiki button link corrected
+
+> **📖 Documentation:** New user wiki at `docs/wiki/` with 7 pages: Home, Installation, Quick Start, Settings & Engines, Output Modes, Toolbox, FAQ, plus sidebar navigation.
+
+> **669/669 tests passing** (+6 skipped) — 0 regressions.
+
+**New files:** `src/tools/font_injector.py`, `src/utils/data_transfer.py`, `docs/wiki/*.md` (8 files)
+
+**Affected files:** `src/gui/qml/lite/LiteMain.qml`, `src/backend/lite_backend.py`, `src/core/translation_pipeline.py`, `src/core/runtime_hook_template.py`, `src/core/exporter.py`, `src/core/deep_extraction.py`, `src/utils/config.py`, `locales/*.json`, `AGENTS.md`, `.github/workflows/release.yml`, `README.md`
+
+---
 #### [2.8.7-LITE] - 2026-07-11
 
 > **Release 2 — Feature & Hotfix:** False-positive filter hardening, variable reference guard, LibreTranslate/Custom endpoint support, CLI mode, RPYC full version, dependency cleanup, and GUI improvements.
@@ -215,7 +243,6 @@ The CLI was replaced with Full version's Rich-powered terminal interface: gradie
 **Affected files:** `requirements.txt`, `RenLocalizer.spec`, `src/utils/encoding.py`, `src/core/parser.py`
 
 
----
 
 #### [2.8.6-LITE] - 2026-07-06
 

@@ -1,11 +1,11 @@
-# RenLocalizer Lite: Visual Novel Localization Made Simple
+# RenLocalizer: Visual Novel Localization Made Simple
 
 <p align="center">
   <strong>Minimalist, Zero-Dependency Translation and Localization Toolkit for Ren'Py Games.</strong>
 </p>
 
 <p align="center">
-  RenLocalizer Lite is a streamlined, single-page desktop application designed to translate Ren'Py games (.rpy, .rpyc, and tl/ directories) without breaking game code, formatting, or variables. 
+  RenLocalizer is a streamlined, single-page desktop application designed to translate Ren'Py games (.rpy, .rpyc, and tl/ directories) without breaking game code, formatting, or variables. 
 </p>
 
 <p align="center">
@@ -20,17 +20,17 @@
   <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-3776ab">
   <img alt="GUI" src="https://img.shields.io/badge/gui-PyQt6%20%2B%20QML-41cd52">
   <img alt="Build" src="https://img.shields.io/badge/build-Portable%20%2F%20CLI-ff6b6b">
-  <img alt="Version" src="https://img.shields.io/badge/version-2.8.7--LITE-111827">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.8.8-111827">
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue">
 </p>
 
 ---
 
-## Why RenLocalizer Lite?
+## Why RenLocalizer?
 
 Visual Novel translations often fail because translation tools don't understand code. They accidentally translate variable names, corrupt formatting tags (`{i}`/`{b}`), or trigger duplicate translation key crashes. 
 
-**RenLocalizer Lite solves this with zero hassle:**
+**RenLocalizer solves this with zero hassle:**
 
 - **🔌 Zero Dependencies (Plug-and-Play):** All major machine translation and LLM submodules (including Google Translate, OpenAI, DeepSeek, and Local LLM support) are pre-bundled inside the application. No need to install Python or configure virtual environments.
 - **🎯 Minimalist UI:** Stripped of complex tabs and overwhelming settings. The single-page Material dashboard focuses strictly on: **Select Project -> Configure Engine -> Translate.**
@@ -133,7 +133,7 @@ In the event that an LLM returns a corrupted translation or leaks XML tags, the 
 
 Issues, bug reports, and pull requests are welcome. Feel free to open a ticket on the GitHub Issues page.
 
-- [Wiki Guide](https://github.com/Lord0fTurk/RenLocalizer/wiki/LITE-RELEASE-GUIDE)
+- [Wiki Guide](https://github.com/Lord0fTurk/RenLocalizer/wiki)
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [License](LICENSE) (Licensed under the GPL-3.0 License)
 - [Support on Patreon](https://www.patreon.com/cw/LordOfTurk)

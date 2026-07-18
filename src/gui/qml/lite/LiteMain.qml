@@ -1,5 +1,6 @@
-// LiteMain.qml — RenLocalizer Lite Ana Pencere
-// Tek sayfa, navigasyon yok, sadece "Oyun Seç → Çevir" akışı.
+// LiteMain.qml — RenLocalizer v2.8.8 (Pro Card-based Dashboard UI Overhaul)
+// Yeniden tasarlandı: Sol Kenar Çubuğu (Sidebar Navigation), Glass/Carbon Kartlar,
+// Mikro-animasyonlar, Tam Sayfa Ayarlar ve Konsol Sekmeleri, Evrensel ComboBox Bugfix.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -9,109 +10,96 @@ import QtQuick.Window
 
 ApplicationWindow {
     id: root
-    title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("app_title", "RenLocalizer") + " Lite"
-    width: Math.min(900, Screen.desktopAvailableWidth * 0.85)
-    height: Math.min(680, Screen.desktopAvailableHeight * 0.85)
-    minimumWidth: 720
-    minimumHeight: 560
-    visible: false  // show() Python tarafından çağrılır
+    title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("app_title", "RenLocalizer") + " (" + liteBackend.version + ")"
 
-    // ── Global Theme Colors Manager ──────────────────────────────────────
+    // Responsive ve ferah başlangıç boyutları
+    width: Math.min(1320, Screen.desktopAvailableWidth * 0.86)
+    height: Math.min(860, Screen.desktopAvailableHeight * 0.86)
+    minimumWidth: 980
+    minimumHeight: 650
+    visible: false // show() Python tarafından çağrılır
 
-    readonly property string currentTheme: liteBackend.uiTrigger, liteBackend.getCurrentTheme()
+    Material.theme: Material.Dark
+    Material.accent: clrAccent
+    Material.primary: clrPrimary
 
-    // Material Tema Ayarları
-    Material.theme: (currentTheme === "light") ? Material.Light : Material.Dark
+    color: clrBg
 
-    Material.accent: {
-        if (currentTheme === "red") return "#f03e3e"
-        if (currentTheme === "turquoise") return "#0ca678"
-        if (currentTheme === "green") return "#37b24d"
-        if (currentTheme === "neon") return "#ae3ec9"
-        if (currentTheme === "light") return "#4c6ef5"
-        return "#7950f2"
+    // ── Tek Premium Pro Koyu/Neon Palet (Siberpunk & Glassmorphism) ─────
+    readonly property color clrBg:         "#0B0F17" // Koyu uzay zemin
+    readonly property color clrSidebar:    "#111522" // Sol menü arkaplanı
+    readonly property color clrSidebarTop: "#161B2E" // Sol menü üst gradyan
+    readonly property color clrCard:       "#151A29" // Kart arkaplanı
+    readonly property color clrCardHover:  "#1D2436" // Kart üzerine gelince
+    readonly property color clrCardBorder: "#242C44" // İnce siber kenarlık
+    readonly property color clrBorderGlow: "#00F2FE" // Turkuaz kart parlaması
+    readonly property color clrInput:      "#0E121D" // Giriş kutuları
+    readonly property color clrPrimary:    "#1A1E2E"
+    readonly property color clrAccent:     "#00F2FE" // Turkuaz/Cyan neon
+    readonly property color clrAccent2:    "#4FACFE" // Mavi gradyan bitiş
+    readonly property color clrPurple:     "#A855F7" // Vurgu moru
+    readonly property color clrSuccess:    "#10B981" // Yeşil çentik
+    readonly property color clrSuccessDim: Qt.rgba(16, 185, 129, 0.15)
+    readonly property color clrWarn:       "#F59E0B" // Amber uyarı
+    readonly property color clrWarnDim:    Qt.rgba(245, 158, 11, 0.15)
+    readonly property color clrError:      "#EF4444" // Kırmızı hata
+    readonly property color clrTxt:        "#F3F4F6" // Ana beyaz metin
+    readonly property color clrTxt2:       "#9CA3AF" // İkinci gri metin
+    readonly property color clrTxtDim:     "#6B7280" // Soluk gri metin
+
+    // Geriye uyumluluk aliasları (sinyal/bağlantı koruması için)
+    readonly property color cardBg:    clrCard
+    readonly property color inputBg:   clrInput
+    readonly property color borderClr: clrCardBorder
+    readonly property color txtMain:   clrTxt
+    readonly property color txtSecond: clrTxt2
+    readonly property color txtDim:    clrTxtDim
+    readonly property color accentClr: clrAccent
+    readonly property color successClr:clrSuccess
+    readonly property color warningClr:clrWarn
+    readonly property color errorClr:  clrError
+
+    // ── State & Navigasyon ────────────────────────────────────────────────
+    property int    navIndex:        0 // 0: Dashboard, 1: Settings, 2: Logs, 3: Toolbox
+    property bool   isTranslating:   false
+    property string currentStage:    "idle"
+    property int    totalLines:      0
+    property int    translatedLines: 0
+    property real   successRate:     0.0
+    property string outputPath:      ""
+    property bool   statsVisible:    false
+
+    // ── Evrensel Dil Adı ve Kodu Çözümleyici (Undefined Bugfix) ──────────
+    function getLangText(modelData, model) {
+        var n = ""
+        var c = ""
+        if (typeof model !== "undefined" && model && model.name !== undefined) {
+            n = model.name
+            c = model.code !== undefined ? model.code : ""
+        } else if (typeof modelData !== "undefined" && modelData) {
+            if (modelData.name !== undefined) n = modelData.name
+            else if (typeof modelData === "string") n = modelData
+            if (modelData.code !== undefined) c = modelData.code
+        }
+        if (!n || n === "undefined") n = "Auto-detect"
+        if (c && c !== "auto" && c !== "undefined") return n + " (" + c + ")"
+        return n
     }
 
-    Material.primary: {
-        if (currentTheme === "light") return "#ffffff"
-        if (currentTheme === "red") return "#211222"
-        if (currentTheme === "turquoise") return "#081d28"
-        if (currentTheme === "green") return "#06150c"
-        if (currentTheme === "neon") return "#10091e"
-        return "#1a1a2e"
-    }
-
-    Material.background: {
-        if (currentTheme === "light") return "#f8f9fa"
-        if (currentTheme === "red") return "#170a18"
-        if (currentTheme === "turquoise") return "#05131a"
-        if (currentTheme === "green") return "#040d07"
-        if (currentTheme === "neon") return "#090511"
-        return "#121224"
-    }
-
-    color: Material.background
-
-    // ── Renk tokenları ──────────────────────────────────────────────────
-    readonly property color cardBg: {
-        if (currentTheme === "light") return "#ffffff"
-        if (currentTheme === "red") return "#2d1b2e"
-        if (currentTheme === "turquoise") return "#0d2b3a"
-        if (currentTheme === "green") return "#0a1f12"
-        if (currentTheme === "neon") return "#1a0f2d"
-        return "#1e1e38"
-    }
-
-    readonly property color inputBg: {
-        if (currentTheme === "light") return "#f1f3f5"
-        if (currentTheme === "red") return "#211222"
-        if (currentTheme === "turquoise") return "#081d28"
-        if (currentTheme === "green") return "#06150c"
-        if (currentTheme === "neon") return "#10091e"
-        return "#1a1a2e"
-    }
-
-    readonly property color borderClr: {
-        if (currentTheme === "light") return "#e2e8f0"
-        if (currentTheme === "red") return "#5c2134"
-        if (currentTheme === "turquoise") return "#0e4b5a"
-        if (currentTheme === "green") return "#0f3c21"
-        if (currentTheme === "neon") return "#341a54"
-        return "#2e2e4f"
-    }
-    readonly property color txtMain: (currentTheme === "light") ? "#212529" : "#ffffff"
-    readonly property color txtSecond: (currentTheme === "light") ? "#495057" : "#aaaaaa"
-    readonly property color txtDim: (currentTheme === "light") ? "#868e96" : "#888888"
-    readonly property color accentClr: Material.accent
-    readonly property color successClr: "#6bcb77"
-    readonly property color warningClr: "#f39c12"
-    readonly property color errorClr: "#ff6b6b"
-
-    // ── State ────────────────────────────────────────────────────────────
-    property bool isTranslating: false
-    property string currentStage: "idle"
-    property int totalLines: 0
-    property int translatedLines: 0
-    property real successRate: 0.0
-    property string outputPath: ""
-
-    // ── Başlangıç: son proje yolunu geri yükle ──────────────────────────
+    // ── Başlangıç ─────────────────────────────────────────────────────────
     Component.onCompleted: {
         var last = liteBackend.getLastProjectPath()
-        if (last && last.length > 0) {
+        if (last && last.length > 0)
             projectPathField.text = last
-        }
 
-        // Hedef dili de geri yükle
         var currentLang = liteBackend.getTargetLanguage()
         var idx = targetLangCombo.indexOfValue(currentLang)
         if (idx >= 0) targetLangCombo.currentIndex = idx
 
-        // Başlangıçta güncellemeleri denetle
         liteBackend.checkForUpdates(false)
     }
 
-    // ── Backend Sinyalleri ───────────────────────────────────────────────
+    // ── Backend Sinyalleri ────────────────────────────────────────────────
     Connections {
         target: liteBackend
 
@@ -120,8 +108,7 @@ ApplicationWindow {
         }
 
         function onProgressChanged(current, total, text) {
-            if (total > 0)
-                progressBar.value = current / total
+            if (total > 0) progressBar.value = current / total
             progressLabel.text = text + " (" + current + "/" + total + ")"
         }
 
@@ -142,16 +129,17 @@ ApplicationWindow {
             progressBar.value = 0
             progressLabel.text = ""
             stageLabel.text = liteBackend.getTextWithDefault("starting_translation", "Başlatılıyor...")
+            navIndex = 0 // Akışı anlık izlemek için Dashboard sekmene geç
         }
 
         function onTranslationFinished(success, message) {
             isTranslating = false
             if (success) {
-                stageLabel.text = liteBackend.getTextWithDefault("stage_completed", "Tamamlandı") + " ✅"
+                stageLabel.text = liteBackend.getTextWithDefault("stage_completed", "Tamamlandı") + " ✓"
                 progressBar.value = 1.0
                 showToast(liteBackend.getTextWithDefault("translation_completed", "Çeviri tamamlandı!"), "success")
             } else {
-                stageLabel.text = liteBackend.getTextWithDefault("stage_error", "Hata") + " ❌"
+                stageLabel.text = liteBackend.getTextWithDefault("stage_error", "Hata")
                 showToast(liteBackend.getTextWithDefault("pipeline_translate_failed", "Çeviri başarısız") + ": " + message, "error")
             }
         }
@@ -160,7 +148,7 @@ ApplicationWindow {
             totalLines = total
             translatedLines = translated
             successRate = total > 0 ? (translated / total) * 100 : 0
-            statsCard.visible = true
+            statsVisible = true
             appendLog("success",
                 "📊 " + liteBackend.getTextWithDefault("original_text", "Toplam") + ": " + total +
                 " | " + liteBackend.getTextWithDefault("completed", "Çevrildi") + ": " + translated +
@@ -190,19 +178,18 @@ ApplicationWindow {
         }
 
         function onUpdateCheckFinished(hasUpdate, message) {
-            if (hasUpdate || settingsPopup.visible) {
-                showToast(message, hasUpdate ? "success" : "info")
-            }
+            showToast(message, hasUpdate ? "success" : "info")
         }
     }
 
-    // ── Yardımcı JS Fonksiyonları ────────────────────────────────────────
+    // ── Yardımcı Log Fonksiyonları ────────────────────────────────────────
     ListModel { id: logModel }
 
     function appendLog(level, message) {
         var ts = new Date().toLocaleTimeString(Qt.locale(), "HH:mm:ss")
         logModel.append({ "level": level, "message": message, "ts": ts })
         logListView.positionViewAtEnd()
+        logConsoleListView.positionViewAtEnd()
     }
 
     function showToast(msg, type) {
@@ -213,29 +200,30 @@ ApplicationWindow {
     }
 
     function logColor(level) {
-        if (level === "error")   return errorClr
-        if (level === "warning") return warningClr
-        if (level === "success") return successClr
-        if (level === "debug")   return "#888888"
-        return txtMain
+        if (level === "error")   return clrError
+        if (level === "warning") return clrWarn
+        if (level === "success") return clrSuccess
+        if (level === "debug")   return clrTxtDim
+        return clrTxt
     }
 
     function logPrefix(level) {
-        var trigger = liteBackend.uiTrigger;
-        if (level === "error")   return "[" + liteBackend.getTextWithDefault("log_tag_error", "ERROR").replace("[", "").replace("]", "") + "] "
-        if (level === "warning") return "[" + liteBackend.getTextWithDefault("log_tag_warn", "WARN").replace("[", "").replace("]", "") + "] "
-        if (level === "success") return "[✓] "
-        if (level === "debug")   return "[" + liteBackend.getTextWithDefault("log_tag_debug", "DEBUG").replace("[", "").replace("]", "") + "] "
-        return "[" + liteBackend.getTextWithDefault("log_tag_info", "INFO").replace("[", "").replace("]", "") + "] "
+        var trigger = liteBackend.uiTrigger
+        if (level === "error")   return "[" + liteBackend.getTextWithDefault("log_tag_error", "HATA").replace("[","").replace("]","") + "] "
+        if (level === "warning") return "[" + liteBackend.getTextWithDefault("log_tag_warn", "UYARI").replace("[","").replace("]","") + "] "
+        if (level === "success") return "[" + liteBackend.getTextWithDefault("log_tag_ok", "TAMAM").replace("[","").replace("]","") + "] "
+        return "[" + liteBackend.getTextWithDefault("log_tag_info", "BİLGİ").replace("[","").replace("]","") + "] "
     }
 
-    // ── Dosya Diyalogları ────────────────────────────────────────────────
+    // ── Dosya ve Klasör Seçim Diyalogları ─────────────────────────────────
     FileDialog {
         id: fileDialog
         title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("select_game_exe_title", "Oyun EXE Dosyasını Seç")
         nameFilters: Qt.platform.os === "windows"
-            ? [liteBackend.getTextWithDefault("renpy_games_filter", "Ren'Py Oyunları") + " (*.exe)", liteBackend.getTextWithDefault("all_files_filter", "Tüm dosyalar") + " (*)"]
-            : [liteBackend.getTextWithDefault("shell_scripts_filter", "Shell scriptleri") + " (*.sh)", liteBackend.getTextWithDefault("all_files_filter", "Tüm dosyalar") + " (*)"]
+            ? [liteBackend.getTextWithDefault("renpy_games_filter", "Ren'Py Oyunları") + " (*.exe)",
+               liteBackend.getTextWithDefault("all_files_filter", "Tüm dosyalar") + " (*)"]
+            : [liteBackend.getTextWithDefault("shell_scripts_filter", "Shell scriptleri") + " (*.sh)",
+               liteBackend.getTextWithDefault("all_files_filter", "Tüm dosyalar") + " (*)"]
         onAccepted: {
             var raw = selectedFile.toString()
             liteBackend.setProjectPath(raw)
@@ -253,2063 +241,1542 @@ ApplicationWindow {
         }
     }
 
-    // ── Ana İçerik ───────────────────────────────────────────────────────
-    ColumnLayout {
+    // ═══════════════════════════════════════════════════════════════════════
+    // ANA LAYOUT (Sol Sidebar Navigation + Sağ İçerik Paneli)
+    // ═══════════════════════════════════════════════════════════════════════
+    RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        // ── Başlık Çubuğu ─────────────────────────────────────────────
+        // ── 1. SOL KENAR ÇUBUĞU (SIDEBAR NAVIGATION - 230px) ──────────────
         Rectangle {
-            Layout.fillWidth: true
-            height: 64
-            color: "#0e0e20"
+            Layout.preferredWidth: 230
+            Layout.fillHeight: true
+            color: clrSidebar
 
-            RowLayout {
+            // Sağ siber kenarlık
+            Rectangle {
+                anchors.right: parent.right
+                width: 1; height: parent.height
+                color: clrCardBorder
+            }
+
+            ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 24
-                anchors.rightMargin: 24
-                spacing: 14
+                anchors.leftMargin: 20; anchors.rightMargin: 20
+                anchors.topMargin: 26; anchors.bottomMargin: 26
+                spacing: 20
 
-                // Logo
-                Rectangle {
-                    width: 36; height: 36
-                    radius: 8
-                    color: Qt.rgba(121/255, 80/255, 242/255, 0.2)
-                    border.color: accentClr
-                    border.width: 1
-
-                    Image {
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        source: liteBackend.get_asset_url("icon.png")
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        mipmap: true
+                // Üst Logo & Başlık
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+                    Item {
+                        Layout.preferredWidth: 44; Layout.preferredHeight: 44
+                        Layout.maximumWidth: 44; Layout.maximumHeight: 44
+                        Image {
+                            anchors.fill: parent
+                            source: liteBackend.get_asset_url("icon.png")
+                            sourceSize: Qt.size(64, 64)
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                        }
+                    }
+                    ColumnLayout {
+                        spacing: 2
+                        Label {
+                            text: "RenLocalizer"
+                            font.pixelSize: 18; font.bold: true; color: clrTxt
+                            font.letterSpacing: 0.5
+                        }
+                        Label {
+                            text: "v" + liteBackend.version
+                            font.pixelSize: 11; color: clrAccent
+                            font.bold: true
+                        }
                     }
                 }
 
+                Item { height: 4 }
+                Rectangle { Layout.fillWidth: true; height: 1; color: clrCardBorder; opacity: 0.7 }
+                Item { height: 2 }
+
+                // Menü Butonları (Sekmeler)
                 ColumnLayout {
-                    spacing: 0
-                    Label {
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("app_title", "RenLocalizer") + " Lite"
-                        font.pixelSize: 20
-                        font.bold: true
-                        color: txtMain
-                    }
-                    Label {
-                        text: liteBackend.uiTrigger, "Google Translate • " + liteBackend.getTextWithDefault("app_subtitle", "Ren'Py Çeviri Aracı")
-                        font.pixelSize: 11
-                        color: txtSecond
-                    }
-                }
+                    Layout.fillWidth: true
+                    spacing: 10
 
-                Item { Layout.fillWidth: true }
-
-                // Ayarlar Butonu
-                Button {
-                    id: settingsBtn
-                    width: 32; height: 32
-                    background: Rectangle {
-                        radius: 8
-                        color: parent.hovered ? "#3d3d54" : "transparent"
-                    }
-                    contentItem: Label {
-                        text: "⚙️"
-                        font.pixelSize: 16
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: settingsPopup.open()
-                    ToolTip.text: "Gelişmiş Çeviri Ayarları"
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 500
-                }
-
-                // Durum göstergesi
-                Rectangle {
-                    width: statusIndicator.implicitWidth + 20
-                    height: 26
-                    radius: 13
-                    color: isTranslating
-                        ? Qt.rgba(121/255, 80/255, 242/255, 0.2)
-                        : Qt.rgba(107/255, 203/255, 119/255, 0.15)
-                    border.color: isTranslating ? accentClr : successClr
-                    border.width: 1
-
-                    Label {
-                        id: statusIndicator
-                        anchors.centerIn: parent
-                        text: liteBackend.uiTrigger, isTranslating ? liteBackend.getTextWithDefault("pipeline_logs.stage_translating", "⟳ Çeviriyor...") : "● " + liteBackend.getTextWithDefault("status_ready", "Hazır")
-                        font.pixelSize: 11
-                        color: isTranslating ? accentClr : successClr
+                    // Buton 1: Dashboard
+                    Button {
+                        Layout.fillWidth: true; height: 44
+                        onClicked: navIndex = 0
+                        background: Rectangle {
+                            radius: 10
+                            color: navIndex === 0 ? Qt.rgba(0, 242, 254, 0.14) : (parent.hovered ? clrCardHover : "transparent")
+                            border.color: navIndex === 0 ? clrAccent : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                        contentItem: RowLayout {
+                            spacing: 14
+                            Label { text: "🏠"; font.pixelSize: 17 }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_dashboard", "Dashboard")
+                                font.pixelSize: 13; font.bold: navIndex === 0; color: navIndex === 0 ? clrAccent : clrTxt
+                            }
+                        }
                     }
 
-                    SequentialAnimation on opacity {
-                        running: isTranslating
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.4; duration: 700 }
-                        NumberAnimation { to: 1.0; duration: 700 }
+                    // Buton 2: Settings (Gelişmiş Ayarlar)
+                    Button {
+                        Layout.fillWidth: true; height: 44
+                        onClicked: navIndex = 1
+                        background: Rectangle {
+                            radius: 10
+                            color: navIndex === 1 ? Qt.rgba(0, 242, 254, 0.14) : (parent.hovered ? clrCardHover : "transparent")
+                            border.color: navIndex === 1 ? clrAccent : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                        contentItem: RowLayout {
+                            spacing: 14
+                            Label { text: "⚙️"; font.pixelSize: 17 }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_settings", "Settings & AI")
+                                font.pixelSize: 13; font.bold: navIndex === 1; color: navIndex === 1 ? clrAccent : clrTxt
+                            }
+                        }
+                    }
+
+                    // Buton 3: Log Console (Detaylı Loglar)
+                    Button {
+                        Layout.fillWidth: true; height: 44
+                        onClicked: navIndex = 2
+                        background: Rectangle {
+                            radius: 10
+                            color: navIndex === 2 ? Qt.rgba(0, 242, 254, 0.14) : (parent.hovered ? clrCardHover : "transparent")
+                            border.color: navIndex === 2 ? clrAccent : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                        contentItem: RowLayout {
+                            spacing: 14
+                            Label { text: "📜"; font.pixelSize: 17 }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_logs", "Log Console")
+                                font.pixelSize: 13; font.bold: navIndex === 2; color: navIndex === 2 ? clrAccent : clrTxt
+                            }
+                        }
+                    }
+                    // Glossary Button
+                    Button {
+                        Layout.fillWidth: true; height: 44
+                        onClicked: navIndex = 4
+                        background: Rectangle {
+                            radius: 10
+                            color: navIndex === 4 ? Qt.rgba(0, 242, 254, 0.14) : (parent.hovered ? clrCardHover : "transparent")
+                            border.color: navIndex === 4 ? clrAccent : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                        contentItem: RowLayout {
+                            spacing: 14
+                            Label { text: "📚"; font.pixelSize: 17 }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_glossary", "📚 Glossary")
+                                font.pixelSize: 13; font.bold: navIndex === 4; color: navIndex === 4 ? clrAccent : clrTxt
+                            }
+                        }
+                    }
+
+                    // Buton 5: Toolbox (Araç Kutusu)
+                    Button {
+                        Layout.fillWidth: true; height: 44
+                        onClicked: navIndex = 3
+                        background: Rectangle {
+                            radius: 10
+                            color: navIndex === 3 ? Qt.rgba(0, 242, 254, 0.14) : (parent.hovered ? clrCardHover : "transparent")
+                            border.color: navIndex === 3 ? clrAccent : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                        contentItem: RowLayout {
+                            spacing: 14
+                            Label { text: "🛠️"; font.pixelSize: 17 }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_toolbox", "🛠️ Araç Kutusu")
+                                font.pixelSize: 13; font.bold: navIndex === 3; color: navIndex === 3 ? clrAccent : clrTxt
                     }
                 }
             }
         }
 
-        // ── İçerik Bölgesi ────────────────────────────────────────────
-        ScrollView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            contentWidth: availableWidth
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-            ColumnLayout {
-                width: Math.min(parent.width - 48, 900)
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 16
-                anchors.topMargin: 20
-                anchors.bottomMargin: 20
 
+                // Esnek İtici Alan (En az 24px garanti tampon)
+                Item {
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 28
+                }
+
+                Rectangle { Layout.fillWidth: true; height: 1; color: clrCardBorder; opacity: 0.7 }
                 Item { height: 4 }
 
-                // ── Kart 1: Proje Seçimi ──────────────────────────────
-                Rectangle {
+                // Kılavuz ve Destek Butonları
+                ColumnLayout {
                     Layout.fillWidth: true
-                    height: card1Col.height + 36
-                    radius: 16
-                    color: cardBg
-
-                    // Sol vurgu çizgisi
-                    Rectangle {
-                        width: 3; height: parent.height - 20
-                        x: 0; anchors.verticalCenter: parent.verticalCenter
-                        radius: 2
-                        color: accentClr
-                    }
-
-                    ColumnLayout {
-                        id: card1Col
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 20
-                        anchors.leftMargin: 24
-                        spacing: 12
-
-                        Label {
-                            text: liteBackend.uiTrigger, "📁 " + liteBackend.getTextWithDefault("input_section", "Oyun Seç")
-                            font.pixelSize: 15
-                            font.bold: true
-                            color: txtMain
+                    spacing: 10
+                    Button {
+                        Layout.fillWidth: true; height: 38
+                        onClicked: Qt.openUrlExternally("https://github.com/Lord0fTurk/RenLocalizer/wiki")
+                        background: Rectangle { radius: 8; color: parent.hovered ? clrCardHover : "transparent"; border.color: clrCardBorder; border.width: 1 }
+                        contentItem: RowLayout {
+                            anchors.centerIn: parent; spacing: 8
+                            Label { text: "📖"; font.pixelSize: 14 }
+                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_wiki_guide", "Wiki Guide"); color: clrTxt2; font.pixelSize: 12; elide: Text.ElideRight }
                         }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            TextField {
-                                id: projectPathField
-                                Layout.fillWidth: true
-                                height: 44
-                                placeholderText: "" // Disable native placeholder to prevent overlapping/floating text issues
-                                color: txtMain
-                                font.pixelSize: 13
-                                leftPadding: 14
-                                rightPadding: 14
-                                verticalAlignment: TextInput.AlignVCenter
-
-                                Label {
-                                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("directory_placeholder", "Oyun EXE'si veya klasörünü seçin...")
-                                    color: Qt.rgba(1, 1, 1, 0.3)
-                                    font.pixelSize: 13
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: 14
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    visible: parent.text === "" && !parent.activeFocus
-                                }
-
-                                background: Rectangle {
-                                    radius: 8
-                                    color: inputBg
-                                    border.color: projectPathField.activeFocus ? accentClr : borderClr
-                                    border.width: 1
-                                    Behavior on border.color { ColorAnimation { duration: 150 } }
-                                }
-
-                                onEditingFinished: {
-                                    if (text.length > 0)
-                                        liteBackend.setProjectPath(text)
-                                }
-                            }
-
-                            // EXE Butonu
-                            Button {
-                                id: fileBrowseBtn
-                                text: "📄 EXE"
-                                height: 44
-                                width: 80
-                                onClicked: fileDialog.open()
-
-                                contentItem: Label {
-                                    text: parent.text
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: "white"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                background: Rectangle {
-                                    radius: 8
-                                    color: parent.down    ? Qt.darker(accentClr, 1.3)
-                                         : parent.hovered ? Qt.darker(accentClr, 1.1)
-                                         : accentClr
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                }
-                            }
-
-                            // Klasör Butonu
-                            Button {
-                                id: folderBrowseBtn
-                                text: liteBackend.uiTrigger, "📂 " + liteBackend.getTextWithDefault("browse_folder", "Klasör")
-                                height: 44
-                                width: 90
-                                onClicked: folderDialog.open()
-
-                                contentItem: Label {
-                                    text: parent.text
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: "white"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                background: Rectangle {
-                                    radius: 8
-                                    color: parent.down    ? Qt.darker("#495057", 1.3)
-                                         : parent.hovered ? "#6c757d"
-                                         : "#495057"
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                }
-                            }
+                    }
+                    Button {
+                        Layout.fillWidth: true; height: 38
+                        onClicked: Qt.openUrlExternally("https://www.patreon.com/RenLocalizer")
+                        background: Rectangle { radius: 8; color: parent.hovered ? Qt.rgba(239, 68, 68, 0.15) : "transparent"; border.color: "#991B1B"; border.width: 1 }
+                        contentItem: RowLayout {
+                            anchors.centerIn: parent; spacing: 8
+                            Label { text: "❤️"; font.pixelSize: 14 }
+                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_patreon_support", "Patreon Support"); color: "#FCA5A5"; font.pixelSize: 12; elide: Text.ElideRight }
                         }
                     }
                 }
 
-                // ── Kart 2: Dil + Başlat ──────────────────────────────
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: card2Col.height + 36
-                    radius: 16
-                    color: cardBg
+                Item { height: 6 }
 
-                    Rectangle {
-                        width: 3; height: parent.height - 20
-                        x: 0; anchors.verticalCenter: parent.verticalCenter
-                        radius: 2
-                        color: "#0ca678"
+                // Sistem Durumu
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Rectangle { width: 9; height: 9; radius: 4.5; color: isTranslating ? clrWarn : clrSuccess }
+                    Label {
+                        text: liteBackend.uiTrigger, isTranslating ? liteBackend.getTextWithDefault("status_working", "Working...") : liteBackend.getTextWithDefault("status_ready", "System Ready")
+                        color: clrTxt2; font.pixelSize: 12; font.bold: true
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+        }
+
+        // ── 2. SAĞ SAYFA İÇERİK ALANI (CARD-BASED GLASS DASHBOARD) ────────
+        StackLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            currentIndex: navIndex
+
+            // ═════════════════════════════════════════════════════════════
+            // SEKME 0: DASHBOARD (Örnek Görseldeki Pro Kart Düzeni)
+            // ═════════════════════════════════════════════════════════════
+            ScrollView {
+                clip: true
+                contentWidth: availableWidth
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                ScrollBar.vertical: ScrollBar {}
+
+                ColumnLayout {
+                    width: parent.width
+                    anchors.margins: 32
+                    spacing: 24
+
+                    Item { height: 4 }
+
+                    // Üst Başlık
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        ColumnLayout {
+                            spacing: 4
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_dashboard", "Dashboard")
+                                font.pixelSize: 26; font.bold: true; color: clrTxt
+                            }
+                            Label {
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("dashboard_subtitle", "Select game executable, configure translation engine/languages, and launch localization.")
+                                font.pixelSize: 13; color: clrTxt2
+                            }
+                        }
                     }
 
-                    ColumnLayout {
-                        id: card2Col
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 20
-                        anchors.leftMargin: 24
-                        spacing: 14
-
-                        Label {
-                            text: liteBackend.uiTrigger, "⚙️ " + liteBackend.getTextWithDefault("settings_tab_translation", "Çeviri Ayarları")
-                            font.pixelSize: 15
-                            font.bold: true
-                            color: txtMain
-                        }
+                    // ── KART 1: PROJECT SETUP (PROJE KURULUMU) ────────────
+                    Rectangle {
+                        id: cardProject
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: 128
+                        radius: 16; color: cardProject.hovered ? clrCardHover : clrCard
+                        border.color: cardProject.hovered ? Qt.rgba(0, 242, 254, 0.4) : clrCardBorder
+                        border.width: 1
+                        property bool hovered: false
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.color { ColorAnimation { duration: 180 } }
+                        HoverHandler { onHoveredChanged: cardProject.hovered = hovered }
 
                         RowLayout {
-                            Layout.fillWidth: true
+                            anchors.fill: parent; anchors.margins: 22
                             spacing: 20
 
-                            // Motor seçimi (dinamik)
                             ColumnLayout {
-                                spacing: 6
-                                Label {
-                                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("home_summary_engine", "Çeviri Motoru")
-                                    color: txtSecond
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                }
-                                ComboBox {
-                                    id: engineComboBox
-                                    width: 180
-                                    model: [
-                                        { text: "🌐 Google Translate", value: "google" },
-                                        { text: "🤖 OpenAI",           value: "openai" },
-                                        { text: "🤖 DeepSeek",         value: "deepseek" },
-                                        { text: "💻 Local LLM",        value: "local_llm" },
-                                        { text: "🔓 LibreTranslate",   value: "libretranslate" },
-                                        { text: "🔗 Custom Endpoint",  value: "custom" }
-                                    ]
-                                    textRole: "text"
-                                    valueRole: "value"
-                                    Component.onCompleted: {
-                                        currentIndex = indexOfValue(liteBackend.selectedEngine)
-                                        if (currentIndex < 0) currentIndex = 0
-                                    }
-                                    onActivated: liteBackend.setSelectedEngine(currentValue)
-                                    background: Rectangle {
-                                        radius: 8
-                                        color: Qt.rgba(1, 1, 1, 0.06)
-                                        border.color: borderClr
-                                    }
-                                    contentItem: Label {
-                                        leftPadding: 10
-                                        text: engineComboBox.displayText
-                                        color: txtMain
-                                        font.pixelSize: 12
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                }
-                            }
+                                Layout.fillWidth: true
+                                spacing: 10
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("card_project_setup", "Project Setup"); font.pixelSize: 16; font.bold: true; color: clrTxt }
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("card_project_desc", "Select game executable file or game folder."); font.pixelSize: 12; color: clrTxt2 }
 
-                            // Kaynak dil
-                            ColumnLayout {
-                                spacing: 6
-                                Layout.preferredWidth: 200
-                                Label {
-                                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("source_language", "Kaynak Dil")
-                                    color: txtSecond
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                }
-                                ComboBox {
-                                    id: sourceLangCombo
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    height: 40
-                                    model: liteBackend.getSourceLanguages()
-                                    textRole: "name"
-                                    valueRole: "code"
-                                    Component.onCompleted: currentIndex = indexOfValue("auto")
-                                    onActivated: liteBackend.setSourceLanguage(currentValue)
-                                    background: Rectangle {
-                                        radius: 8
-                                        color: inputBg
-                                        border.color: sourceLangCombo.hovered ? accentClr : borderClr
-                                        border.width: 1
-                                        Behavior on border.color { ColorAnimation { duration: 150 } }
-                                    }
-                                    contentItem: Label {
-                                        leftPadding: 10
-                                        text: sourceLangCombo.displayText
-                                        color: txtMain
-                                        font.pixelSize: 12
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                    delegate: ItemDelegate {
-                                        width: sourceLangCombo.width
-                                        contentItem: Label {
-                                            text: model.name + " (" + model.code + ")"
-                                            color: sourceLangCombo.highlightedIndex === index ? accentClr : txtSecond
-                                            font.pixelSize: 11
-                                            leftPadding: 10
+                                    spacing: 12
+                                    TextField {
+                                        id: projectPathField
+                                        Layout.fillWidth: true; height: 40
+                                        font.pixelSize: 12; color: clrTxt
+                                        selectByMouse: true
+                                        onEditingFinished: if (text.length > 0) liteBackend.setProjectPath(text)
+                                        background: Rectangle { radius: 8; color: clrInput; border.color: projectPathField.activeFocus ? clrAccent : clrCardBorder; border.width: 1 }
+                                        Label {
+                                            anchors.left: parent.left; anchors.leftMargin: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("input_placeholder", "C:/Games/MyGame/MyGame.exe...")
+                                            color: clrTxtDim; font.pixelSize: 12; visible: projectPathField.text.length === 0 && !projectPathField.activeFocus
                                         }
+                                    }
+                                    Button {
+                                        id: btnBrowseFolder
+                                        height: 42
+                                        Layout.preferredWidth: Math.max(115, implicitContentWidth + 32)
+                                        text: liteBackend.uiTrigger, "📁 " + liteBackend.getTextWithDefault("browse_folder", "Klasör")
+                                        onClicked: folderDialog.open()
                                         background: Rectangle {
-                                            color: hovered ? Qt.rgba(121/255, 80/255, 242/255, 0.2) : "transparent"
+                                            radius: 10; color: parent.hovered ? clrCardHover : clrInput
+                                            border.color: parent.hovered ? Qt.rgba(0, 242, 254, 0.5) : clrCardBorder; border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
                                         }
+                                        contentItem: Label { text: parent.text; color: clrTxt; font.pixelSize: 13; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                     }
-                                    popup: Popup {
-                                        y: sourceLangCombo.height
-                                        width: sourceLangCombo.width
-                                        implicitHeight: Math.min(contentItem.implicitHeight, 260)
-                                        padding: 1
-                                        contentItem: ListView {
-                                            clip: true
-                                            implicitHeight: contentHeight
-                                            model: sourceLangCombo.delegateModel
-                                            ScrollBar.vertical: ScrollBar {}
-                                        }
+                                    Button {
+                                        id: btnBrowseExe
+                                        height: 42
+                                        Layout.preferredWidth: Math.max(135, implicitContentWidth + 32)
+                                        text: liteBackend.uiTrigger, "🎮 " + liteBackend.getTextWithDefault("browse_exe", "EXE Dosyası")
+                                        onClicked: fileDialog.open()
                                         background: Rectangle {
-                                            color: "#252540"
-                                            radius: 8
-                                            border.color: borderClr
-                                            border.width: 1
+                                            radius: 10; color: parent.hovered ? clrCardHover : clrInput
+                                            border.color: parent.hovered ? clrAccent : clrCardBorder; border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
                                         }
+                                        contentItem: Label { text: parent.text; color: clrAccent; font.pixelSize: 13; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                     }
                                 }
                             }
 
-                            // Hedef dil
-                            ColumnLayout {
-                                spacing: 6
-                                Layout.preferredWidth: 200
-                                Label {
-                                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("target_language", "Hedef Dil")
-                                    color: txtSecond
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                }
-                                ComboBox {
-                                    id: targetLangCombo
-                                    Layout.fillWidth: true
-                                    height: 40
-                                    model: liteBackend.getTargetLanguages()
-                                    textRole: "name"
-                                    valueRole: "code"
-                                    onActivated: liteBackend.setTargetLanguage(currentValue)
-
-                                    background: Rectangle {
-                                        radius: 8
-                                        color: inputBg
-                                        border.color: targetLangCombo.hovered ? accentClr : borderClr
-                                        border.width: 1
-                                        Behavior on border.color { ColorAnimation { duration: 150 } }
-                                    }
-                                    contentItem: Label {
-                                        text: targetLangCombo.currentText
-                                        color: txtMain
-                                        font.pixelSize: 12
-                                        verticalAlignment: Text.AlignVCenter
-                                        leftPadding: 12
-                                        elide: Text.ElideRight
-                                    }
-                                    delegate: ItemDelegate {
-                                        width: targetLangCombo.width
-                                        contentItem: Label {
-                                            text: modelData.name
-                                            color: txtMain
-                                            font.pixelSize: 12
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        background: Rectangle {
-                                            color: hovered ? Qt.rgba(121/255, 80/255, 242/255, 0.2) : "transparent"
-                                        }
-                                    }
-                                    popup: Popup {
-                                        y: targetLangCombo.height
-                                        width: targetLangCombo.width
-                                        implicitHeight: Math.min(contentItem.implicitHeight, 260)
-                                        padding: 1
-                                        contentItem: ListView {
-                                            clip: true
-                                            implicitHeight: contentHeight
-                                            model: targetLangCombo.delegateModel
-                                            ScrollBar.vertical: ScrollBar {}
-                                        }
-                                        background: Rectangle {
-                                            color: "#252540"
-                                            radius: 8
-                                            border.color: borderClr
-                                            border.width: 1
-                                        }
-                                    }
-                                }
-                            }
-
-                            Item { Layout.fillWidth: true }
-
-                            // Başlat / Durdur butonu
-                            Button {
-                                id: startBtn
-                                width: 150; height: 44
-                                enabled: projectPathField.text.length > 0
-                                text: {
-                                    var trigger = liteBackend.uiTrigger;
-                                    return isTranslating 
-                                        ? "⏹  " + liteBackend.getTextWithDefault("stop", "Durdur") 
-                                        : "▶  " + liteBackend.getTextWithDefault("start_translation", "Çeviriyi Başlat");
-                                }
-
-                                onClicked: {
-                                    if (isTranslating) {
-                                        liteBackend.stopTranslation()
-                                    } else {
-                                        if (projectPathField.text.length > 0)
-                                            liteBackend.setProjectPath(projectPathField.text)
-                                        liteBackend.startTranslation()
-                                    }
-                                }
-
-                                contentItem: Label {
-                                    text: parent.text
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: parent.enabled ? "white" : "#888"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                background: Rectangle {
-                                    id: startBtnBg
-                                    radius: 10
-                                    color: !parent.enabled ? "#333344"
-                                         : isTranslating
-                                           ? (parent.down ? "#c0392b" : parent.hovered ? "#e74c3c" : "#c0392b")
-                                           : (parent.down ? Qt.darker(accentClr, 1.3)
-                                              : parent.hovered ? Qt.lighter(accentClr, 1.15)
-                                              : accentClr)
-
-                                    border.color: (parent.enabled && !isTranslating && parent.hovered) 
-                                        ? Qt.lighter(accentClr, 1.4) 
-                                        : "transparent"
-                                    border.width: (parent.enabled && !isTranslating && parent.hovered) ? 2 : 0
-
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                    Behavior on border.color { ColorAnimation { duration: 150 } }
-                                }
+                            // Dekoratif İkon / Oyun Kolu Rozeti
+                            Rectangle {
+                                width: 72; height: 72; radius: 14; color: Qt.rgba(0, 242, 254, 0.08)
+                                border.color: Qt.rgba(0, 242, 254, 0.25); border.width: 1
+                                Label { anchors.centerIn: parent; text: "🎮"; font.pixelSize: 32 }
                             }
                         }
                     }
-                }
 
-                // ── Kart 3: İlerleme (sadece çeviri sırasında) ────────
-                Rectangle {
-                    id: progressCard
-                    Layout.fillWidth: true
-                    height: progressCol.height + 36
-                    radius: 16
-                    color: cardBg
-                    visible: isTranslating || currentStage === "completed" || currentStage === "error"
-
-                    Behavior on visible { PropertyAnimation { duration: 200 } }
-
+                    // ── KART 2: TRANSLATION ENGINE & LANGUAGES ────────────
                     Rectangle {
-                        width: 3; height: parent.height - 20
-                        x: 0; anchors.verticalCenter: parent.verticalCenter
-                        radius: 2
-                        color: currentStage === "completed" ? successClr
-                             : currentStage === "error"     ? errorClr
-                             : accentClr
-                        Behavior on color { ColorAnimation { duration: 300 } }
-                    }
+                        id: cardEngine
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: 135
+                        radius: 16; color: cardEngine.hovered ? clrCardHover : clrCard
+                        border.color: cardEngine.hovered ? Qt.rgba(0, 242, 254, 0.4) : clrCardBorder
+                        border.width: 1
+                        property bool hovered: false
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.color { ColorAnimation { duration: 180 } }
+                        HoverHandler { onHoveredChanged: cardEngine.hovered = hovered }
 
-                    ColumnLayout {
-                        id: progressCol
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 20
-                        anchors.leftMargin: 24
-                        spacing: 10
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 22
+                            spacing: 14
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label {
-                                id: stageLabel
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("status_ready", "Hazır")
-                                font.pixelSize: 14
-                                font.bold: true
-                                color: txtMain
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("card_engine_title", "Translation Engine & Languages"); font.pixelSize: 16; font.bold: true; color: clrTxt }
+                                Item { Layout.fillWidth: true }
+                                Label { text: liteBackend.uiTrigger, "⚙️ " + liteBackend.getTextWithDefault("advanced_settings_link", "Configure AI Parameters ->"); color: clrAccent; font.pixelSize: 12; font.underline: true; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: navIndex = 1 } }
                             }
-                            Item { Layout.fillWidth: true }
-                            Label {
-                                id: progressLabel
-                                text: ""
-                                font.pixelSize: 12
-                                color: txtSecond
-                            }
-                        }
 
-                        ProgressBar {
-                            id: progressBar
-                            Layout.fillWidth: true
-                            value: 0; from: 0; to: 1
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 18
 
-                            background: Rectangle {
-                                radius: 5
-                                color: inputBg
-                                height: 8
-                            }
-                            contentItem: Item {
-                                Rectangle {
-                                    width: progressBar.visualPosition * parent.width
-                                    height: 8; radius: 5
-                                    color: currentStage === "completed" ? successClr : accentClr
-                                    Behavior on width { NumberAnimation { duration: 200 } }
-                                    Behavior on color { ColorAnimation { duration: 300 } }
+                                // Motor
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 5
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("engine_label", "Machine Translation / AI Engine"); font.pixelSize: 11; color: clrTxt2; font.bold: true }
+                                    ComboBox {
+                                        id: engineComboBox
+                                        Layout.fillWidth: true; height: 40
+                                        model: [
+                                            {"id": "google", "name": "🌐 Google Translate (" + liteBackend.getTextWithDefault("engine_desc_google", "Primary / Free") + ")"},
+                                            {"id": "openai", "name": "🤖 OpenAI / GPT-4o (" + liteBackend.getTextWithDefault("engine_desc_ai", "AI Engine") + ")"},
+                                            {"id": "local_llm", "name": "🖥️ Local LLM (Ollama / LM Studio)"},
+                                            {"id": "deepseek", "name": "🧠 DeepSeek AI (" + liteBackend.getTextWithDefault("engine_desc_deepseek", "Fast / Economic") + ")"},
+                                            {"id": "libretranslate", "name": "📖 LibreTranslate (" + liteBackend.getTextWithDefault("engine_desc_local", "Self-hosted") + ")"},
+                                            {"id": "custom", "name": "🔗 Custom Endpoint (" + liteBackend.getTextWithDefault("engine_desc_custom", "Custom API") + ")"}
+                                        ]
+                                        textRole: "name"; valueRole: "id"
+                                        Component.onCompleted: currentIndex = indexOfValue(liteBackend.selectedEngine || "google")
+                                        onActivated: { liteBackend.setSelectedEngine(currentValue); liteBackend.refreshUI() }
+                                        background: Rectangle { radius: 8; color: clrInput; border.color: parent.hovered ? clrAccent : clrCardBorder; border.width: 1 }
+                                        contentItem: Label { leftPadding: 14; text: engineComboBox.displayText; color: clrTxt; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
+                                        delegate: ItemDelegate {
+                                            width: engineComboBox.width
+                                            contentItem: Label { text: modelData.name; color: clrTxt; font.pixelSize: 12; leftPadding: 14 }
+                                            background: Rectangle { color: hovered ? Qt.rgba(0, 242, 254, 0.12) : "transparent" }
+                                        }
+                                        popup: Popup { y: engineComboBox.height; width: engineComboBox.width; implicitHeight: Math.min(contentItem.implicitHeight, 220); padding: 4; contentItem: ListView { clip: true; implicitHeight: contentHeight; model: engineComboBox.delegateModel; ScrollBar.vertical: ScrollBar {} } background: Rectangle { color: clrCard; radius: 8; border.color: clrCardBorder; border.width: 1 } }
+                                    }
+                                }
+
+                                // Kaynak Dil (Evrensel Robust Bugfix)
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 5
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("source_language", "Source Language"); font.pixelSize: 11; color: clrTxt2; font.bold: true }
+                                    ComboBox {
+                                        id: sourceLangCombo
+                                        Layout.fillWidth: true; height: 40
+                                        model: liteBackend.getSourceLanguages()
+                                        textRole: "name"; valueRole: "code"
+                                        Component.onCompleted: currentIndex = indexOfValue("auto")
+                                        onActivated: liteBackend.setSourceLanguage(currentValue)
+                                        background: Rectangle { radius: 8; color: clrInput; border.color: parent.hovered ? clrAccent : clrCardBorder; border.width: 1 }
+                                        contentItem: Label { leftPadding: 14; text: sourceLangCombo.displayText !== "" ? sourceLangCombo.displayText : "🤖 Auto-detect"; color: clrTxt; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
+                                        delegate: ItemDelegate {
+                                            width: sourceLangCombo.width
+                                            contentItem: Label { text: getLangText(modelData, model); color: sourceLangCombo.highlightedIndex === index ? clrAccent : clrTxt; font.pixelSize: 12; leftPadding: 14 }
+                                            background: Rectangle { color: hovered ? Qt.rgba(0, 242, 254, 0.12) : "transparent" }
+                                        }
+                                        popup: Popup { y: sourceLangCombo.height; width: sourceLangCombo.width; implicitHeight: Math.min(contentItem.implicitHeight, 260); padding: 4; contentItem: ListView { clip: true; implicitHeight: contentHeight; model: sourceLangCombo.delegateModel; ScrollBar.vertical: ScrollBar {} } background: Rectangle { color: clrCard; radius: 8; border.color: clrCardBorder; border.width: 1 } }
+                                    }
+                                }
+
+                                // Hedef Dil (Evrensel Robust Bugfix)
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 5
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("target_language", "Target Language"); font.pixelSize: 11; color: clrTxt2; font.bold: true }
+                                    ComboBox {
+                                        id: targetLangCombo
+                                        Layout.fillWidth: true; height: 40
+                                        model: liteBackend.getTargetLanguages()
+                                        textRole: "name"; valueRole: "code"
+                                        onActivated: liteBackend.setTargetLanguage(currentValue)
+                                        background: Rectangle { radius: 8; color: clrInput; border.color: parent.hovered ? clrAccent : clrCardBorder; border.width: 1 }
+                                        contentItem: Label { leftPadding: 14; text: targetLangCombo.displayText; color: clrTxt; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
+                                        delegate: ItemDelegate {
+                                            width: targetLangCombo.width
+                                            contentItem: Label { text: getLangText(modelData, model); color: targetLangCombo.highlightedIndex === index ? clrAccent : clrTxt; font.pixelSize: 12; leftPadding: 14 }
+                                            background: Rectangle { color: hovered ? Qt.rgba(0, 242, 254, 0.12) : "transparent" }
+                                        }
+                                        popup: Popup { y: targetLangCombo.height; width: targetLangCombo.width; implicitHeight: Math.min(contentItem.implicitHeight, 260); padding: 4; contentItem: ListView { clip: true; implicitHeight: contentHeight; model: targetLangCombo.delegateModel; ScrollBar.vertical: ScrollBar {} } background: Rectangle { color: clrCard; radius: 8; border.color: clrCardBorder; border.width: 1 } }
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                // ── Kart 4: İstatistikler ─────────────────────────────
-                Rectangle {
-                    id: statsCard
-                    Layout.fillWidth: true
-                    height: 80
-                    radius: 16
-                    color: cardBg
-                    visible: false
+                    // ── ANA AKSİYON BUTONU (NEON CYAN -> BLUE GRADIENT) ───
+                    Button {
+                        id: startButton
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: 56
+                        enabled: !isTranslating || currentStage !== "idle"
+                        onClicked: {
+                            if (isTranslating) liteBackend.stopTranslation()
+                            else liteBackend.startTranslation()
+                        }
+                        background: Rectangle {
+                            radius: 14
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: isTranslating ? "#EF4444" : (startButton.hovered ? "#4FACFE" : "#00F2FE") }
+                                GradientStop { position: 1.0; color: isTranslating ? "#B91C1C" : (startButton.hovered ? "#00F2FE" : "#4FACFE") }
+                            }
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                        }
+                        contentItem: RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 12
+                            Label {
+                                text: liteBackend.uiTrigger, isTranslating ? "⏹ " + liteBackend.getTextWithDefault("btn_stop_translation", "STOP TRANSLATION") : "⚡ " + liteBackend.getTextWithDefault("btn_start_translation", "START TRANSLATION →")
+                                font.pixelSize: 16; font.bold: true
+                                color: isTranslating ? "white" : (startButton.hovered ? "#0B0F17" : "#0A0D14")
+                                font.letterSpacing: 1.0
+                            }
+                        }
+                    }
+
+                    // Native TLID bilgi notu
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        height: ntTipLabel.implicitHeight + 14; radius: 8
+                        visible: liteBackend.outputMode === "native"
+                        color: Qt.rgba(245, 158, 11, 0.08); border.color: Qt.rgba(245, 158, 11, 0.2); border.width: 1
+                        RowLayout {
+                            anchors.fill: parent; anchors.margins: 8; spacing: 8
+                            Label { text: "⚠️"; font.pixelSize: 14 }
+                            Label {
+                                id: ntTipLabel; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("tip_native_limitation", "Tip: Some games build UI text at runtime (quests + \"(?)\" buttons, NPC schedules, Python f-strings). Native TLID captures static text only. If parts of the interface stay untranslated, switch to Standard mode and re-translate.")
+                                color: clrWarn; font.pixelSize: 11
+                            }
+                        }
+                    }
+
+                    // ── KART 3: PROCESS STATUS (DURUM BARı) ───────────────
+                    Rectangle {
+                        id: cardStatus
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: statsVisible ? 170 : 115
+                        radius: 16; color: cardStatus.hovered ? clrCardHover : clrCard
+                        border.color: cardStatus.hovered ? Qt.rgba(0, 242, 254, 0.4) : clrCardBorder
+                        border.width: 1
+                        property bool hovered: false
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                        HoverHandler { onHoveredChanged: cardStatus.hovered = hovered }
+
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 22
+                            spacing: 14
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("card_status_title", "Process Status"); font.pixelSize: 16; font.bold: true; color: clrTxt }
+                                Item { Layout.fillWidth: true }
+                                Label {
+                                    id: stageLabel
+                                    text: liteBackend.uiTrigger, currentStage === "idle" ? liteBackend.getTextWithDefault("status_ready", "Ready - Waiting to Start") : currentStage
+                                    font.pixelSize: 13; font.bold: true; color: clrAccent
+                                }
+                            }
+
+                            // İlerleme Barı
+                            ProgressBar {
+                                id: progressBar
+                                Layout.fillWidth: true; height: 12
+                                value: 0.0
+                                background: Rectangle { radius: 6; color: clrInput }
+                                contentItem: Item {
+                                    Rectangle {
+                                        width: progressBar.visualPosition * progressBar.width; height: progressBar.height; radius: 6
+                                        gradient: Gradient {
+                                            orientation: Gradient.Horizontal
+                                            GradientStop { position: 0.0; color: clrAccent }
+                                            GradientStop { position: 1.0; color: clrAccent2 }
+                                        }
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label { id: progressLabel; text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lines_processed", "Processed lines: 0 / 0 lines"); font.pixelSize: 12; color: clrTxt2 }
+                                Item { Layout.fillWidth: true }
+                                Label { text: Math.round(progressBar.value * 100) + "%"; font.pixelSize: 13; font.bold: true; color: clrTxt }
+                            }
+
+                            // İstatistik Kartı Açılımı
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: statsVisible
+                                Rectangle {
+                                    Layout.fillWidth: true; height: 42; radius: 10; color: clrInput
+                                    border.color: clrSuccess; border.width: 1
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 12
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("stats_completed_banner", "🎉 Çeviri Başarıyla Tamamlandı!"); font.bold: true; color: clrSuccess; font.pixelSize: 13 }
+                                        Item { Layout.fillWidth: true }
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("stats_summary_total", "Toplam:") + " " + totalLines + " | " + liteBackend.getTextWithDefault("stats_summary_translated", "Çevrilen:") + " " + translatedLines + " (" + successRate.toFixed(1) + "%)"; color: clrTxt; font.pixelSize: 13; font.bold: true }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── KART 4: LOG CONSOLE SUMMARY (MİNİ LOG PANİ) ───────
+                    Rectangle {
+                        id: cardLog
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: 190
+                        radius: 16; color: cardLog.hovered ? clrCardHover : clrCard
+                        border.color: cardLog.hovered ? Qt.rgba(0, 242, 254, 0.4) : clrCardBorder
+                        border.width: 1
+                        property bool hovered: false
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                        HoverHandler { onHoveredChanged: cardLog.hovered = hovered }
+
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 18
+                            spacing: 10
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("card_log_title", "Log Console Summary"); font.pixelSize: 15; font.bold: true; color: clrTxt }
+                                Item { Layout.fillWidth: true }
+                                Button {
+                                    height: 28; text: liteBackend.uiTrigger, "📜 " + liteBackend.getTextWithDefault("view_all_logs", "Tüm Logları Aç ->")
+                                    onClicked: navIndex = 2
+                                    background: Rectangle { radius: 6; color: "transparent" }
+                                    contentItem: Label { text: parent.text; color: clrAccent; font.pixelSize: 12; font.underline: true }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; Layout.fillHeight: true; radius: 10; color: clrInput; border.color: clrCardBorder; border.width: 1
+                                ListView {
+                                    id: logListView
+                                    anchors.fill: parent; anchors.margins: 10; clip: true
+                                    model: logModel
+                                    delegate: RowLayout {
+                                        width: logListView.width - 20; spacing: 12
+                                        Label { text: model.ts; color: clrTxtDim; font.pixelSize: 11; font.family: "Consolas" }
+                                        Label { text: logPrefix(model.level); color: logColor(model.level); font.bold: true; font.pixelSize: 11 }
+                                        Label { text: model.message; color: logColor(model.level); font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Item { height: 24 }
+                }
+            }
+
+            // ═════════════════════════════════════════════════════════════
+            // SEKME 1: SETTINGS (TAM SAYFA GELİŞMİŞ AYARLAR)
+            // ═════════════════════════════════════════════════════════════
+            ScrollView {
+                clip: true
+                contentWidth: availableWidth
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                ScrollBar.vertical: ScrollBar {}
+
+                ColumnLayout {
+                    width: parent.width
+                    anchors.margins: 32
+                    spacing: 24
+
+                    Item { height: 4 }
 
                     RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 20
-                        spacing: 40
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        ColumnLayout {
+                            spacing: 4
+                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_settings", "Settings & Advanced Configuration"); font.pixelSize: 26; font.bold: true; color: clrTxt }
+                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("settings_desc", "Configure UI language, translation threads, AI endpoints, and caching."); font.pixelSize: 13; color: clrTxt2 }
+                        }
+                    }
+
+                    // 1. ARAYÜZ & SİSTEM AYARLARI KARTI (SADECE ARUI VE TEMA)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: 110
+                        radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
 
                         ColumnLayout {
-                            spacing: 2
-                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("original_text", "Toplam Satır"); color: txtSecond; font.pixelSize: 11 }
-                            Label { text: totalLines; color: txtMain; font.pixelSize: 22; font.bold: true }
-                        }
-                        Rectangle { width: 1; height: 40; color: borderClr }
-                        ColumnLayout {
-                            spacing: 2
-                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("completed", "Çevrildi"); color: txtSecond; font.pixelSize: 11 }
-                            Label { text: translatedLines; color: successClr; font.pixelSize: 22; font.bold: true }
-                        }
-                        Rectangle { width: 1; height: 40; color: borderClr }
-                        ColumnLayout {
-                            spacing: 2
-                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("success_rate", "Başarı Oranı"); color: txtSecond; font.pixelSize: 11 }
-                            Label {
-                                text: successRate.toFixed(1) + "%"
-                                color: accentClr; font.pixelSize: 22; font.bold: true
+                            anchors.fill: parent; anchors.margins: 22; spacing: 14
+                            Label { text: "🖥️ " + liteBackend.getTextWithDefault("settings_section_ui", "Arayüz & Sistem Ayarları"); font.pixelSize: 16; font.bold: true; color: clrAccent }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ui_language_label", "Arayüz Dili (UI Language):"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                ComboBox {
+                                    id: uiLanguageCombo
+                                    Layout.preferredWidth: 240; height: 38
+                                    model: liteBackend.getAvailableUILanguages()
+                                    textRole: "name"; valueRole: "code"
+                                    background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                    contentItem: Label { leftPadding: 14; text: uiLanguageCombo.displayText; color: clrTxt; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
+                                    onActivated: liteBackend.setUILanguage(currentValue)
+                                    delegate: ItemDelegate { width: uiLanguageCombo.width; contentItem: Label { text: modelData.name; color: clrTxt; font.pixelSize: 12; leftPadding: 14 } background: Rectangle { color: hovered ? Qt.rgba(0, 242, 254, 0.12) : "transparent" } }
+                                    popup: Popup { y: uiLanguageCombo.height; width: uiLanguageCombo.width; implicitHeight: 240; padding: 4; contentItem: ListView { clip: true; model: uiLanguageCombo.delegateModel; ScrollBar.vertical: ScrollBar {} } background: Rectangle { color: clrCard; radius: 8; border.color: clrCardBorder; border.width: 1 } }
+                                }
+                                Item { Layout.fillWidth: true }
                             }
+                        }
+                    }
+
+                    // 2. ÇIKTI ÜRETİM MODU & ÇEVİRİ BELLEĞİ (NATIVE TLID vs STRINGS & TM CACHE)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: outCol.implicitHeight + 44
+                        radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
+                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 200 } }
+
+                        ColumnLayout {
+                            id: outCol
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                            anchors.margins: 22; spacing: 18
+
+                            Label { text: "📦 " + liteBackend.getTextWithDefault("settings_section_output", "Çıktı Üretim Modu & Çeviri Belleği (Output & TM Cache)"); font.pixelSize: 16; font.bold: true; color: clrAccent }
+
+                            // KATMAN 1: GÖRSEL ÇİFT BUTONLU SEGMENTED SEÇİCİ (STRINGS vs NATIVE TLID)
+                            ColumnLayout {
+                                Layout.fillWidth: true; spacing: 10
+
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("label_output_mode", "Ren'Py Çıktı Formatı Seçimi (Output Generation Mode):"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 14
+
+                                    // Buton 1: Strings Modu
+                                    Button {
+                                        id: btnStringsMode
+                                        Layout.fillWidth: true; height: 50
+                                        onClicked: liteBackend.outputMode = "strings"
+
+                                        background: Rectangle {
+                                            radius: 10
+                                            color: liteBackend.outputMode === "strings" ? Qt.rgba(0, 242, 254, 0.15) : (btnStringsMode.hovered ? Qt.rgba(1, 1, 1, 0.08) : clrInput)
+                                            border.color: liteBackend.outputMode === "strings" ? clrAccent : clrCardBorder
+                                            border.width: liteBackend.outputMode === "strings" ? 2 : 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                        }
+
+                                        contentItem: RowLayout {
+                                            anchors.centerIn: parent; spacing: 8
+                                            Label { text: liteBackend.outputMode === "strings" ? "●" : "○"; color: liteBackend.outputMode === "strings" ? clrAccent : clrTxtDim; font.pixelSize: 16 }
+                                             Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("mode_strings_btn", "📋 Standard (strings.json)"); color: liteBackend.outputMode === "strings" ? clrAccent : clrTxt; font.bold: liteBackend.outputMode === "strings"; font.pixelSize: 12 }
+                                        }
+                                    }
+
+                                    // Buton 2: Native TLID Modu
+                                    Button {
+                                        id: btnNativeMode
+                                        Layout.fillWidth: true; height: 50
+                                        onClicked: liteBackend.outputMode = "native"
+
+                                        background: Rectangle {
+                                            radius: 10
+                                            color: liteBackend.outputMode === "native" ? Qt.rgba(0, 242, 254, 0.15) : (btnNativeMode.hovered ? Qt.rgba(1, 1, 1, 0.08) : clrInput)
+                                            border.color: liteBackend.outputMode === "native" ? clrAccent : clrCardBorder
+                                            border.width: liteBackend.outputMode === "native" ? 2 : 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                        }
+
+                                        contentItem: RowLayout {
+                                                anchors.centerIn: parent; spacing: 6
+                                                Label { text: liteBackend.outputMode === "native" ? "●" : "○"; color: liteBackend.outputMode === "native" ? clrAccent : clrTxtDim; font.pixelSize: 16 }
+                                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("mode_native_btn", "⚡ Native TLID"); color: liteBackend.outputMode === "native" ? clrAccent : clrTxt; font.bold: liteBackend.outputMode === "native"; font.pixelSize: 12 }
+                                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("badge_recommended", "💎 Recommended"); color: clrSuccess; font.pixelSize: 10; font.bold: true }
+                                            }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true; height: descLabel.implicitHeight + 16
+                                    radius: 8; color: Qt.rgba(1, 1, 1, 0.03); border.color: clrCardBorder; border.width: 1
+                                    RowLayout {
+                                        id: descLayout; anchors.fill: parent; anchors.margins: 8; spacing: 8
+                                        Label { text: "💡"; font.pixelSize: 14 }
+                                        Label {
+                                            id: descLabel; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                                            text: liteBackend.outputMode === "native" ?
+                                                  (liteBackend.uiTrigger, liteBackend.getTextWithDefault("desc_native_mode", "Ren'Py built-in translate blocks for dialogues + auto-export translate strings: for UI. Zero Python scripts during gameplay — pure native speed. Works for ~90% of games. Known limitation: Python {variable} texts and runtime-concatenated strings may not be captured. Switch to Standard if you see untranslated screen elements.")) :
+                                                  (liteBackend.uiTrigger, liteBackend.getTextWithDefault("desc_strings_mode", "Full runtime hook with O(1) lookup, MRU cache, screen harvesting, template matching, RTL. Handles ALL text types including dynamic and concatenated strings. Slightly higher memory (~3 MB). Recommended for complex screen UIs or when Native TLID misses text."))
+                                            color: clrTxt2; font.pixelSize: 11
+                                        }
+                                    }
+                                }
+
+                                // Tip: when to use Standard mode
+                                Rectangle {
+                                    Layout.fillWidth: true; height: tipLabel.implicitHeight + 14
+                                    radius: 8; color: Qt.rgba(245, 158, 11, 0.08); border.color: Qt.rgba(245, 158, 11, 0.2); border.width: 1
+                                    visible: liteBackend.outputMode === "native"
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 8; spacing: 8
+                                        Label { text: "⚠️"; font.pixelSize: 14 }
+                                        Label {
+                                            id: tipLabel; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("tip_native_limitation", "Some games define UI text in Python variables (quests, schedules, etc.). If you see untranslated screen text, switch to Standard mode — it handles these better.")
+                                            color: clrWarn; font.pixelSize: 11
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: clrCardBorder }
+
+                            // KATMAN 2: ÇEVİRİ BELLEĞİ VE ÖNBELLEK YÖNETİMİ
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: 16
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 3
+                                    Label { text: liteBackend.uiTrigger, "💾 " + liteBackend.getTextWithDefault("lite_cache_title", "Çeviri Belleği (TM Cache) Kullan"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_cache_desc", "Daha önce çevrilen satırları hatırlar, aynı cümle tekrar geldiğinde anında bellekten getirir."); color: clrTxt2; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                                }
+
+                                Switch {
+                                    checked: liteBackend.useCache
+                                    onToggled: liteBackend.useCache = checked
+                                }
+
+                                Button {
+                                    Layout.preferredWidth: 220; height: 40
+                                    text: "🧹 " + liteBackend.getTextWithDefault("lite_clear_cache_btn", "Çeviri Belleğini (TM) Temizle")
+                                    onClicked: if (liteBackend.clearTranslationCache()) showToast("Çeviri belleği temizlendi.", "success")
+                                    background: Rectangle { radius: 8; color: parent.hovered ? "#991B1B" : "#7F1D1D"; border.color: "#B91C1C"; border.width: 1 }
+                                    contentItem: Label { text: parent.text; color: "white"; font.bold: true; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                }
+                            }
+                        }
+                    }
+
+                    // PERFORMANS VE PARAMETRELER KARTI
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: 330
+                        radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
+
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 22; spacing: 16
+                            Label { text: "⚡ " + liteBackend.getTextWithDefault("settings_section_perf", "Performans & Bağlantı Parametreleri"); font.pixelSize: 16; font.bold: true; color: clrAccent }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_concurrency_label", "Concurrent Threads") + ": " + Math.round(threadsSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: threadsSlider; Layout.fillWidth: true; from: 1; to: 32; stepSize: 1; value: liteBackend.maxConcurrentThreads; onMoved: liteBackend.maxConcurrentThreads = value }
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_delay_label", "Request Delay") + ": " + delaySlider.value.toFixed(2) + "s"; color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: delaySlider; Layout.fillWidth: true; from: 0.0; to: 3.0; stepSize: 0.05; value: liteBackend.requestDelay; onMoved: liteBackend.requestDelay = value }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_batch_label", "Batch Size") + ": " + Math.round(batchSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: batchSlider; Layout.fillWidth: true; from: 10; to: 500; stepSize: 10; value: liteBackend.maxBatchSize; onMoved: liteBackend.maxBatchSize = value }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_multi_endpoint_title", "Multi-Endpoint (Mirror)"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_multi_endpoint_desc", "Distributes requests across Google servers."); color: clrTxt2; font.pixelSize: 11 }
+                                    }
+                                    Switch { checked: liteBackend.useMultiEndpoint; onToggled: liteBackend.useMultiEndpoint = checked }
+                                }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: clrCardBorder }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_aggressive_title", "Aggressive Retry"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_aggressive_desc", "Retries untranslated lines on mirror servers."); color: clrTxt2; font.pixelSize: 11 }
+                                    }
+                                    Switch { checked: liteBackend.aggressiveRetry; onToggled: liteBackend.aggressiveRetry = checked }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_rpyc_reader_title", "RPYC AST Reader"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_rpyc_reader_desc", "Reads compiled .rpyc files directly."); color: clrTxt2; font.pixelSize: 11 }
+                                    }
+                                    Switch { checked: liteBackend.enableRpycReader; onToggled: liteBackend.enableRpycReader = checked }
+                                }
+                            }
+                        }
+                    }
+
+                    // AI MOTOR KARTI (SEÇİLİ MOTORA DUYARLI TAM KAPSAMLI YAPILANDIRMA)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: aiCol.implicitHeight + 44
+                        radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
+                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 200 } }
+
+                        ColumnLayout {
+                            id: aiCol
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                            anchors.margins: 22; spacing: 16
+
+                            Label { text: liteBackend.uiTrigger, "🤖 " + liteBackend.getTextWithDefault("settings_section_ai", "AI Engine Configuration"); font.pixelSize: 16; font.bold: true; color: clrAccent }
+
+                            // OpenAI / DeepSeek Ayarları
+                            ColumnLayout {
+                                Layout.fillWidth: true; spacing: 14
+                                visible: liteBackend.selectedEngine === "openai" || liteBackend.selectedEngine === "deepseek"
+
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 18
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 5
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("label_openai_key", "OpenAI / DeepSeek API Key:"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        TextField {
+                                            Layout.fillWidth: true; height: 40; text: liteBackend.openaiApiKey; echoMode: TextInput.Password; placeholderText: "sk-..."
+                                            onEditingFinished: liteBackend.openaiApiKey = text
+                                            background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 5
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("label_openai_model", "Model Name:"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        TextField {
+                                            Layout.fillWidth: true; height: 40; text: liteBackend.openaiModel; placeholderText: liteBackend.selectedEngine === "deepseek" ? "deepseek-v4-flash" : "gpt-4o-mini"
+                                            onEditingFinished: liteBackend.openaiModel = text
+                                            background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                        }
+                                    }
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 5
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("openai_base_url_label", "Base URL (Optional, empty for default):"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    TextField {
+                                        Layout.fillWidth: true; height: 40; text: liteBackend.openaiBaseUrl; placeholderText: liteBackend.selectedEngine === "deepseek" ? "https://api.deepseek.com/v1" : "https://api.openai.com/v1"
+                                        onEditingFinished: liteBackend.openaiBaseUrl = text
+                                        background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                    }
+                                }
+                            }
+
+                            // Local LLM (Ollama / LM Studio) Ayarları
+                            ColumnLayout {
+                                Layout.fillWidth: true; spacing: 14
+                                visible: liteBackend.selectedEngine === "local_llm" || liteBackend.selectedEngine === "google"
+
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 18
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 5
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("label_ollama_url", "Local LLM Server URL (Ollama/LM Studio):"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        TextField {
+                                            Layout.fillWidth: true; height: 40; text: liteBackend.localLlmUrl; placeholderText: "http://localhost:11434/v1"
+                                            onEditingFinished: liteBackend.localLlmUrl = text
+                                            background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 5
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("label_ollama_model", "Local LLM Model Name:"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        TextField {
+                                            Layout.fillWidth: true; height: 40; text: liteBackend.localLlmModel; placeholderText: "qwen2.5-coder:7b-instruct, llama3..."
+                                            onEditingFinished: liteBackend.localLlmModel = text
+                                            background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // LibreTranslate Ayarları
+                            ColumnLayout {
+                                Layout.fillWidth: true; spacing: 14
+                                visible: liteBackend.selectedEngine === "libretranslate"
+
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 18
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 5
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("libretranslate_url_label", "LibreTranslate Server URL:"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        TextField {
+                                            Layout.fillWidth: true; height: 40; text: liteBackend.libretranslateUrl; placeholderText: "http://localhost:5000"
+                                            onEditingFinished: liteBackend.libretranslateUrl = text
+                                            background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 5
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("libretranslate_api_key_label", "LibreTranslate API Key (Optional):"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        TextField {
+                                            Layout.fillWidth: true; height: 40; text: liteBackend.libretranslateApiKey; echoMode: TextInput.Password
+                                            onEditingFinished: liteBackend.libretranslateApiKey = text
+                                            background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Custom Endpoint Ayarları
+                            ColumnLayout {
+                                Layout.fillWidth: true; spacing: 14
+                                visible: liteBackend.selectedEngine === "custom"
+
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 18
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 5
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("custom_url_label", "Custom API Endpoint URL:"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        TextField {
+                                            Layout.fillWidth: true; height: 40; text: liteBackend.customEndpointUrl; placeholderText: "http://localhost:8000/translate"
+                                            onEditingFinished: liteBackend.customEndpointUrl = text
+                                            background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 5
+                                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("custom_api_key_label", "Custom API Key (Optional):"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                        TextField {
+                                            Layout.fillWidth: true; height: 40; text: liteBackend.customEndpointApiKey; echoMode: TextInput.Password
+                                            onEditingFinished: liteBackend.customEndpointApiKey = text
+                                            background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // GELİŞMİŞ YAPAY ZEKA PARAMETRELERİ (TUNING & SYSTEM PROMPT) KARTI
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 24; Layout.rightMargin: 24
+                        Layout.preferredHeight: aiTuningCol.implicitHeight + 44
+                        radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
+
+                        ColumnLayout {
+                            id: aiTuningCol
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                            anchors.margins: 22; spacing: 18
+
+                            Label { text: liteBackend.uiTrigger, "⚡ " + liteBackend.getTextWithDefault("ai_tuning_title", "Advanced AI Tuning & System Prompt"); font.pixelSize: 16; font.bold: true; color: clrAccent }
+
+                            // Satır 1: Temperature & Max Tokens
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: 24
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_temp_label", "AI Temperature") + ": " + aiTempSlider.value.toFixed(2); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: aiTempSlider; Layout.fillWidth: true; from: 0.0; to: 1.0; stepSize: 0.05; value: liteBackend.aiTemperature; onMoved: liteBackend.aiTemperature = value }
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_tokens_label", "Max Tokens") + ": " + Math.round(aiTokensSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: aiTokensSlider; Layout.fillWidth: true; from: 256; to: 8192; stepSize: 256; value: liteBackend.aiMaxTokens; onMoved: liteBackend.aiMaxTokens = value }
+                                }
+                            }
+
+                            // Satır 2: AI Timeout & AI Batch Size
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: 24
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_timeout_label", "AI Timeout") + ": " + Math.round(aiTimeoutSlider.value) + "s"; color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: aiTimeoutSlider; Layout.fillWidth: true; from: 10; to: 300; stepSize: 10; value: liteBackend.aiTimeout; onMoved: liteBackend.aiTimeout = value }
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_batch_label", "AI Batch Size") + ": " + Math.round(aiBatchSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: aiBatchSlider; Layout.fillWidth: true; from: 1; to: 50; stepSize: 1; value: liteBackend.aiBatchSize; onMoved: liteBackend.aiBatchSize = value }
+                                }
+                            }
+
+                            // Satır 3: AI Retry Count & AI Concurrency
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: 24
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_retry_label", "AI Retry Count") + ": " + Math.round(aiRetrySlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: aiRetrySlider; Layout.fillWidth: true; from: 1; to: 5; stepSize: 1; value: liteBackend.aiRetryCount; onMoved: liteBackend.aiRetryCount = value }
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 6
+                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_concurrency_label", "AI Concurrency") + ": " + Math.round(aiConcSlider.value); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                    Slider { id: aiConcSlider; Layout.fillWidth: true; from: 1; to: 10; stepSize: 1; value: liteBackend.aiConcurrency; onMoved: liteBackend.aiConcurrency = value }
+                                }
+                            }
+
+                            // Satır 4: Custom System Prompt
+                            ColumnLayout {
+                                Layout.fillWidth: true; spacing: 6
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_prompt_label", "Custom System Prompt (Optional instructions for AI):"); color: clrTxt; font.bold: true; font.pixelSize: 13 }
+                                TextField {
+                                    id: aiPromptField
+                                    Layout.fillWidth: true; height: 44
+                                    text: liteBackend.aiCustomSystemPrompt
+                                    placeholderText: "Translate the following Ren'Py visual novel dialogue accurately while keeping tags..."
+                                    onEditingFinished: liteBackend.aiCustomSystemPrompt = text
+                                    background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
+                                }
+                            }
+                        }
+                    }
+
+                    Item { height: 24 }
+                }
+            }
+
+            // ═════════════════════════════════════════════════════════════
+            // SEKME 2: LOG CONSOLE
+            // ═════════════════════════════════════════════════════════════
+            ScrollView {
+                clip: true; contentWidth: availableWidth
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                ScrollBar.vertical: ScrollBar {}
+
+                ColumnLayout {
+                    width: parent.width - 48; anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 18; anchors.topMargin: 32; anchors.bottomMargin: 32
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        ColumnLayout {
+                            spacing: 4
+                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("nav_logs", "Log Console & System Diagnostics"); font.pixelSize: 26; font.bold: true; color: clrTxt }
+                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("logs_desc", "Real-time execution trace, stage notifications, and error diagnostics."); font.pixelSize: 13; color: clrTxt2 }
                         }
                         Item { Layout.fillWidth: true }
                         Button {
-                            text: liteBackend.uiTrigger, "📂 " + liteBackend.getTextWithDefault("open_directory", "Çıktıyı Aç")
-                            visible: outputPath.length > 0
-                            height: 36
-                            onClicked: liteBackend.openLocalPath(outputPath)
-                            background: Rectangle {
-                                radius: 8
-                                color: parent.hovered ? Qt.darker("#1971c2", 1.1) : "#1971c2"
-                                Behavior on color { ColorAnimation { duration: 120 } }
+                            height: 40; text: liteBackend.uiTrigger, "📋 " + liteBackend.getTextWithDefault("copy_log", "Copy Log")
+                            onClicked: {
+                                var lines = []
+                                for (var i = 0; i < logModel.count; i++) {
+                                    var item = logModel.get(i)
+                                    lines.push(item.ts + " [" + item.level.toUpperCase() + "] " + item.message)
+                                }
+                                liteBackend.copyToClipboard(lines.join("\n"))
+                                showToast("Log panoya kopyalandı!", "info")
                             }
-                            contentItem: Label {
-                                text: parent.text
-                                color: "white"; font.pixelSize: 12
-                                horizontalAlignment: Text.AlignHCenter
-                            }
+                            background: Rectangle { radius: 8; color: clrCard; border.color: clrCardBorder; border.width: 1 }
+                            contentItem: Label { text: parent.text; color: clrTxt; font.pixelSize: 12; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        }
+                        Button {
+                            height: 40; text: liteBackend.uiTrigger, "🗑 " + liteBackend.getTextWithDefault("clear_log", "Clear")
+                            onClicked: logModel.clear()
+                            background: Rectangle { radius: 8; color: clrCard; border.color: clrCardBorder; border.width: 1 }
+                            contentItem: Label { text: parent.text; color: clrError; font.pixelSize: 12; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                         }
                     }
-                }
 
-                // ── Kart 5: Log Paneli ────────────────────────────────
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 240
-                    radius: 16
-                    color: inputBg
-                    border.color: borderClr
-                    border.width: 1
-                    clip: true
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: 8
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label {
-                                text: liteBackend.uiTrigger, "📋 " + liteBackend.getTextWithDefault("log", "İşlem Günlüğü")
-                                font.pixelSize: 13
-                                font.bold: true
-                                color: txtMain
-                            }
-                            Item { Layout.fillWidth: true }
-                            Label {
-                                text: liteBackend.uiTrigger, logModel.count + " " + liteBackend.getTextWithDefault("lines", "satır")
-                                font.pixelSize: 11
-                                color: txtSecond
-                            }
-                            // Log kopyala butonu
-                            Button {
-                                text: "📋"
-                                width: 28; height: 28
-                                onClicked: {
-                                    var fullLog = ""
-                                    for (var i = 0; i < logModel.count; i++) {
-                                        var item = logModel.get(i)
-                                        fullLog += item.ts + " " + logPrefix(item.level) + item.message + "\n"
-                                    }
-                                    liteBackend.copyToClipboard(fullLog)
-                                    showToast(liteBackend.getTextWithDefault("log_copy_success", "Log copied to clipboard."), "success")
-                                }
-                                ToolTip.text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("copy_log", "Günlüğü kopyala")
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 500
-                                background: Rectangle {
-                                    radius: 6
-                                    color: parent.hovered ? "#3d3d54" : "transparent"
-                                }
-                                contentItem: Label {
-                                    text: parent.text
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    font.pixelSize: 13
-                                }
-                            }
-
-                            // Log temizle butonu
-                            Button {
-                                text: "🗑"
-                                width: 28; height: 28
-                                onClicked: logModel.clear()
-                                ToolTip.text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("clear_log", "Günlüğü temizle")
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 500
-                                background: Rectangle {
-                                    radius: 6
-                                    color: parent.hovered ? "#3d3d54" : "transparent"
-                                }
-                                contentItem: Label {
-                                    text: parent.text
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    font.pixelSize: 13
-                                }
-                            }
-                        }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true; Layout.minimumHeight: 300
+                        radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
 
                         ListView {
-                            id: logListView
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
+                            id: logConsoleListView
+                            anchors.fill: parent; anchors.margins: 18; clip: true
                             model: logModel
-                            clip: true
-                            spacing: 1
-                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
+                            ScrollBar.vertical: ScrollBar {}
                             delegate: RowLayout {
-                                width: logListView.width
-                                spacing: 6
-
-                                Label {
-                                    text: model.ts
-                                    font.pixelSize: 10
-                                    font.family: "Consolas, monospace"
-                                    color: "#555577"
-                                    Layout.preferredWidth: 60
-                                }
-                                Label {
-                                    text: logPrefix(model.level) + model.message
-                                    font.pixelSize: 11
-                                    font.family: "Consolas, monospace"
-                                    color: logColor(model.level)
-                                    Layout.fillWidth: true
-                                    wrapMode: Text.Wrap
-                                }
+                                width: logConsoleListView.width - 24; spacing: 14
+                                Label { text: model.ts; color: clrTxtDim; font.pixelSize: 12; font.family: "Consolas" }
+                                Label { text: logPrefix(model.level); color: logColor(model.level); font.bold: true; font.pixelSize: 12 }
+                                Label { text: model.message; color: logColor(model.level); font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap }
                             }
                         }
                     }
                 }
-
-                // ── İpucu kutusu ─────────────────────────────────────
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: tipLayout.implicitHeight + 24
-                    radius: 10
-                    color: Qt.rgba(243/255, 156/255, 18/255, 0.1)
-                    border.color: Qt.rgba(243/255, 156/255, 18/255, 0.4)
-                    border.width: 1
-
-                    RowLayout {
-                        id: tipLayout
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 10
-
-                        Label {
-                            text: "💡"
-                            font.pixelSize: 16
-                            Layout.alignment: Qt.AlignVCenter
-                        }
-                        Label {
-                            Layout.fillWidth: true
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_tip_desc", "Lite sürüm arayüzü sadeleştirilmiş hızlı çeviri modudur. Gelişmiş ince ayarlar, toplu sözlük yönetimi, font araçları ve özel çıkarma seçenekleri için tam RenLocalizer sürümünü kullanın.")
-                            color: "#f39c12"
-                            font.pixelSize: 12
-                            wrapMode: Text.Wrap
-                            Layout.alignment: Qt.AlignVCenter
-                        }
-                    }
-                }
-
-                // ── Wiki Kılavuzu Yönlendirme Butonu ─────────────────────────
-                Button {
-                    Layout.fillWidth: true
-                    height: 38
-                    
-                    contentItem: RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        Label {
-                            text: "📖"
-                            font.pixelSize: 14
-                        }
-                        Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_guide_btn", "Open RenLocalizer Lite Wiki Guide")
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: "white"
-                        }
-                    }
-
-                    background: Rectangle {
-                        radius: 8
-                        color: parent.down ? Qt.darker("#2b8a3e", 1.2) : parent.hovered ? "#2b8a3e" : "#2f9e44"
-                        border.color: parent.hovered ? "#40c057" : "transparent"
-                        border.width: 1
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-
-                    onClicked: {
-                        Qt.openUrlExternally("https://github.com/Lord0fTurk/RenLocalizer/wiki/LITE-RELEASE-GUIDE")
-                    }
-                }
-
-                // ── Patreon Destek Butonu ─────────────────────────────────────
-                Button {
-                    id: patreonBtn
-                    Layout.fillWidth: true
-                    height: 42
-
-                    // Pulse glow animation
-                    property real pulse: 0
-                    NumberAnimation on pulse {
-                        from: 0; to: 1; duration: 2000; loops: Animation.Infinite
-                    }
-
-                    contentItem: RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        Label {
-                            text: "❤️"
-                            font.pixelSize: 16
-                            transform: Translate {
-                                y: patreonBtn.pulse * -3
-                                Behavior on y { SpringAnimation { spring: 3; damping: 0.3 } }
-                            }
-                        }
-                        Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("patreon_btn", "Support on Patreon")
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: "white"
-                        }
-                    }
-
-                    background: Rectangle {
-                        radius: 8
-                        color: parent.down ? Qt.darker("#d9480f", 1.2) : parent.hovered ? "#e8590c" : "#d9480f"
-                        border.color: parent.hovered ? "#ff6b35" : Qt.hsla(0.08 + patreonBtn.pulse * 0.06, 0.8, 0.5, 1)
-                        border.width: parent.hovered ? 2 : 1
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-
-                    scale: parent.hovered ? 1.02 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100 } }
-
-                    onClicked: {
-                        Qt.openUrlExternally("https://www.patreon.com/cw/LordOfTurk")
-                    }
-                }
-
-                Item { height: 8 }
-            }
-        }
-
-        // ── Alt Durum Çubuğu ──────────────────────────────────────────
-        Rectangle {
-            Layout.fillWidth: true
-            height: 24
-            color: "#0a0a18"
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 16
-
-                Label {
-                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("app_title", "RenLocalizer") + " Lite v" + liteBackend.version
-                    font.pixelSize: 10
-                    color: "#555577"
-                }
-                Label {
-                    text: "Google Translate"
-                    font.pixelSize: 10
-                    color: "#555577"
-                }
-                Item { Layout.fillWidth: true }
-                Label {
-                    text: liteBackend.uiTrigger, isTranslating ? liteBackend.getTextWithDefault("pipeline_logs.stage_translating", "⟳ Çeviriyor...") : "● " + liteBackend.getTextWithDefault("status_ready", "Hazır")
-                    font.pixelSize: 10
-                    color: isTranslating ? accentClr : successClr
-                }
-            }
-        }
-    }
-
-    // ── Toast Bildirimi ──────────────────────────────────────────────────
-    Rectangle {
-        id: toast
-        property string message: ""
-        property string toastType: "info"
-
-        z: 9999
-        visible: opacity > 0
-        opacity: 0
-
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 36
-        anchors.horizontalCenter: parent.horizontalCenter
-
-        width: Math.min(toastContent.implicitWidth + 48, root.width - 60)
-        height: Math.max(48, toastContent.implicitHeight + 20)
-        radius: 10
-
-        color: toastType === "error"   ? "#c92a2a"
-             : toastType === "success" ? "#2b8a3e"
-             : toastType === "warning" ? "#e67700"
-             : "#495057"
-
-        border.color: "white"
-        border.width: 1
-
-        RowLayout {
-            id: toastContent
-            anchors.fill: parent
-            anchors.margins: 12
-            spacing: 10
-
-            Label {
-                text: toast.toastType === "success" ? "✅"
-                    : toast.toastType === "error"   ? "❌"
-                    : toast.toastType === "warning"  ? "⚠️"
-                    : "ℹ️"
-                font.pixelSize: 16
             }
 
-            Label {
-                text: toast.message
-                color: "white"
-                font.bold: true
-                font.pixelSize: 13
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                verticalAlignment: Text.AlignVCenter
-            }
-        }
-
-        Behavior on opacity { NumberAnimation { duration: 400 } }
-
-        Timer {
-            id: toastTimer
-            interval: 6000
-            onTriggered: toast.opacity = 0
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: toast.opacity = 0
-        }
-    }
-
-    // ── Uyarı Dialogu ────────────────────────────────────────────────────
-    Dialog {
-        id: warningDialog
-        property string titleText: {
-            var trigger = liteBackend.uiTrigger;
-            return liteBackend.getTextWithDefault("warning", "Uyarı");
-        }
-        property string bodyText: ""
-
-        anchors.centerIn: parent
-        width: Math.min(400, root.width * 0.85)
-        modal: true
-        title: "⚠️ " + titleText
-
-        background: Rectangle {
-            color: "#1e1e38"
-            radius: 14
-            border.color: warningClr
-            border.width: 1
-        }
-
-        contentItem: Label {
-            text: warningDialog.bodyText
-            color: txtMain
-            wrapMode: Text.Wrap
-            font.pixelSize: 13
-            horizontalAlignment: Text.AlignHCenter
-            padding: 20
-        }
-
-        footer: DialogButtonBox {
-            background: Rectangle { color: "transparent" }
-            Button {
-                text: {
-                    var trigger = liteBackend.uiTrigger;
-                    return liteBackend.getTextWithDefault("btn_ok", "Tamam");
-                }
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                background: Rectangle { radius: 8; color: accentClr }
-                contentItem: Label {
-                    text: parent.text; color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                }
-                onClicked: warningDialog.close()
-            }
-            alignment: Qt.AlignHCenter
-            padding: 10
-        }
-    }
-
-    // ── Tamamlanma Dialogu ───────────────────────────────────────────────
-    Dialog {
-        id: completionDialog
-        property string summaryText: ""
-        property string outputPath: ""
-        property string diagPath: ""
-
-        anchors.centerIn: parent
-        width: Math.min(440, root.width * 0.85)
-        modal: true
-        title: {
-            var trigger = liteBackend.uiTrigger;
-            return "✅ " + liteBackend.getTextWithDefault("translation_complete_title", "Çeviri Tamamlandı");
-        }
-
-        background: Rectangle {
-            color: "#1e1e38"
-            radius: 14
-            border.color: successClr
-            border.width: 1
-        }
-
-        contentItem: ColumnLayout {
-            spacing: 12
-
-            Label {
-                text: completionDialog.summaryText
-                color: txtMain
-                wrapMode: Text.Wrap
-                font.pixelSize: 13
-                Layout.fillWidth: true
-                Layout.margins: 20
-                horizontalAlignment: Text.AlignHCenter
-            }
-        }
-
-        footer: DialogButtonBox {
-            background: Rectangle { color: "transparent" }
-
-            Button {
-                visible: completionDialog.outputPath.length > 0
-                text: {
-                    var trigger = liteBackend.uiTrigger;
-                    return "📂 " + liteBackend.getTextWithDefault("translation_complete_open_output", "Çıktıyı Aç");
-                }
-                DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
-                background: Rectangle { radius: 8; color: "#1971c2" }
-                contentItem: Label {
-                    text: parent.text; color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                }
-                onClicked: liteBackend.openLocalPath(completionDialog.outputPath)
-            }
-
-            Button {
-                text: {
-                    var trigger = liteBackend.uiTrigger;
-                    return liteBackend.getTextWithDefault("btn_close", "Kapat");
-                }
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                background: Rectangle { radius: 8; color: accentClr }
-                contentItem: Label {
-                    text: parent.text; color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                }
-                onClicked: completionDialog.close()
-            }
-            alignment: Qt.AlignHCenter
-            padding: 10
-        }
-    }
-
-    // ── Gelişmiş Ayarlar Diyalogu ─────────────────────────────────────────
-    Dialog {
-        id: settingsPopup
-        title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_settings_title", "⚙️ Advanced Translation Settings")
-        anchors.centerIn: parent
-        width: Math.min(460, root.width * 0.9)
-        height: Math.min(600, root.height * 0.9)
-        modal: true
-
-        background: Rectangle {
-            color: "#1e1e38"
-            radius: 14
-            border.color: borderClr
-            border.width: 1
-        }
-
-        onOpened: {
-            threadsSlider.value = liteBackend.maxConcurrentThreads
-            delaySlider.value = liteBackend.requestDelay
-            batchSlider.value = liteBackend.maxBatchSize
-            multiSwitch.checked = liteBackend.useMultiEndpoint
-            aggressiveSwitch.checked = liteBackend.aggressiveRetry
-            cacheSwitch.checked = liteBackend.useCache
-            updateStartupSwitch.checked = liteBackend.checkForUpdatesOnStartup
-            rpycSwitch.checked = liteBackend.enableRpycReader
-            deepScanSwitch.checked = liteBackend.enableDeepScan
-
-            // Advanced AI Settings
-            aiTempSlider.value = liteBackend.aiTemperature
-            aiTimeoutSlider.value = liteBackend.aiTimeout
-            aiMaxTokensSlider.value = liteBackend.aiMaxTokens
-            aiBatchSlider.value = liteBackend.aiBatchSize
-            aiRetrySlider.value = liteBackend.aiRetryCount
-            aiConcurrencySlider.value = liteBackend.aiConcurrency
-            aiDelaySlider.value = liteBackend.aiRequestDelay
-            aiSysPromptField.text = liteBackend.aiCustomSystemPrompt
-
-            // UI Language
-            var curLang = liteBackend.getCurrentUILanguage()
-            var langIdx = uiLanguageCombo.indexOfValue(curLang)
-            if (langIdx >= 0) uiLanguageCombo.currentIndex = langIdx
-
-            // UI Theme
-            var curTheme = liteBackend.getCurrentTheme()
-            var themeIdx = uiThemeCombo.indexOfValue(curTheme)
-            if (themeIdx >= 0) uiThemeCombo.currentIndex = themeIdx
-        }
-
-        contentItem: ScrollView {
-            id: settingsScroll
+        // ═════════════════════════════════════════════════════════════
+        // SEKME 3: TOOLBOX
+        // ═════════════════════════════════════════════════════════════
+        ScrollView {
             clip: true
-            ScrollBar.vertical: ScrollBar {
-                id: settingsVbar
-                policy: ScrollBar.AsNeeded
-                width: 10
-                interactive: true
-                contentItem: Rectangle {
-                    implicitWidth: 10
-                    implicitHeight: 30
-                    radius: 5
-                    color: settingsVbar.pressed ? accentClr : (settingsVbar.hovered ? Qt.lighter(accentClr, 1.3) : Qt.rgba(1,1,1,0.12))
-                }
-            }
+            contentWidth: availableWidth
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical: ScrollBar {}
 
             ColumnLayout {
-                width: settingsScroll.availableWidth - 16
-                spacing: 16
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
-                Layout.topMargin: 10
-                Layout.bottomMargin: 10
+                width: parent.width
+                anchors.margins: 32
+                spacing: 24
 
-                Label {
-                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_ui_settings", "UI Settings")
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: accentClr
-                }
+                Item { height: 4 }
 
-                // UI Language
+                // Başlık Alanı
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 10
-                    Label {
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ui_language_label", "UI Language:")
-                        color: txtMain
-                        font.bold: true
-                        font.pixelSize: 12
-                        Layout.fillWidth: true
-                    }
-                    ComboBox {
-                        id: uiLanguageCombo
-                        Layout.preferredWidth: 180
-                        model: liteBackend.getAvailableUILanguages()
-                        textRole: "name"
-                        valueRole: "code"
-                    }
-                }
-
-                // UI Theme
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-                    Label {
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("theme_label", "Theme:")
-                        color: txtMain
-                        font.bold: true
-                        font.pixelSize: 12
-                        Layout.fillWidth: true
-                    }
-                    ComboBox {
-                        id: uiThemeCombo
-                        Layout.preferredWidth: 180
-                        model: liteBackend.getAvailableThemes()
-                        textRole: "name"
-                        valueRole: "code"
-                    }
-                }
-
-                Rectangle { Layout.fillWidth: true; height: 1; color: borderClr }
-
-                // Update Settings
-                Label {
-                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("update_check_title", "Update Check")
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: accentClr
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    spacing: 16
+                    Label { text: "🛠️"; font.pixelSize: 32 }
                     ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
+                        spacing: 4
                         Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("check_updates", "Check for Updates")
-                            color: txtMain
-                            font.bold: true
-                            font.pixelSize: 12
+                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("toolbox_title", "RenLocalizer Araç Kutusu (Toolbox)")
+                            font.pixelSize: 22; font.bold: true; color: clrTxt
                         }
                         Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("check_updates_desc", "Check for updates on startup")
-                            color: txtSecond
-                            font.pixelSize: 10
-                            wrapMode: Text.Wrap
-                            Layout.fillWidth: true
-                        }
-                    }
-                    Switch {
-                        id: updateStartupSwitch
-                    }
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("check_updates_now_button", "Check")
-                    height: 36
-                    background: Rectangle {
-                        radius: 8
-                        color: parent.hovered ? Qt.darker(accentClr, 1.1) : accentClr
-                    }
-                    contentItem: Label {
-                        text: parent.text
-                        color: "white"
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        liteBackend.checkForUpdates(true)
-                    }
-                }
-
-                Rectangle { Layout.fillWidth: true; height: 1; color: borderClr }
-
-                Label {
-                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("settings_engines_title", "Translation Engines & APIs")
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: accentClr
-                }
-
-                // 1. Threads
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_concurrency_label", "Concurrent Request Limit"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                        Item { Layout.fillWidth: true }
-                        Label { text: Math.round(threadsSlider.value); color: accentClr; font.bold: true; font.pixelSize: 12 }
-                    }
-                    Slider {
-                        id: threadsSlider
-                        Layout.fillWidth: true
-                        from: 1; to: 32; stepSize: 1
-                        live: true
-                    }
-                    Label {
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_concurrency_desc", "Number of parallel requests to send. Higher values increase rate limit risks.")
-                        color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                    }
-                }
-
-                // 2. Request Delay
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_delay_label", "Request Delay (Seconds)"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                        Item { Layout.fillWidth: true }
-                        Label { text: delaySlider.value.toFixed(2) + "s"; color: accentClr; font.bold: true; font.pixelSize: 12 }
-                    }
-                    Slider {
-                        id: delaySlider
-                        Layout.fillWidth: true
-                        from: 0.0; to: 3.0; stepSize: 0.05
-                        live: true
-                    }
-                    Label {
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_delay_desc", "Delay between requests. Increase this to avoid Google blocks.")
-                        color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                    }
-                }
-
-                // 3. Batch Size
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_batch_label", "Batch Size (Lines)"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                        Item { Layout.fillWidth: true }
-                        Label { text: Math.round(batchSlider.value); color: accentClr; font.bold: true; font.pixelSize: 12 }
-                    }
-                    Slider {
-                        id: batchSlider
-                        Layout.fillWidth: true
-                        from: 10; to: 500; stepSize: 10
-                        live: true
-                    }
-                    Label {
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_batch_desc", "Number of lines packed in a single request. Lower values reduce rate limit risks.")
-                        color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                    }
-                }
-
-                Rectangle { Layout.fillWidth: true; height: 1; color: borderClr }
-
-                // 4. Multi-Endpoint
-                RowLayout {
-                    Layout.fillWidth: true
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
-                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("use_multi_endpoint_label", "Use Multi-Endpoint"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                        Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_multi_endpoint_desc", "Distribute requests to multiple Google mirror servers to make blocking harder.")
-                            color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                        }
-                    }
-                    Switch {
-                        id: multiSwitch
-                    }
-                }
-
-                // 6. Aggressive Retry
-                RowLayout {
-                    Layout.fillWidth: true
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
-                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("aggressive_retry", "Aggressive Translation"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                        Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_aggressive_desc", "Retry lines that return unchanged on alternative servers (slower).")
-                            color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                        }
-                    }
-                    Switch {
-                        id: aggressiveSwitch
-                    }
-                }
-
-                // 6.1 RPYC Reader
-                RowLayout {
-                    Layout.fillWidth: true
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
-                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("enable_rpyc_reader_label", "RPYC Reader (Experimental)"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                        Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("rpyc_reader_desc", "Reads compiled .rpyc files directly via AST extraction; no decompilation needed.")
-                            color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                        }
-                    }
-                    Switch {
-                        id: rpycSwitch
-                    }
-                }
-
-                // 6.2 Deep Scan
-                RowLayout {
-                    Layout.fillWidth: true
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
-                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("deep_scan", "Deep Scan"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                        Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("deep_scan_desc", "Analyze RPYC files with AST (slower).")
-                            color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                        }
-                    }
-                    Switch {
-                        id: deepScanSwitch
-                    }
-                }
-
-                Rectangle { Layout.fillWidth: true; height: 1; color: borderClr }
-
-                // 7. Clear Cache Button
-                ColumnLayout {
-                    id: cacheSectionLayout
-                    Layout.fillWidth: true
-                    spacing: 6
-                    Label {
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_cache_title", "Translation Cache (TM) Management")
-                        color: txtMain
-                        font.bold: true
-                        font.pixelSize: 12
-                    }
-                    // 7.1 Cache Usage Switch
-                    RowLayout {
-                        Layout.fillWidth: true
-                        ColumnLayout {
-                            spacing: 2
-                            Layout.fillWidth: true
-                            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_use_cache_label", "Use Translation Cache (TM)"); color: txtMain; font.bold: true; font.pixelSize: 12 }
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_use_cache_desc", "Read already translated lines from cache to complete translation instantly.")
-                                color: txtSecond; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true
-                            }
-                        }
-                        Switch {
-                            id: cacheSwitch
-                        }
-                    }
-                    Label {
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_clear_cache_desc", "Purge cached translations for the selected project to start translation from scratch.")
-                        color: txtSecond
-                        font.pixelSize: 10
-                        wrapMode: Text.Wrap
-                        Layout.fillWidth: true
-                    }
-                    Button {
-                        id: clearCacheBtn
-                        Layout.fillWidth: true
-                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_clear_cache_btn", "🧹 Clear Translation Cache")
-                        background: Rectangle {
-                            radius: 8
-                            color: parent.hovered ? "#bd2130" : "#dc3545"
-                        }
-                        contentItem: Label {
-                            text: parent.text
-                            color: "white"
-                            font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: {
-                            if (liteBackend.clearTranslationCache()) {
-                                showToast(liteBackend.getTextWithDefault("log_cache_cleared", "Translation memory cleared."), "success")
-                            } else {
-                                showToast(liteBackend.getTextWithDefault("log_cache_clear_error", "Error clearing cache: no project selected."), "error")
-                            }
+                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("toolbox_subtitle", "Görsel roman çevirilerini kusursuzlaştırmak, font hatalarını çözmek ve sözlük oluşturmak için hayat kurtaran altın araçlar.")
+                            font.pixelSize: 13; color: clrTxt2; wrapMode: Text.Wrap; Layout.fillWidth: true
                         }
                     }
                 }
 
-                // 7. AI Motor Ayarları (Modernized Card Wrapper inside ScrollView)
+                // ── KART 1: FONT DEĞİŞTİRİCİ VE ENJEKTÖR ─────────────────────
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: aiGroup.implicitHeight + 24
-                    color: Qt.rgba(1, 1, 1, 0.15)
-                    border.color: Qt.rgba(255, 255, 255, 0.08)
-                    border.width: 1
-                    radius: 10
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.preferredHeight: 210
+                    radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
 
                     ColumnLayout {
-                        id: aiGroup
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 12
+                        anchors.fill: parent; anchors.margins: 22; spacing: 14
 
-                        Label {
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_ai_settings_title", "🤖 AI Motor Settings")
-                            color: accentClr
-                            font.pixelSize: 13
-                            font.bold: true
-                        }
-
-                        // OpenAI / DeepSeek için API Key
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            visible: engineComboBox.currentValue === "openai" || engineComboBox.currentValue === "deepseek"
-
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("openai_api_key_label", "OpenAI / DeepSeek API Key:")
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: openaiKeyField
-                                Layout.fillWidth: true
-                                text: liteBackend.openaiApiKey
-                                placeholderText: "sk-..."
-                                echoMode: TextInput.Password
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: Qt.rgba(1, 1, 1, 0.05)
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_model_label", "Model:")
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: openaiModelField
-                                Layout.fillWidth: true
-                                text: liteBackend.openaiModel
-                                placeholderText: engineComboBox.currentValue === "deepseek" ? "deepseek-v4-flash" : "gpt-4o-mini"
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: Qt.rgba(1, 1, 1, 0.05)
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-
-                            Label {
-                                text: engineComboBox.currentValue === "deepseek" ? 
-                                    (liteBackend.uiTrigger, liteBackend.getTextWithDefault("deepseek_url_label", "DeepSeek API URL:")) : 
-                                    (liteBackend.uiTrigger, liteBackend.getTextWithDefault("openai_base_url_label", "Base URL (Optional, empty = OpenAI):"))
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: openaiBaseUrlField
-                                Layout.fillWidth: true
-                                text: engineComboBox.currentValue === "deepseek" ? "https://api.deepseek.com/v1" : liteBackend.openaiBaseUrl
-                                placeholderText: "https://api.openai.com/v1"
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: Qt.rgba(1, 1, 1, 0.05)
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-                        }
-
-                        // Local LLM ayarları
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            visible: engineComboBox.currentValue === "local_llm"
-
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("local_llm_url_label", "Ollama / LM Studio URL:")
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: localLlmUrlField
-                                Layout.fillWidth: true
-                                text: liteBackend.localLlmUrl
-                                placeholderText: "http://localhost:11434/v1"
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: Qt.rgba(1, 1, 1, 0.05)
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("local_llm_model_label", "Model Name:")
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: localLlmModelField
-                                Layout.fillWidth: true
-                                text: liteBackend.localLlmModel
-                                placeholderText: "qwen2.5-coder:7b-instruct, dolphin-2.9-llama3-8b..."
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: Qt.rgba(1, 1, 1, 0.05)
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-
-                        }
-
-                        // LibreTranslate ayarları
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            visible: engineComboBox.currentValue === "libretranslate"
-
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("libretranslate_url_label", "LibreTranslate Sunucu URL:")
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: libretranslateUrlField
-                                Layout.fillWidth: true
-                                placeholderText: "http://localhost:5000"
-                                Component.onCompleted: text = liteBackend.libretranslateUrl
-                                onEditingFinished: liteBackend.libretranslateUrl = text
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: inputBg
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("libretranslate_api_key_label", "API Key (opsiyonel):")
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: libretranslateKeyField
-                                Layout.fillWidth: true
-                                placeholderText: "····················"
-                                Component.onCompleted: text = liteBackend.libretranslateApiKey
-                                onEditingFinished: liteBackend.libretranslateApiKey = text
-                                echoMode: TextInput.Password
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: inputBg
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("libretranslate_hint", "Docker: docker run -p 5000:5000 libretranslate/libretranslate")
-                                color: txtDim
-                                font.pixelSize: 9
-                                wrapMode: Text.WordWrap
-                                Layout.fillWidth: true
-                            }
-                        }
-
-                        // Custom Endpoint ayarları
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            visible: engineComboBox.currentValue === "custom"
-
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("custom_url_label", "API Endpoint URL:")
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: customUrlField
-                                Layout.fillWidth: true
-                                placeholderText: "http://localhost:5000/translate"
-                                Component.onCompleted: text = liteBackend.customEndpointUrl
-                                onEditingFinished: liteBackend.customEndpointUrl = text
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: inputBg
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("custom_api_key_label", "API Key (opsiyonel):")
-                                color: txtMain
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
-                            TextField {
-                                id: customKeyField
-                                Layout.fillWidth: true
-                                placeholderText: "····················"
-                                Component.onCompleted: text = liteBackend.customEndpointApiKey
-                                onEditingFinished: liteBackend.customEndpointApiKey = text
-                                echoMode: TextInput.Password
-                                color: txtMain
-                                background: Rectangle {
-                                    radius: 8
-                                    color: inputBg
-                                    border.color: parent.activeFocus ? accentClr : borderClr
-                                    border.width: parent.activeFocus ? 2 : 1
-                                }
-                            }
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("custom_endpoint_hint", "LibreTranslate API formatı bekler. Kendi çeviri sunucunuzu bağlayın.")
-                                color: txtDim
-                                font.pixelSize: 9
-                                wrapMode: Text.WordWrap
-                                Layout.fillWidth: true
-                            }
-                        }
-
-                        // Gelişmiş AI Ayarları (sadece AI motorları seçiliyken görünür)
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
-                            visible: ["openai", "deepseek", "local_llm"].includes(engineComboBox.currentValue)
-
-                            // Ayırıcı çizgi
+                        RowLayout {
+                            spacing: 14; Layout.fillWidth: true
                             Rectangle {
-                                Layout.fillWidth: true
-                                height: 1
-                                color: borderClr
-                                opacity: 0.3
+                                width: 44; height: 44; radius: 10; color: Qt.rgba(0, 242, 254, 0.1)
+                                border.color: Qt.rgba(0, 242, 254, 0.3); border.width: 1
+                                Label { anchors.centerIn: parent; text: "🔤"; font.pixelSize: 22 }
                             }
-
-                            Label {
-                                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("advanced_settings", "Gelişmiş Ayarlar")
-                                color: accentClr
-                                font.pixelSize: 12
-                                font.bold: true
-                            }
-
-                            // 1. Temperature Slider
                             ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_creativity_label", "Creativity (Temperature):"); color: txtMain; font.bold: true; font.pixelSize: 11 }
-                                    Item { Layout.fillWidth: true }
-                                    Label { text: aiTempSlider.value.toFixed(2); color: accentClr; font.bold: true; font.pixelSize: 11 }
-                                }
-                                Slider {
-                                    id: aiTempSlider
-                                    Layout.fillWidth: true
-                                    from: 0.0; to: 2.0; stepSize: 0.05
-                                    live: true
-                                }
-                            }
-
-                            // 2. AI Batch Size Slider
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_batch_important_label", "AI Batch Size:"); color: txtMain; font.bold: true; font.pixelSize: 11 }
-                                    Item { Layout.fillWidth: true }
-                                    Label { text: Math.round(aiBatchSlider.value); color: accentClr; font.bold: true; font.pixelSize: 11 }
-                                }
-                                Slider {
-                                    id: aiBatchSlider
-                                    Layout.fillWidth: true
-                                    from: 1; to: 200; stepSize: 5
-                                    live: true
-                                }
-                            }
-
-                            // 3. AI Concurrency Slider
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_parallel_label", "AI Parallel Requests:"); color: txtMain; font.bold: true; font.pixelSize: 11 }
-                                    Item { Layout.fillWidth: true }
-                                    Label { text: Math.round(aiConcurrencySlider.value); color: accentClr; font.bold: true; font.pixelSize: 11 }
-                                }
-                                Slider {
-                                    id: aiConcurrencySlider
-                                    Layout.fillWidth: true
-                                    from: 1; to: 20; stepSize: 1
-                                    live: true
-                                }
-                            }
-
-                            // 4. Request Delay Slider
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_request_delay_label_sec", "AI Request Delay (Sec):"); color: txtMain; font.bold: true; font.pixelSize: 11 }
-                                    Item { Layout.fillWidth: true }
-                                    Label { text: aiDelaySlider.value.toFixed(2) + "s"; color: accentClr; font.bold: true; font.pixelSize: 11 }
-                                }
-                                Slider {
-                                    id: aiDelaySlider
-                                    Layout.fillWidth: true
-                                    from: 0.0; to: 10.0; stepSize: 0.1
-                                    live: true
-                                }
-                            }
-
-                            // 5. Max Output Tokens
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_tokens_short", "Max Tokens:") + " (Output)"; color: txtMain; font.bold: true; font.pixelSize: 11 }
-                                    Item { Layout.fillWidth: true }
-                                    Label { text: Math.round(aiMaxTokensSlider.value); color: accentClr; font.bold: true; font.pixelSize: 11 }
-                                }
-                                Slider {
-                                    id: aiMaxTokensSlider
-                                    Layout.fillWidth: true
-                                    from: 256; to: 8192; stepSize: 256
-                                    live: true
-                                }
-                            }
-
-                            // 6. Timeout
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_timeout_short", "Timeout (Seconds):"); color: txtMain; font.bold: true; font.pixelSize: 11 }
-                                    Item { Layout.fillWidth: true }
-                                    Label { text: Math.round(aiTimeoutSlider.value) + "s"; color: accentClr; font.bold: true; font.pixelSize: 11 }
-                                }
-                                Slider {
-                                    id: aiTimeoutSlider
-                                    Layout.fillWidth: true
-                                    from: 10; to: 600; stepSize: 10
-                                    live: true
-                                }
-                            }
-
-                            // 7. Retry Count
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_retry_short", "Retry Count:"); color: txtMain; font.bold: true; font.pixelSize: 11 }
-                                    Item { Layout.fillWidth: true }
-                                    Label { text: Math.round(aiRetrySlider.value); color: accentClr; font.bold: true; font.pixelSize: 11 }
-                                }
-                                Slider {
-                                    id: aiRetrySlider
-                                    Layout.fillWidth: true
-                                    from: 0; to: 10; stepSize: 1
-                                    live: true
-                                }
-                            }
-
-                            // 8. Custom System Prompt
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 6
-
-                                Label {
-                                    text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_custom_system_prompt_label", "Custom System Prompt (Optional):")
-                                    color: txtMain
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                }
-                                TextField {
-                                    id: aiSysPromptField
-                                    Layout.fillWidth: true
-                                    placeholderText: "Translate using a formal register..."
-                                    color: txtMain
-                                    background: Rectangle {
-                                        radius: 8
-                                        color: Qt.rgba(1, 1, 1, 0.05)
-                                        border.color: parent.activeFocus ? accentClr : borderClr
-                                        border.width: parent.activeFocus ? 2 : 1
-                                    }
-                                }
-                            }
-
-                            // Uncensored Model Tooltip Warning
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: warningText.implicitHeight + 16
-                                color: Qt.rgba(240/255, 173/255, 78/255, 0.08)
-                                border.color: Qt.rgba(240/255, 173/255, 78/255, 0.3)
-                                border.width: 1
-                                radius: 8
-                                Layout.topMargin: 4
-                                Layout.bottomMargin: 4
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 8
-                                    Label {
-                                        text: "💡"
-                                        font.pixelSize: 14
-                                    }
-                                    Label {
-                                        id: warningText
-                                        text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("ai_uncensored_model_tooltip", "To prevent AI model refusals on romance, violence, or adult visual novel content, it is highly recommended to use Dolphin, Abliterated, or Uncensored variants.")
-                                        color: "#f0ad4e"
-                                        font.pixelSize: 10
-                                        wrapMode: Text.Wrap
-                                        Layout.fillWidth: true
-                                    }
-                                }
+                                spacing: 2; Layout.fillWidth: true
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("tool_font_title", "Font Değiştirici ve Enjektör (Font Helper)"); font.pixelSize: 16; font.bold: true; color: clrTxt }
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("tool_font_desc", "Japonca/İngilizce oyun fontlarını Türkçe karakter destekli evrensel fontlarla otomatik değiştirerek kare kare yazı hatasını kökünden çözer."); font.pixelSize: 13; color: clrTxt2; wrapMode: Text.Wrap; Layout.fillWidth: true }
                             }
                         }
 
-                        // Google seçiliyken bilgilendirme
-                        Label {
-                            visible: engineComboBox.currentValue === "google"
-                            text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("google_no_key_desc", "Google Translate selected — no API key required.")
-                            color: txtSecond
-                            font.pixelSize: 11
-                            wrapMode: Text.Wrap
-                            Layout.fillWidth: true
+                        Button {
+                            height: 42
+                            Layout.preferredWidth: Math.max(220, implicitContentWidth + 36)
+                            text: liteBackend.uiTrigger, "⚡ " + liteBackend.getTextWithDefault("btn_run_font", "Font Enjektörünü Çalıştır")
+                            onClicked: liteBackend.runToolFontHelper()
+                            background: Rectangle {
+                                radius: 10; color: parent.hovered ? clrCardHover : clrInput
+                                border.color: parent.hovered ? clrAccent : clrCardBorder; border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+                            contentItem: Label { text: parent.text; color: clrAccent; font.pixelSize: 13; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        }
+
+                        Button {
+                            height: 42
+                            Layout.preferredWidth: Math.max(260, implicitContentWidth + 36)
+                            text: liteBackend.uiTrigger, "🔽 " + liteBackend.getTextWithDefault("btn_font_inject", "Google Fonts'tan Font İndir ve Enjekte Et")
+                            onClicked: liteBackend.runToolFontInject()
+                            background: Rectangle {
+                                radius: 10; color: parent.hovered ? clrCardHover : clrInput
+                                border.color: parent.hovered ? clrSuccess : clrCardBorder; border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+                            contentItem: Label { text: parent.text; color: clrSuccess; font.pixelSize: 13; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                         }
                     }
                 }
+
+                // ── KART 2: REN'PY HATA DOKTORU (LINT) ──────────────────────
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.preferredHeight: 175
+                    radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
+
+                    ColumnLayout {
+                        anchors.fill: parent; anchors.margins: 22; spacing: 14
+
+                        RowLayout {
+                            spacing: 14; Layout.fillWidth: true
+                            Rectangle {
+                                width: 44; height: 44; radius: 10; color: Qt.rgba(168, 85, 247, 0.1)
+                                border.color: Qt.rgba(168, 85, 247, 0.3); border.width: 1
+                                Label { anchors.centerIn: parent; text: "🩺"; font.pixelSize: 22 }
+                            }
+                            ColumnLayout {
+                                spacing: 2; Layout.fillWidth: true
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("tool_lint_title", "RenPy Hata Doktoru (Syntax & Lint Check)"); font.pixelSize: 16; font.bold: true; color: clrTxt }
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("tool_lint_desc", "Çeviri sonrasında bozulan satır girintularını, eksik tırnakları ve değişken etiketlerini tarayıp oyunun açılırken çökmesini önler."); font.pixelSize: 13; color: clrTxt2; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            }
+                        }
+
+                        Button {
+                            height: 42
+                            Layout.preferredWidth: Math.max(260, implicitContentWidth + 36)
+                            text: liteBackend.uiTrigger, "🩺 " + liteBackend.getTextWithDefault("btn_run_lint", "Hata Taramasını Başlat (Lint Check)")
+                            onClicked: liteBackend.runToolRenpyLint()
+                            background: Rectangle {
+                                radius: 10; color: parent.hovered ? clrCardHover : clrInput
+                                border.color: parent.hovered ? clrPurple : clrCardBorder; border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+                            contentItem: Label { text: parent.text; color: clrPurple; font.pixelSize: 13; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        }
+                    }
+                }
+
+                // ── KART 3: TERİM SÖZLÜĞÜ ÇIKARICI (GLOSSARY) ───────────────
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.preferredHeight: 175
+                    radius: 16; color: clrCard; border.color: clrCardBorder; border.width: 1
+
+                    ColumnLayout {
+                        anchors.fill: parent; anchors.margins: 22; spacing: 14
+
+                        RowLayout {
+                            spacing: 14; Layout.fillWidth: true
+                            Rectangle {
+                                width: 44; height: 44; radius: 10; color: Qt.rgba(16, 185, 129, 0.1)
+                                border.color: Qt.rgba(16, 185, 129, 0.3); border.width: 1
+                                Label { anchors.centerIn: parent; text: "📚"; font.pixelSize: 22 }
+                            }
+                            ColumnLayout {
+                                spacing: 2; Layout.fillWidth: true
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("tool_glossary_title", "Terim Sözlüğü Çıkarıcı (Glossary Extractor)"); font.pixelSize: 16; font.bold: true; color: clrTxt }
+                                Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("tool_glossary_desc", "Oyun içindeki özel isimleri, karakter adlarını ve krallık terimlerini tarayıp otomatik olarak glossary.json dosyasına aktararak AI çevirisinde senaryo tutarlılığı sağlar."); font.pixelSize: 13; color: clrTxt2; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            }
+                        }
+
+                        Button {
+                            height: 42
+                            Layout.preferredWidth: Math.max(260, implicitContentWidth + 36)
+                            text: liteBackend.uiTrigger, "📚 " + liteBackend.getTextWithDefault("btn_run_glossary", "Terim Sözlüğünü Çıkar (Create Glossary)")
+                            onClicked: liteBackend.runToolGlossaryExtractor()
+                            background: Rectangle {
+                                radius: 10; color: parent.hovered ? clrCardHover : clrInput
+                                border.color: parent.hovered ? clrSuccess : clrCardBorder; border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+                            contentItem: Label { text: parent.text; color: clrSuccess; font.pixelSize: 13; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        }
+                    }
+                }
+
+                Item { height: 24 }
             }
         }
 
-        footer: DialogButtonBox {
-            background: Rectangle { color: "transparent" }
+        // ═════════════════════════════════════════════════════════════
+        // SEKME 4: GLOSSARY — TERİM SÖZLÜĞÜ YÖNETİMİ
+        // ═════════════════════════════════════════════════════════════
+        ScrollView {
+            clip: true; contentWidth: availableWidth
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical: ScrollBar {}
 
-            Button {
-                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_save_btn", "💾 Save Settings")
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                background: Rectangle { radius: 8; color: accentClr }
-                contentItem: Label {
-                    text: parent.text; color: "white"; font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
-                }
-                onClicked: {
-                    liteBackend.maxConcurrentThreads = Math.round(threadsSlider.value)
-                    liteBackend.requestDelay = delaySlider.value
-                    liteBackend.maxBatchSize = Math.round(batchSlider.value)
-                    liteBackend.useMultiEndpoint = multiSwitch.checked
-                    liteBackend.aggressiveRetry = aggressiveSwitch.checked
-                    liteBackend.useCache = cacheSwitch.checked
-                    liteBackend.checkForUpdatesOnStartup = updateStartupSwitch.checked
-                    liteBackend.enableRpycReader = rpycSwitch.checked
-                    liteBackend.enableDeepScan = deepScanSwitch.checked
+            ColumnLayout {
+                width: parent.width - 48; spacing: 18; anchors.horizontalCenter: parent.horizontalCenter
 
-                    // AI engine settings
-                    var eng = engineComboBox.currentValue
-                    liteBackend.setSelectedEngine(eng)
-                    if (eng === "openai" || eng === "deepseek") {
-                        liteBackend.openaiApiKey  = openaiKeyField.text
-                        liteBackend.openaiModel   = openaiModelField.text
-                        liteBackend.openaiBaseUrl = openaiBaseUrlField.text
-                    } else if (eng === "local_llm") {
-                        liteBackend.localLlmUrl   = localLlmUrlField.text
-                        liteBackend.localLlmModel = localLlmModelField.text
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 14
+                    Label { text: "📚"; font.pixelSize: 32 }
+                    ColumnLayout {
+                        spacing: 4
+                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_title", "Term Glossary"); font.pixelSize: 22; font.bold: true; color: clrTxt }
+                        Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_desc", "Manage protected terms. Terms in the glossary will always be translated consistently across the entire game."); font.pixelSize: 13; color: clrTxt2; wrapMode: Text.Wrap; Layout.fillWidth: true }
                     }
-
-                    // Advanced AI settings
-                    liteBackend.aiTemperature = aiTempSlider.value
-                    liteBackend.aiTimeout = Math.round(aiTimeoutSlider.value)
-                    liteBackend.aiMaxTokens = Math.round(aiMaxTokensSlider.value)
-                    liteBackend.aiBatchSize = Math.round(aiBatchSlider.value)
-                    liteBackend.aiRetryCount = Math.round(aiRetrySlider.value)
-                    liteBackend.aiConcurrency = Math.round(aiConcurrencySlider.value)
-                    liteBackend.aiRequestDelay = aiDelaySlider.value
-                    liteBackend.aiCustomSystemPrompt = aiSysPromptField.text
-
-                    // UI settings
-                    liteBackend.setUILanguage(uiLanguageCombo.currentValue)
-                    liteBackend.setTheme(uiThemeCombo.currentValue)
-
-                    liteBackend.saveSettings()
-                    settingsPopup.close()
                 }
-            }
 
-            Button {
-                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("lite_close_btn", "Close")
-                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                background: Rectangle { radius: 8; color: "#495057" }
-                contentItem: Label {
-                    text: parent.text; color: "white"
-                    horizontalAlignment: Text.AlignHCenter
+                // Action bar
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 10
+                    Button {
+                        height: 36; text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_btn_add", "➕ Add Term")
+                        onClicked: {
+                            addGlossarySource.text = ""; addGlossaryTarget.text = ""
+                            addGlossaryDialog.open()
+                        }
+                        background: Rectangle { radius: 8; color: parent.hovered ? clrCardHover : clrInput; border.color: clrAccent; border.width: 1 }
+                        contentItem: Label { text: parent.text; color: clrAccent; font.pixelSize: 12; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                    Button {
+                        height: 36; text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_btn_import", "📥 Import")
+                        onClicked: importGlossaryDialog.open()
+                        background: Rectangle { radius: 8; color: parent.hovered ? clrCardHover : clrInput; border.color: clrCardBorder; border.width: 1 }
+                        contentItem: Label { text: parent.text; color: clrTxt; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                    Button {
+                        height: 36; text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_btn_export", "📤 Export")
+                        onClicked: exportGlossaryDialog.open()
+                        background: Rectangle { radius: 8; color: parent.hovered ? clrCardHover : clrInput; border.color: clrCardBorder; border.width: 1 }
+                        contentItem: Label { text: parent.text; color: clrTxt; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        height: 36; text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_btn_fill", "📋 Fill Source")
+                        onClicked: liteBackend.fillEmptyGlossaryWithSource()
+                        background: Rectangle { radius: 8; color: parent.hovered ? clrCardHover : clrInput; border.color: clrCardBorder; border.width: 1 }
+                        contentItem: Label { text: parent.text; color: clrTxt; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                    Button {
+                        height: 36; text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_btn_translate", "🌐 Translate Empty")
+                        onClicked: liteBackend.translateEmptyGlossary()
+                        background: Rectangle { radius: 8; color: parent.hovered ? clrCardHover : clrInput; border.color: clrPurple; border.width: 1 }
+                        contentItem: Label { text: parent.text; color: clrPurple; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
                 }
-                onClicked: settingsPopup.close()
-            }
 
-            alignment: Qt.AlignHCenter
-            padding: 12
+                // Table header
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 12
+                    Rectangle { Layout.fillWidth: true; height: 1; color: clrCardBorder }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 12
+                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_col_source", "Source (Original)"); font.pixelSize: 12; font.bold: true; color: clrTxt2; Layout.fillWidth: true; Layout.preferredWidth: 300 }
+                    Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_col_target", "Target (Translation)"); font.pixelSize: 12; font.bold: true; color: clrTxt2; Layout.fillWidth: true }
+                    Item { Layout.preferredWidth: 40 }
+                }
+
+                // Terms list
+                ListView {
+                    id: glossaryListView
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(600, glossaryListView.count * 48 + 8)
+                    model: liteBackend.uiTrigger, liteBackend.glossaryList
+                    clip: true; interactive: false
+                    delegate: RowLayout {
+                        width: glossaryListView.width - 8; spacing: 12; Layout.fillWidth: true
+                        Rectangle {
+                            Layout.fillWidth: true; Layout.preferredWidth: 300; height: 40; radius: 8
+                            color: clrInput; border.color: clrCardBorder; border.width: 1
+                            Label {
+                                anchors.fill: parent; anchors.margins: 10
+                                text: modelData.source; color: clrTxt; font.pixelSize: 12
+                                elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true; height: 40; radius: 8
+                            color: clrInput; border.color: modelData.target ? clrCardBorder : Qt.rgba(239, 68, 68, 0.3); border.width: 1
+                            Label {
+                                anchors.fill: parent; anchors.margins: 10
+                                text: modelData.target || liteBackend.getTextWithDefault("glossary_empty", "(empty)"); color: modelData.target ? clrTxt : clrError
+                                font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        Button {
+                            Layout.preferredWidth: 36; height: 36
+                            text: "✕"; onClicked: liteBackend.removeGlossaryItem(modelData.source)
+                            background: Rectangle { radius: 8; color: parent.hovered ? "#3B1111" : "transparent"; border.color: "transparent" }
+                            contentItem: Label { text: "✕"; color: clrError; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        }
+                    }
+                }
+
+                Label {
+                    text: liteBackend.uiTrigger, glossaryListView.count + " " + liteBackend.getTextWithDefault("glossary_count", "terms loaded."); color: clrTxtDim; font.pixelSize: 11
+                    Layout.fillWidth: true
+                }
+                Item { height: 24 }
+            }
+        }
         }
     }
 
-    // ── Güncelleme Dialogu ────────────────────────────────────────────────
+    // ── Toast Bildirim Köşesi ─────────────────────────────────────────────
+    Rectangle {
+        id: toast
+        parent: root.contentItem
+        z: 999
+        anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 28
+        width: Math.min(500, toastText.implicitWidth + 56); radius: 12
+        height: Math.max(46, toastText.implicitHeight + 28)
+        property string message: ""
+        property string toastType: "info"
+        color: toastType === "success" ? "#064E3B" : toastType === "error" ? "#7F1D1D" : "#1E293B"
+        border.color: toastType === "success" ? clrSuccess : toastType === "error" ? clrError : clrAccent
+        border.width: 1; opacity: 0.0; visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 250 } }
+        RowLayout {
+            anchors.fill: parent; anchors.margins: 14; spacing: 12
+            Label { text: toast.toastType === "success" ? "✓" : toast.toastType === "error" ? "✕" : "ℹ"; color: "white"; font.bold: true }
+            Label { id: toastText; text: toast.message; color: "white"; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        }
+        Timer { id: toastTimer; interval: 3500; onTriggered: toast.opacity = 0.0 }
+    }
+
+    // ── Uyarı ve Tamamlanma Popup Diyalogları ─────────────────────────────
+    Dialog {
+        id: warningDialog
+        anchors.centerIn: parent; width: Math.min(480, root.width * 0.8)
+        title: titleText; property string titleText: ""; property string bodyText: ""
+        modal: true; standardButtons: Dialog.Ok
+        contentItem: Label { text: warningDialog.bodyText; color: clrTxt; wrapMode: Text.Wrap }
+    }
+
+    Dialog {
+        id: completionDialog
+        anchors.centerIn: parent; width: Math.min(540, root.width * 0.85)
+        title: "🎉 Çeviri ve Derleme Özet Raporu"; modal: true
+        property string summaryText: ""; property string outputPath: ""; property string diagPath: ""
+        standardButtons: Dialog.Ok
+        contentItem: ColumnLayout {
+            spacing: 14
+            Label { text: completionDialog.summaryText; color: clrTxt; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Button { text: "📂 " + liteBackend.getTextWithDefault("open_output_folder", "Çıktı Klasörünü Aç"); onClicked: if(completionDialog.outputPath) liteBackend.openLocalPath(completionDialog.outputPath) }
+        }
+    }
+
     Dialog {
         id: updateDialog
-        property string latestVersion: ""
-        property string releaseUrl: ""
+        anchors.centerIn: parent; width: Math.min(480, root.width * 0.8)
+        title: "🚀 Yeni Sürüm Mevcut"; modal: true
+        property string latestVersion: ""; property string releaseUrl: ""
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        contentItem: Label { text: "Yeni Sürüm: " + updateDialog.latestVersion + "\nHemen indirmek için Tamam'a tıklayın."; color: clrTxt; wrapMode: Text.Wrap }
+        onAccepted: if(releaseUrl) Qt.openUrlExternally(releaseUrl)
+    }
 
-        anchors.centerIn: parent
-        width: Math.min(420, root.width * 0.85)
-        modal: true
-        title: "🔔 " + (liteBackend.uiTrigger, liteBackend.getTextWithDefault("update_available_title", "Update Available"))
-
-        background: Rectangle {
-            color: "#1e1e38"
-            radius: 14
-            border.color: accentClr
-            border.width: 1
-        }
-
-        contentItem: ColumnLayout {
-            spacing: 12
-            Label {
-                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("update_available_message", "A new version is available: {latest} (current: {current}).\nOpen the releases page?").replace("{latest}", updateDialog.latestVersion).replace("{current}", liteBackend.version)
-                color: txtMain
-                wrapMode: Text.Wrap
-                font.pixelSize: 13
-                Layout.fillWidth: true
-                Layout.margins: 20
-                horizontalAlignment: Text.AlignHCenter
+    // ── Glossary Dialogs ─────────────────────────────────────────────────
+    Dialog {
+        id: addGlossaryDialog
+        anchors.centerIn: parent; width: 400
+        title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_dlg_add_title", "➕ Add Glossary Term"); modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        ColumnLayout {
+            spacing: 12; Layout.fillWidth: true
+            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_dlg_source", "Source (Original Text):"); color: clrTxt }
+            TextField {
+                id: addGlossarySource; Layout.fillWidth: true
+                placeholderText: liteBackend.getTextWithDefault("glossary_dlg_source_placeholder", "e.g. Character Name")
+                background: Rectangle { radius: 8; color: clrInput; border.color: clrAccent; border.width: 1 }
+            }
+            Label { text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_dlg_target", "Target (Translation):"); color: clrTxt }
+            TextField {
+                id: addGlossaryTarget; Layout.fillWidth: true
+                placeholderText: liteBackend.getTextWithDefault("glossary_dlg_target_placeholder", "e.g. Karakter Adı")
+                background: Rectangle { radius: 8; color: clrInput; border.color: clrCardBorder; border.width: 1 }
             }
         }
+        onAccepted: if (addGlossarySource.text) liteBackend.addGlossaryItem(addGlossarySource.text, addGlossaryTarget.text)
+    }
 
-        footer: DialogButtonBox {
-            background: Rectangle { color: "transparent" }
+    FileDialog {
+        id: importGlossaryDialog
+        title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_dlg_import", "📥 Import Glossary")
+        nameFilters: ["Glossary Files (*.json *.csv *.xlsx)", "All Files (*)"]
+        onAccepted: {
+            var path = liteBackend.urlToPath(selectedFile.toString())
+            liteBackend.importGlossary(path)
+        }
+    }
 
-            Button {
-                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("update_open_release", "Open Releases Page")
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                background: Rectangle { radius: 8; color: accentClr }
-                contentItem: Label {
-                    text: parent.text; color: "white"; font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
-                }
-                onClicked: {
-                    Qt.openUrlExternally(updateDialog.releaseUrl)
-                    updateDialog.close()
-                }
-            }
-
-            Button {
-                text: liteBackend.uiTrigger, liteBackend.getTextWithDefault("update_later", "Later")
-                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                background: Rectangle { radius: 8; color: "#495057" }
-                contentItem: Label {
-                    text: parent.text; color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                }
-                onClicked: updateDialog.close()
-            }
-
-            alignment: Qt.AlignHCenter
-            padding: 10
+    FileDialog {
+        id: exportGlossaryDialog
+        title: liteBackend.uiTrigger, liteBackend.getTextWithDefault("glossary_dlg_export", "📤 Export Glossary")
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["JSON (*.json)", "CSV (*.csv)", "Excel (*.xlsx)"]
+        onAccepted: {
+            var path = liteBackend.urlToPath(selectedFile.toString())
+            liteBackend.exportGlossary(path)
         }
     }
 }

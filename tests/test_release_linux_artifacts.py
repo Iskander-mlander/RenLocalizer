@@ -19,7 +19,7 @@ def test_linux_targz_artifact_uploaded_and_released():
     upload_targz_steps = [s for s in build_linux_steps if s.get("name") == "Upload artifact (tar.gz)"]
     assert len(upload_targz_steps) == 1
     assert upload_targz_steps[0]["with"]["name"] == "linux-build-targz"
-    assert upload_targz_steps[0]["with"]["path"] == "RenLocalizer-LITE-Linux-x64.tar.gz"
+    assert upload_targz_steps[0]["with"]["path"] == "RenLocalizer-Linux-x64.tar.gz"
 
     release_steps = workflow["jobs"]["release"]["steps"]
     download_targz_steps = [s for s in release_steps if s.get("name") == "Download Linux tar.gz artifact"]
@@ -28,5 +28,5 @@ def test_linux_targz_artifact_uploaded_and_released():
 
     create_release = next(s for s in release_steps if s.get("name") == "Create Release")
     files = create_release["with"]["files"]
-    assert "RenLocalizer-LITE-Linux-x64.AppImage" in files
-    assert "RenLocalizer-LITE-Linux-x64.tar.gz" in files
+    assert "RenLocalizer-Linux-x64.AppImage" in files
+    assert "RenLocalizer-Linux-x64.tar.gz" in files

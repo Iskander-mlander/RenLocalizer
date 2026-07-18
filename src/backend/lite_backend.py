@@ -64,7 +64,6 @@ class LiteBackend(QObject):
     RenLocalizer Lite — Python-QML köprüsü.
 
     Google Translate ve AI motorları (OpenAI, DeepSeek, LocalLLM) ile çeviri akışını yönetir.
-    Glossary, Tools, Font özellikleri bu sürümde yoktur.
     """
 
     # ── Signals (QML tarafından dinlenir) ────────────────────────────────
@@ -81,6 +80,7 @@ class LiteBackend(QObject):
     warningMessage     = pyqtSignal(str, str, arguments=["title", "message"])
     updateAvailable    = pyqtSignal(str, str, str, arguments=["currentVersion", "latestVersion", "releaseUrl"])
     updateCheckFinished = pyqtSignal(bool, str, arguments=["hasUpdate", "message"])
+    glossaryChanged     = pyqtSignal()
     # ── Settings Signals (QML Two-way bindings) ────────────────────────
     maxThreadsChanged       = pyqtSignal()
     requestDelayChanged     = pyqtSignal()
@@ -112,6 +112,7 @@ class LiteBackend(QObject):
     aiConcurrencyChanged     = pyqtSignal()
     aiRequestDelayChanged    = pyqtSignal()
     aiCustomSystemPromptChanged = pyqtSignal()
+    outputModeChanged         = pyqtSignal()
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -248,8 +249,10 @@ class LiteBackend(QObject):
         }
         return mapping.get(engine_str.lower(), TranslationEngine.GOOGLE)
 
-    def _setup_ai_translator(self, engine: TranslationEngine) -> None:
+    def _setup_ai_translator(self, engine: Optional[TranslationEngine] = None) -> None:
         """Builds and registers the selected AI translator in the translation manager."""
+        if engine is None:
+            engine = self._selected_engine
         try:
             api_key = self.config.api_keys.openai_api_key or ""
             if engine == TranslationEngine.OPENAI:
@@ -408,14 +411,11 @@ class LiteBackend(QObject):
         # Setup new engine in background if not Google (Google always active as fallback)
         if new_engine not in (TranslationEngine.GOOGLE,):
             if new_engine in (TranslationEngine.OPENAI, TranslationEngine.LOCAL_LLM):
-                setup_target = self._setup_ai_translator
+                threading.Thread(target=self._setup_ai_translator, args=(new_engine,), daemon=True).start()
             elif new_engine == TranslationEngine.LIBRETRANSLATE:
-                setup_target = self._setup_libretranslate
+                threading.Thread(target=self._setup_libretranslate, daemon=True).start()
             elif new_engine == TranslationEngine.CUSTOM:
-                setup_target = self._setup_custom_endpoint
-            else:
-                return
-            threading.Thread(target=setup_target, daemon=True).start()
+                threading.Thread(target=self._setup_custom_endpoint, daemon=True).start()
 
     @pyqtProperty(str, notify=openaiApiKeyChanged)
     def openaiApiKey(self) -> str:
@@ -575,6 +575,18 @@ class LiteBackend(QObject):
     def aiCustomSystemPrompt(self, val: str) -> None:
         self.config.translation_settings.ai_custom_system_prompt = val.strip()
         self.aiCustomSystemPromptChanged.emit()
+
+    # ── Output Mode Property ──────────────────────────────────────────────
+
+    @pyqtProperty(str, notify=outputModeChanged)
+    def outputMode(self) -> str:
+        return self.config.translation_settings.output_mode or "strings"
+
+    @outputMode.setter
+    def outputMode(self, val: str) -> None:
+        self.config.translation_settings.output_mode = val or "strings"
+        self.config.save_config()
+        self.outputModeChanged.emit()
 
 
     # ── Utility Slots ────────────────────────────────────────────────────
@@ -1237,3 +1249,209 @@ class LiteBackend(QObject):
             self.logMessage.emit("error", f"❌ {err_msg}")
             self.updateCheckFinished.emit(False, f"Update Check Failed: {exc}")
 
+    # ── 12. ARAÇ KUTUSU (TOOLBOX) SLOTLARI ───────────────────────────────
+    @pyqtSlot()
+    def runToolFontHelper(self) -> None:
+        """Seçili oyun projesi için Font Enjektörünü arka planda çalıştırır."""
+        if not self._project_path or not os.path.exists(self._project_path):
+            self.logMessage.emit("error", "❌ Lütfen önce geçerli bir oyun klasörü veya EXE dosyası seçin.")
+            return
+        self.logMessage.emit("info", "🔤 Font Değiştirici & Enjektör başlatılıyor...")
+        threading.Thread(target=self._run_font_helper_thread, daemon=True).start()
+
+    def _run_font_helper_thread(self) -> None:
+        try:
+            from src.tools.font_helper import check_font_for_project
+            target_lang = getattr(self.config.translation_settings, 'target_language', 'turkish')
+            check_font_for_project(self._project_path, target_lang)
+            self.logMessage.emit("success", "✅ Font kontrolü ve enjeksiyon işlemi başarıyla tamamlandı.")
+        except Exception as e:
+            self.logMessage.emit("error", f"❌ Font Enjektörü Hatası: {e}")
+
+    @pyqtSlot()
+    def runToolFontInject(self) -> None:
+        """Google Fonts'tan uyumlu font indirip oyun içine enjekte eder."""
+        if not self._project_path or not os.path.exists(self._project_path):
+            self.logMessage.emit("error", "❌ Lütfen önce geçerli bir oyun klasörü veya EXE dosyası seçin.")
+            return
+        self.logMessage.emit("info", "🔤 Google Fonts'tan font indiriliyor ve enjekte ediliyor...")
+        threading.Thread(target=self._run_font_inject_thread, daemon=True).start()
+
+    def _run_font_inject_thread(self) -> None:
+        try:
+            from src.tools.font_injector import inject_font
+            target_lang = getattr(self.config.translation_settings, 'target_language', 'turkish')
+            result = inject_font(self._project_path, target_lang)
+            if result.get("success"):
+                self.logMessage.emit("success", f"✅ Font enjekte edildi: {result.get('font', '?')}")
+            else:
+                self.logMessage.emit("warning", f"⚠️ Font enjeksiyonu başarısız: {result.get('message', '?')}")
+        except Exception as e:
+            self.logMessage.emit("error", f"❌ Font Enjeksiyon Hatası: {e}")
+
+    @pyqtSlot()
+    def runToolRenpyLint(self) -> None:
+        """Seçili oyun projesi için Ren'Py Hata Tarayıcısını çalıştırır."""
+        if not self._project_path or not os.path.exists(self._project_path):
+            self.logMessage.emit("error", "❌ Lütfen önce geçerli bir oyun projesi seçin.")
+            return
+        self.logMessage.emit("info", "🩺 Ren'Py Hata Tarayıcısı (Lint) çalıştırılıyor...")
+        threading.Thread(target=self._run_renpy_lint_thread, daemon=True).start()
+
+    def _run_renpy_lint_thread(self) -> None:
+        try:
+            from src.tools.renpy_lint import run_renpy_lint
+            report = run_renpy_lint(self._project_path)
+            if report is None:
+                self.logMessage.emit("warning", "⚠️ Ren'Py SDK bulunamadı — lint çalıştırılamadı. Sisteminizde Ren'Py yüklü olduğundan emin olun.")
+            elif report.ok:
+                self.logMessage.emit("success", f"✅ Lint Taraması Temiz: {report.files_scanned} dosya tarandı, {report.translate_blocks} çeviri bloğu, {report.old_new_pairs} eşleşme.")
+            else:
+                self.logMessage.emit("warning", f"⚠️ Lint: {report.errors} hata, {report.warnings} uyarı\n{report.summary()}")
+        except Exception as e:
+            self.logMessage.emit("error", f"❌ Ren'Py Lint Hatası: {e}")
+
+    @pyqtSlot()
+    def runToolGlossaryExtractor(self) -> None:
+        """Seçili oyun projesinden terim sözlüğü (Glossary) çıkarır."""
+        if not self._project_path or not os.path.exists(self._project_path):
+            self.logMessage.emit("error", "❌ Lütfen önce geçerli bir oyun projesi seçin.")
+            return
+        self.logMessage.emit("info", "📚 Terim Sözlüğü (Glossary) çıkarılıyor...")
+        threading.Thread(target=self._run_glossary_extractor_thread, daemon=True).start()
+
+    def _run_glossary_extractor_thread(self) -> None:
+        try:
+            from src.tools.glossary_extractor.extractor import GlossaryExtractor
+            extractor = GlossaryExtractor()
+            terms = extractor.extract_from_directory(self._project_path, min_occurrence=3)
+            out_json = os.path.join(self._project_path, "glossary.json")
+            import json
+            with open(out_json, "w", encoding="utf-8") as f:
+                json.dump(terms, f, ensure_ascii=False, indent=2)
+            # Update in-memory glossary so Glossary page reflects changes immediately
+            for term in terms:
+                if term not in self.config.glossary:
+                    self.config.glossary[term] = ""
+            self.config.save_glossary()
+            self.glossaryChanged.emit()
+            self.logMessage.emit("success", f"✅ {len(terms)} terim çıkarıldı ve 'glossary.json' olarak kaydedildi.")
+        except Exception as e:
+            self.logMessage.emit("error", f"❌ Sözlük Çıkarıcı Hatası: {e}")
+
+    # ── 📚 Sözlük Yönetimi (Glossary Management) ──────────────────────────
+
+    @pyqtProperty(list, notify=glossaryChanged)
+    def glossaryList(self) -> list:
+        """QML için sözlük listesi döndürür."""
+        if hasattr(self.config, 'glossary') and self.config.glossary:
+            return [{"source": k, "target": v} for k, v in self.config.glossary.items()]
+        return []
+
+    @pyqtSlot(str, str)
+    def addGlossaryItem(self, source: str, target: str) -> None:
+        """Sözlüğe yeni terim ekle."""
+        if not source.strip():
+            return
+        if not hasattr(self.config, 'glossary'):
+            self.config.glossary = {}
+        self.config.glossary[source.strip()] = target.strip()
+        self.config.save_glossary()
+        self.glossaryChanged.emit()
+
+    @pyqtSlot(str)
+    def removeGlossaryItem(self, source: str) -> None:
+        """Sözlükten terim sil."""
+        if hasattr(self.config, 'glossary') and source in self.config.glossary:
+            del self.config.glossary[source]
+            self.config.save_glossary()
+            self.glossaryChanged.emit()
+
+    @pyqtSlot()
+    def translateEmptyGlossary(self) -> None:
+        """Boş hedef alanlarını Google Translate ile çevir."""
+        threading.Thread(target=self._translate_empty_glossary_thread, daemon=True).start()
+
+    def _translate_empty_glossary_thread(self) -> None:
+        try:
+            if not hasattr(self.config, 'glossary'):
+                return
+            empty_keys = [k for k, v in self.config.glossary.items() if not v]
+            if not empty_keys:
+                self.logMessage.emit("info", "✅ Tüm sözlük terimlerinin çevirisi zaten mevcut.")
+                return
+
+            self.logMessage.emit("info", f"🌐 {len(empty_keys)} boş terim Google ile çevriliyor...")
+            from src.core.translator import GoogleTranslator
+            translator = GoogleTranslator(self.config)
+            count = 0
+            for key in empty_keys:
+                try:
+                    batch_result = translator.translate_batch([key], "en", "tr")
+                    if batch_result and batch_result[0]:
+                        translated = batch_result[0][0]
+                        if translated and translated != key:
+                            self.config.glossary[key] = translated
+                            count += 1
+                except Exception:
+                    pass
+                if count % 10 == 0 and count > 0:
+                    self.logMessage.emit("info", f"🌐 Çevrilen: {count}/{len(empty_keys)}")
+
+            self.config.save_glossary()
+            self.glossaryChanged.emit()
+            self.logMessage.emit("success", f"✅ {count} sözlük terimi çevrildi ve kaydedildi.")
+        except Exception as e:
+            self.logMessage.emit("error", f"❌ Terim çevirisi başarısız: {e}")
+
+    @pyqtSlot()
+    def fillEmptyGlossaryWithSource(self) -> None:
+        """Boş hedefleri kaynak metinle doldur (çeviri yapma, olduğu gibi kopyala)."""
+        if not hasattr(self.config, 'glossary'):
+            return
+        count = 0
+        for k, v in self.config.glossary.items():
+            if not v:
+                self.config.glossary[k] = k
+                count += 1
+        if count > 0:
+            self.config.save_glossary()
+            self.glossaryChanged.emit()
+            self.logMessage.emit("success", f"✅ {count} boş terim kaynak metinle dolduruldu.")
+        else:
+            self.logMessage.emit("info", "Doldurulacak boş terim bulunamadı.")
+
+    @pyqtSlot(str)
+    def exportGlossary(self, filepath: str) -> None:
+        """Sözlüğü JSON/XLSX/CSV olarak dışa aktar."""
+        try:
+            from src.utils.data_transfer import export_glossary_to_file
+            glossary = getattr(self.config, 'glossary', {})
+            export_glossary_to_file(glossary, filepath)
+            self.logMessage.emit("success", f"📤 Sözlük dışa aktarıldı: {filepath}")
+        except Exception as e:
+            self.logMessage.emit("error", f"❌ Dışa aktarma hatası: {e}")
+
+    @pyqtSlot(str)
+    def importGlossary(self, filepath: str) -> None:
+        """JSON/XLSX/CSV'den sözlük içe aktar (mevcutla birleştir)."""
+        try:
+            from src.utils.data_transfer import import_glossary_from_file
+            imported = import_glossary_from_file(filepath)
+            if not hasattr(self.config, 'glossary'):
+                self.config.glossary = {}
+            new_count = 0
+            updated_count = 0
+            for src, tgt in imported.items():
+                if src in self.config.glossary:
+                    if self.config.glossary[src] != tgt and tgt:
+                        self.config.glossary[src] = tgt
+                        updated_count += 1
+                else:
+                    self.config.glossary[src] = tgt
+                    new_count += 1
+            self.config.save_glossary()
+            self.glossaryChanged.emit()
+            self.logMessage.emit("success", f"📥 İçe aktarıldı: {new_count} yeni, {updated_count} güncellendi.")
+        except Exception as e:
+            self.logMessage.emit("error", f"❌ İçe aktarma hatası: {e}")

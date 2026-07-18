@@ -592,7 +592,21 @@ class RenPyOutputFormatter:
                 'WHO', 'WHY', 'HOW', 'HUH', 'EH', 'WAIT', 'STOP', 'HELP', 'COME', 'LOOK',
                 'WHAT', 'SURE', 'FINE', 'DONE', 'NEXT', 'BACK', 'AWAY', 'HERE', 'OVER',
                 'LEFT', 'GOOD', 'AT', 'TO', 'ME', 'HE', 'SHE', 'US', 'SO', 'AS', 'AM',
-                'BE', 'IT', 'WE', 'MY', 'HIS', 'HER', 'OUR', 'ITS'
+                'BE', 'IT', 'WE', 'MY', 'HIS', 'HER', 'OUR', 'ITS',
+                # v2.8.8: Difficulty levels & common game UI (false positives)
+                'EASY', 'NORMAL', 'HARD', 'MEDIUM', 'CUM', 'SEX', 'ASS',
+                'NEW', 'OLD', 'TOP', 'BEST', 'FAST', 'SLOW', 'HIGH', 'LOW',
+                'BIG', 'HOT', 'WET', 'DRY', 'FUN', 'CUT', 'RUN', 'FLY',
+                'DAY', 'NIGHT', 'SUN', 'MOON', 'SKY', 'SEA',
+                'MAN', 'WOMAN', 'BOY', 'GIRL', 'GUY', 'LAD',
+                'RED', 'BLUE', 'GREEN', 'PINK', 'GOLD', 'DARK', 'LIGHT',
+                'FREE', 'OPEN', 'CLOSE', 'LOCK', 'SAVE', 'LOAD', 'PLAY',
+                'MAIN', 'MENU', 'EXIT', 'QUIT', 'HOME', 'PAGE', 'FILE',
+                'SIZE', 'TEXT', 'FONT', 'SOUL', 'LIFE', 'LOVE', 'HATE',
+                'TRUE', 'FALSE', 'MALE', 'FEMALE', 'BOTH',
+                'ALL', 'ANY', 'SOME', 'MANY', 'FEW', 'MORE', 'LESS',
+                'WIN', 'LOSE', 'DRAW', 'SHOT', 'HIT', 'KILL', 'DIE',
+                'GET', 'SET', 'PUT', 'LET', 'ASK', 'TALK'
             }
             if text_strip not in _caps_translate_whitelist:
                 return True

@@ -51,6 +51,361 @@ def render_runtime_hook(
     )
 
 
+def render_runtime_hook_native(renpy_lang: str) -> str:
+    """
+    Render a lightweight runtime hook for Native TLID mode.
+    
+    Much simpler than the full hook:
+    - No threading/queue (Python 2/3 compatible)
+    - No screen harvesting
+    - No template/phrase matching
+    - Only config.replace_text for UI text
+    - Minimal import footprint
+    
+    Dialogues are handled by Ren'Py's native TLID system.
+    """
+    return f'''# RenLocalizer Native Runtime Hook v1.0
+# Lightweight version for Native TLID output mode.
+# Dialogues handled by Ren'Py natively — this hook only covers UI text.
+
+init -999 python:
+    import os as _rl_os
+    import json as _rl_json
+    
+    # Core data
+    _rl_translations = {{}}
+    _rl_mru_cache = {{}}
+    _rl_miss_set = set()
+    _rl_loaded = False
+    _rl_loaded_language = None
+    _rl_prev_replace_text = None
+    
+    _rl_mru_cache_max = 50
+    _rl_miss_limit = 5000
+    _RL_DEFAULT_LANG = "{renpy_lang}"
+    
+    def _rl_get_active_language():
+        try:
+            return getattr(_preferences, 'language', 'None') or _RL_DEFAULT_LANG
+        except Exception:
+            return _RL_DEFAULT_LANG
+    
+    def _rl_find_strings_json():
+        lang = _rl_get_active_language()
+        langs_to_try = [lang]
+        if lang.lower() != _RL_DEFAULT_LANG.lower():
+            langs_to_try.append(_RL_DEFAULT_LANG)
+        
+        # Prio 1: __file__ relative (always works regardless of config.gamedir)
+        try:
+            _hook_dir = _rl_os.path.dirname(_rl_os.path.abspath(__file__))
+            for _lang in langs_to_try:
+                if _lang == 'None':
+                    continue
+                path = _rl_os.path.join(_hook_dir, "tl", _lang, "strings.json")
+                if _rl_os.path.isfile(path):
+                    return path
+        except Exception:
+            pass
+        
+        # Prio 2: config.gamedir + searchpath
+        gamedir = getattr(config, 'gamedir', '')
+        sopath = getattr(renpy, 'config', None)
+        
+        for _lang in langs_to_try:
+            if _lang == 'None':
+                continue
+            candidates = []
+            if gamedir:
+                candidates.append(_rl_os.path.join(gamedir, "tl", _lang, "strings.json"))
+            if sopath and getattr(sopath, 'searchpath', None):
+                for d in sopath.searchpath:
+                    candidates.append(_rl_os.path.join(d, "tl", _lang, "strings.json"))
+            candidates.extend([
+                _rl_os.path.join("game", "tl", _lang, "strings.json"),
+                _rl_os.path.join("tl", _lang, "strings.json"),
+            ])
+            for path in candidates:
+                try:
+                    full = _rl_os.path.abspath(path) if not _rl_os.path.isabs(path) else path
+                    if _rl_os.path.isfile(full):
+                        return full
+                except Exception:
+                    pass
+        
+        # Fallback: if language lookups failed, search any tl/*/strings.json
+        fallback_dirs = []
+        if gamedir:
+            fallback_dirs.append(_rl_os.path.join(gamedir, "tl"))
+        fallback_dirs.extend(["game/tl", "tl"])
+        for base in fallback_dirs:
+            try:
+                if _rl_os.path.isdir(base):
+                    for sub in _rl_os.listdir(base):
+                        path = _rl_os.path.join(base, sub, "strings.json")
+                        if _rl_os.path.isfile(path):
+                            return _rl_os.path.abspath(path)
+            except Exception:
+                pass
+        return None
+    
+    def _rl_load_translations():
+        global _rl_translations, _rl_loaded, _rl_loaded_language
+        json_path = _rl_find_strings_json()
+        if not json_path:
+            _rl_loaded = False
+            return False
+        try:
+            with open(json_path, "r", encoding="utf-8") as _rl_f:
+                data = _rl_f.read()
+            parsed = _rl_json.loads(data)
+            if isinstance(parsed, dict) and "translations" in parsed:
+                _rl_translations = parsed["translations"]
+            elif isinstance(parsed, dict):
+                _rl_translations = parsed
+            else:
+                _rl_translations = {{}}
+            _rl_loaded = True
+            _rl_loaded_language = _rl_get_active_language()
+            _rl_mru_cache.clear()
+            _rl_miss_set.clear()
+            return True
+        except Exception:
+            _rl_loaded = False
+            return False
+    
+    # Zero-width space guard to prevent native translate strings: from matching
+    _RL_ZWS = "\u200b"
+    
+    def _rl_lookup(text):
+        """Core lookup: exact -> trimmed -> CI. Returns (translated, True) or (None, False)."""
+        translated = _rl_translations.get(text)
+        if translated is not None:
+            return translated
+        _stripped = text.strip()
+        if _stripped and _stripped != text:
+            translated = _rl_translations.get(_stripped)
+            if translated is not None:
+                return translated
+        return None
+    
+    def _rl_say_menu_text_filter(text):
+        """Layer 0: PRE-native-translate filter.
+        Runs BEFORE Ren'Py's native translate strings: system.
+        - If text is in strings.json: return translation -> native won't match old "translated"
+        - If text is NOT in strings.json: prepend ZWS -> native can't match old "original"
+        """
+        try:
+            if not text:
+                return text
+            if not _rl_loaded:
+                _rl_load_translations()
+            if not _rl_loaded:
+                return text
+            if text in _rl_miss_set:
+                return text
+            translated = _rl_lookup(text)
+            if translated is not None:
+                if len(_rl_mru_cache) >= _rl_mru_cache_max:
+                    keys = list(_rl_mru_cache.keys())
+                    half = len(keys) // 2
+                    for k in keys[:half]:
+                        _rl_mru_cache.pop(k, None)
+                _rl_mru_cache[text] = translated
+                return translated
+            else:
+                if len(_rl_miss_set) < _rl_miss_limit:
+                    _rl_miss_set.add(text)
+                return _RL_ZWS + text
+        except Exception:
+            return text
+    
+    def _rl_replace_text(text):
+        """Layer 1: POST-interpolation lookup.
+        - Strips ZWS guard from untranslated entries
+        - Falls back to dict/MRU/miss for known entries
+        """
+        try:
+            if not text:
+                if _rl_prev_replace_text:
+                    return _rl_prev_replace_text(text)
+                return text
+            if not _rl_loaded:
+                _rl_load_translations()
+            if not _rl_loaded:
+                if _rl_prev_replace_text:
+                    return _rl_prev_replace_text(text)
+                return text
+            
+            # Strip ZWS guard (from _rl_say_menu_text_filter)
+            if text.startswith(_RL_ZWS):
+                _clean = text[len(_RL_ZWS):]
+                return _rl_prev_replace_text(_clean) if _rl_prev_replace_text else _clean
+            
+            if text in _rl_miss_set:
+                return _rl_prev_replace_text(text) if _rl_prev_replace_text else text
+            
+            cached = _rl_mru_cache.get(text)
+            if cached is not None:
+                return _rl_prev_replace_text(cached) if _rl_prev_replace_text else cached
+            
+            translated = _rl_lookup(text)
+            
+            if translated is not None:
+                if len(_rl_mru_cache) >= _rl_mru_cache_max:
+                    keys = list(_rl_mru_cache.keys())
+                    half = len(keys) // 2
+                    for k in keys[:half]:
+                        _rl_mru_cache.pop(k, None)
+                _rl_mru_cache[text] = translated
+                return _rl_prev_replace_text(translated) if _rl_prev_replace_text else translated
+            else:
+                if len(_rl_miss_set) < _rl_miss_limit:
+                    _rl_miss_set.add(text)
+                return _rl_prev_replace_text(text) if _rl_prev_replace_text else text
+        except Exception:
+            return _rl_prev_replace_text(text) if _rl_prev_replace_text else text
+    
+    # Hook installation
+    _rl_prev_replace_text = getattr(config, 'replace_text', None)
+    config.replace_text = _rl_replace_text
+    config.say_menu_text_filter = _rl_say_menu_text_filter
+    
+    # Load translations on start
+    _rl_load_translations()
+    
+    # Language change handler
+    def _rl_on_language_change():
+        _rl_load_translations()
+    
+    config.start_callbacks.append(_rl_on_language_change) if _rl_on_language_change not in config.start_callbacks else None
+'''
+
+
+def render_runtime_hook_dynamic(renpy_lang: str) -> str:
+    """
+    Micro runtime hook for Native TLID mode — handles ONLY Python {variable} texts.
+    
+    Designed to coexist with auto-export translate strings: blocks:
+    - Does NOT install say_menu_text_filter (no ZWS blocking)
+    - Only config.replace_text for template matching
+    - If template match fails, returns text unchanged → translate strings: handles it
+    """
+    return f'''# RenLocalizer Dynamic Template Hook v1.0
+# Micro hook for Native TLID mode — handles Python {{variable}} texts only.
+# Auto-export translate strings: blocks handle all static texts.
+
+init -999 python:
+    import os as _rld_os
+    import json as _rld_json
+    import re as _rld_re
+    
+    # O(1) dict for 99% of texts + template match for {{variable}} texts
+    _rld_static = {{}}
+    _rld_templates = []
+    _rld_cache = {{}}
+    _rld_loaded = False
+    _RLD_DEFAULT_LANG = "{renpy_lang}"
+    
+    def _rld_find_strings_json():
+        """Locate strings.json via hook file location or config.gamedir."""
+        try:
+            _hook_dir = _rld_os.path.dirname(_rld_os.path.abspath(__file__))
+            for _lang in (_RLD_DEFAULT_LANG, "turkish"):
+                path = _rld_os.path.join(_hook_dir, "tl", _lang, "strings.json")
+                if _rld_os.path.isfile(path):
+                    return path
+        except Exception:
+            pass
+        gamedir = getattr(config, 'gamedir', '')
+        if gamedir:
+            for _lang in (_RLD_DEFAULT_LANG, "turkish"):
+                path = _rld_os.path.join(gamedir, "tl", _lang, "strings.json")
+                if _rld_os.path.isfile(path):
+                    return path
+        return None
+    
+    def _rld_load():
+        global _rld_templates, _rld_loaded, _rld_static
+        json_path = _rld_find_strings_json()
+        if not json_path:
+            _rld_loaded = False
+            return
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = _rld_json.loads(f.read())
+            # O(1) exact match dict — covers 99% of texts instantly
+            _rld_static = data.get("translations", {{}})
+            # O(n) template match — only for truly dynamic {{variable}} texts
+            dynamic = data.get("dynamic", {{}})
+            _rld_templates = []
+            if dynamic:
+                _var_re = _rld_re.compile(r'\\{{([^}}]+)\\}}')
+                for orig, trans in dynamic.items():
+                    if not orig or not trans:
+                        continue
+                    escaped = _rld_re.escape(orig)
+                    var_names = []
+                    def _repl(m):
+                        var_names.append(m.group(1))
+                        return r'(.+?)'
+                    pattern_str = '^' + _var_re.sub(_repl, escaped) + '$'
+                    _rld_templates.append((
+                        _rld_re.compile(pattern_str),
+                        trans,
+                        var_names,
+                    ))
+            _rld_loaded = True
+        except Exception:
+            _rld_loaded = False
+    
+    def _rld_replace(text):
+        """O(1) exact match → O(1) cache → O(n) template (only for new texts)."""
+        if not _rld_loaded:
+            _rld_load()
+        if not text:
+            return text
+        
+        # O(1) cache hit — most texts repeat frequently
+        cached = _rld_cache.get(text)
+        if cached is not None:
+            return cached
+        
+        # O(1) exact dict match — covers 99% of all texts
+        exact = _rld_static.get(text)
+        if exact is not None:
+            _rld_cache[text] = exact
+            return exact
+        
+        # O(n) template match — only for new/unseen dynamic texts
+        if _rld_templates:
+            for pattern, trans_tmpl, var_names in _rld_templates:
+                m = pattern.match(text)
+                if m:
+                    result = trans_tmpl
+                    for i, vname in enumerate(var_names):
+                        result = result.replace("{{" + vname + "}}", m.group(i + 1))
+                    _rld_cache[text] = result
+                    return result
+        
+        # Cache even misses (prevent repeated regex)
+        _rld_cache[text] = text
+        # Evict oldest half when cache grows
+        if len(_rld_cache) > 500:
+            keys = list(_rld_cache.keys())
+            for k in keys[:250]:
+                _rld_cache.pop(k, None)
+        return text
+    
+    # Install both — no ZWS blocking (passes unchanged text to native if not found)
+    _rld_prev_replace = getattr(config, 'replace_text', None)
+    _rld_prev_menu = getattr(config, 'say_menu_text_filter', None)
+    config.replace_text = _rld_replace
+    config.say_menu_text_filter = _rld_replace
+    _rld_load()
+'''
+
+
 RUNTIME_HOOK_TEMPLATE = r'''# RenLocalizer Runtime Translation Hook v4.2.0
 # =============================================
 # Industrial-grade translation system with zero-lag lookup, dynamic alignment,

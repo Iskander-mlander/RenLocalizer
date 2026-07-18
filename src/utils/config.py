@@ -197,6 +197,11 @@ class TranslationSettings:
     # XRPYX placeholder formatı fuzzy matching'e ihtiyaç duymuyor
     # Bu ayar sadece geriye dönük uyumluluk için tutuluyor, UI'da gösterilmiyor
     enable_fuzzy_match: bool = False
+
+    # v2.8.7: Native TLID output mode — generates translate <lang> <label>_<hash>: 
+    # blocks instead of translate <lang> strings: for dialogues. UI text stays strings:.
+    # Runtime hook still active but handles only UI/screen text when native mode enabled.
+    output_mode: str = "native"  # "strings" | "native"
     # Deep Scan: Normal pattern'lerin kaçırdığı gizli stringleri bul
     # init python bloklarındaki dictionary'ler, değişken atamaları vb.
     enable_deep_scan: bool = True  # Varsayılan artık açık (gizli string taraması)
@@ -318,6 +323,8 @@ class TranslationSettings:
         _valid_engines = ("google", "deepl", "openai", "gemini", "local_llm", "libretranslate", "custom", "yandex", "pseudo", "opus_mt")
         if self.selected_engine not in _valid_engines:
             self.selected_engine = "google"
+        if self.output_mode not in ("strings", "native"):
+            self.output_mode = "native"
         if self.deepl_formality not in ("default", "formal", "informal"):
             self.deepl_formality = "default"
         if self.gemini_safety_settings not in ("BLOCK_NONE", "BLOCK_ONLY_HIGH", "STANDARD"):

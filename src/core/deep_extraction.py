@@ -280,17 +280,63 @@ class MultiLineStructureParser:
         Returns list of {'text': str, 'lineno': int, 'context': key}
         """
         results = []
-        # Normalize block to lines for lineno calculation
         lines = block.splitlines()
+
+        # Translatable key names commonly used in Ren'Py game data structures.
+        # Categories: quest systems, character profiles, phone/chat, schedule,
+        # inventory, achievements, tutorial, journal, UI screens, general text.
+        # Sourced from real Ren'Py game patterns and community conventions.
+        _translatable_keys = {
+            # Core / general
+            'title', 'name', 'desc', 'text', 'content', 'body',
+            'label', 'caption', 'header', 'subtitle', 'heading',
+            'intro', 'outro', 'greeting', 'farewell',
+            # Quest & mission systems
+            'objective', 'objectives', 'description', 'summary', 'brief', 'briefing',
+            'quest_name', 'quest_desc', 'quest_title', 'quest_text',
+            'task', 'tasks', 'goal', 'goals', 'step', 'steps', 'stage',
+            'detail', 'details', 'info', 'information',
+            # Character profiles & bios
+            'bio', 'biography', 'backstory', 'personality', 'history', 'background',
+            'profile', 'introduction', 'quote', 'saying', 'catchphrase', 'motto',
+            # Phone messages & chat systems
+            'message', 'subject', 'preview', 'snippet',
+            'sender', 'chat', 'reply', 'post', 'comment',
+            # Schedule & calendar
+            'event_name', 'event_title', 'event_desc',
+            'schedule_entry', 'calendar_note', 'reminder', 'appointment',
+            'activity', 'plan', 'agenda',
+            # Inventory & shops
+            'item_name', 'item_desc', 'item_description',
+            'flavor_text', 'lore', 'examine_text', 'inspect_text',
+            # Achievements & gallery
+            'achievement_name', 'unlock_text',
+            'gallery_name', 'gallery_desc', 'cg_name', 'cg_desc',
+            'scene_name', 'scene_desc', 'scene_title',
+            # Tutorial & help
+            'tutorial_text', 'guide_text', 'help_text', 'explanation',
+            'instruction', 'instructions',
+            # Journal & diary
+            'entry', 'journal_entry', 'log_entry', 'diary_text',
+            'note', 'memo', 'entry_title', 'entry_body',
+            # UI screen elements
+            'tooltip', 'hint', 'tip',
+            'tooltip_text', 'hover_text', 'status_text',
+            'notification', 'alert', 'warning', 'prompt', 'confirm',
+            'button_text', 'badge_text',
+            # Dialogue & story
+            'narration', 'narrative', 'story', 'story_text',
+            'dialog', 'dialogue', 'line',
+            'option', 'choice', 'question', 'answer',
+        }
 
         # 1) dict-style quoted keys: 'key': 'value' or "key": "value"
         for m in re.finditer(r"([\'\"])(?P<key>[A-Za-z0-9_\- ]+)\1\s*:\s*([\'\"])(?P<val>.*?)(?:\3)", block, re.DOTALL):
             key = m.group('key')
             val = m.group('val').strip()
-            # compute lineno offset
             start_pos = m.start()
             lineno = block[:start_pos].count('\n')
-            if any(tok in key.lower() for tok in ('title', 'name', 'desc', 'text', 'label', 'message', 'caption')):
+            if any(tok in key.lower() for tok in _translatable_keys):
                 results.append({'text': val, 'lineno': lineno, 'context': key})
 
         # 2) bare-key: value (where value is quoted string)
@@ -298,15 +344,16 @@ class MultiLineStructureParser:
             key = m.group('key')
             val = m.group('val').strip()
             lineno = block[:m.start()].count('\n')
-            if any(tok in key.lower() for tok in ('title', 'name', 'desc', 'text', 'label', 'message', 'caption')):
+            if any(tok in key.lower() for tok in _translatable_keys):
                 results.append({'text': val, 'lineno': lineno, 'context': key})
 
-        # 3) list-style of strings: ["a", "b", ...] — if var_name suggests translatable, extract items
-        if any(tok in var_name.lower() for tok in ('title', 'name', 'desc', 'texts', 'messages', 'labels', 'captions')):
+        # 3) list-style of strings: ["a", "b", ...] — if var_name suggests translatable
+        if any(tok in var_name.lower() for tok in _translatable_keys):
             for m in re.finditer(r"([\'\"])(?P<val>.*?)(?:\1)", block, re.DOTALL):
                 val = m.group('val').strip()
                 lineno = block[:m.start()].count('\n')
-                if val:
+                # Skip very short or technical-looking values
+                if val and len(val) >= 3 and not re.search(r'^[a-z_]+://|^\d+$|^[A-Z_]+$', val):
                     results.append({'text': val, 'lineno': lineno, 'context': var_name})
 
         return results
