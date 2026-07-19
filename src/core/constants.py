@@ -27,21 +27,19 @@ GOOGLE_ENDPOINTS = [
     "https://translate.google.it/translate_a/single",
 ]
 
-# Lingva Translate instances (Free Google Translate Proxy)
-# NOT: Tum bilinen Lingva instance'lari Eylul 2024 itibariyle olmustur.
-# (lingva.lunar.icu, lingva.ml, ve tum alternatifler 404/timeout donuyor)
-# Lingva fallback guncelleme gerektiginde https://github.com/thedaviddelta/lingva-translate
-# reposundaki "Instances" bolumunden kontrol edilebilir.
+# Lingva Translate instances (Free Google Translate Proxy fallback)
+# Used only when all Google direct endpoints fail.
+# Check for updates: https://github.com/thedaviddelta/lingva-translate
 LINGVA_INSTANCES = [
-    # Tumu olmus - yeni instance bulunana kadar bos
+    "https://lingva.ml",
 ]
 
 # User Agents for rotating requests to avoid bot detection
 USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
 ]
 
 # ============================================================================
@@ -52,6 +50,5 @@ REQUEST_TIMEOUT_TOTAL = 45
 REQUEST_TIMEOUT_CONNECT = 10
 REQUEST_TIMEOUT_READ = 30
 
-MIRROR_MAX_FAILURES = 5   # Max failures before temp ban
-MIRROR_BAN_TIME = 120     # Ban duration in seconds (2 min)
-
+MIRROR_MAX_FAILURES = 5  # Max failures before temp ban
+MIRROR_BAN_TIME = 120  # Ban duration in seconds (2 min)
