@@ -1369,7 +1369,9 @@ class LiteBackend(QObject):
                 )
                 if google_translator:
                     google_translator.multi_q_concurrency = threads
-                    google_translator.max_texts_per_slice = batch_size
+                    google_translator.max_texts_per_slice = min(
+                        batch_size, 50
+                    )  # Google separator batch max
                     google_translator._google_request_delay = delay
                     google_translator.use_multi_endpoint = multi
                     google_translator.enable_lingva_fallback = lingva
