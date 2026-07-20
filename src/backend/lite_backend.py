@@ -1369,7 +1369,9 @@ class LiteBackend(QObject):
                 )
                 if google_translator:
                     google_translator.multi_q_concurrency = threads
-                    google_translator.max_texts_per_slice = batch_size
+                    google_translator.max_texts_per_slice = min(
+                        batch_size, 50
+                    )  # Google separator batch max
                     google_translator._google_request_delay = delay
                     google_translator.use_multi_endpoint = multi
                     google_translator.enable_lingva_fallback = lingva
@@ -1516,7 +1518,8 @@ class LiteBackend(QObject):
         try:
             from src.tools.renpy_lint import run_renpy_lint
 
-            report = run_renpy_lint(self._project_path)
+            sdk_path = self.config.app_settings.renpy_sdk_path
+            report = run_renpy_lint(self._project_path, sdk_path=sdk_path)
             if report is None:
                 self.logMessage.emit(
                     "warning",

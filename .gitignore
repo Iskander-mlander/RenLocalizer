@@ -1,4 +1,6 @@
 opencode.jsonc
+*.bak
+session-*.md
 AGENTS.md
 
 # Python

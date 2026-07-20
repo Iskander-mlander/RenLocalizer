@@ -20,24 +20,32 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Linux Qt runtime dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb \
-            libgl1 libegl1 libxkbcommon-x11-0 libdbus-1-3 \
-            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
-            libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 \
-            libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libxcb-glx0 \
-            libxcb-cursor0 \
-            fonts-noto-color-emoji
+          if command -v pacman &> /dev/null; then
+            # Arch Linux
+            sudo pacman -Syu --noconfirm xvfb \
+              libgl glibc libxkbcommon libdbus xcb-util-image xcb-util-keysyms \
+              xcb-util-renderutil xcb-util-cursor noto-fonts-emoji
+          else
+            # Debian/Ubuntu
+            sudo apt-get update
+            sudo apt-get install -y xvfb \
+              libgl1 libegl1 libxkbcommon-x11-0 libdbus-1-3 \
+              libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+              libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 \
+              libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libxcb-glx0 \
+              libxcb-cursor0 \
+              fonts-noto-color-emoji
+          fi
 
       - name: Install Python dependencies
         run: |
@@ -64,6 +72,39 @@ jobs:
           export QT_QPA_PLATFORM="offscreen"
           python run_lite.py
 
+  archlinux:
+    name: Arch Linux (Python 3.14)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --user root
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install system deps
+        run: |
+          pacman -Sy --noconfirm --needed \
+            python python-pip git qt6-base xorg-server-xvfb \
+            libxcb libxkbcommon noto-fonts-emoji
+          pacman -Scc --noconfirm
+
+      - name: Install Python deps
+        run: |
+          python -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Patch aiohttp
+        run: . venv/bin/activate && python scripts/patch_aiohttp.py
+
+      - name: Run tests
+        run: |
+          . venv/bin/activate
+          python -m pytest tests/test_parser.py tests/test_false_positive_filters.py tests/test_text_type_filtering.py tests/test_reliability_hardening.py -q --rootdir .
+
   linux-pyqt-compat:
     name: Linux source compatibility (PyQt6 ${{ matrix.pyqt6-version }})
     runs-on: ubuntu-22.04
@@ -89,10 +130,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
