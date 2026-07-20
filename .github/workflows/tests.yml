@@ -77,7 +77,7 @@ jobs:
       - name: Install system deps
         run: |
           pacman -Sy --noconfirm --needed \
-            python python-pip git qt6-base xvfb \
+            python python-pip git qt6-base xorg-server-xvfb \
             libxcb libxkbcommon noto-fonts-emoji
           pacman -Scc --noconfirm
 
