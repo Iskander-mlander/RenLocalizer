@@ -1,5 +1,35 @@
 # RenLocalizer Changelog
 
+#### [2.8.9] - 2026-07-17
+
+> **Thanks to [@Iskander-mlander](https://github.com/Iskander-mlander) for the Google Translate optimization, CI/CD updates, Lingva revival, Python 3.14 compat patches, and most of the 2.8.9 improvements! 🙌**
+
+> **⚡ Google Translate Speed Optimization:** `max_texts_per_slice` was using `max_batch_size` (100), causing separator batch to be skipped and sending ~100 individual HTTP requests instead of batched ones. Now capped at 50 (Google's internal separator batch limit), reducing requests from ~100 to 2 per batch — resulting in **~8x speed improvement** for Google translations.
+
+> **🌐 Lingva Fallback Revived:** Added the only working Lingva instance (`https://lingva.ml`) back to `LINGVA_INSTANCES`. Only activates when all Google endpoints fail (existing logic unchanged).
+
+> **🔧 CI & Compatibility Updates:**
+> - GitHub Actions bumped to `checkout@v7` / `setup-python@v7`
+> - New Arch Linux CI job testing Python 3.14 compatibility
+> - `scripts/patch_aiohttp.py` — workaround for Python 3.14 circular import in aiohttp
+> - `run_renpy_lint()` now accepts optional `sdk_path` parameter for custom Ren'Py SDK paths
+
+> **🌍 Localization Overhaul:** All UI strings now dynamically update on language change via `liteBackend.uiTrigger` bindings — no restart required. Section headers, engine descriptions, slider labels, and toast messages are fully localized across 9 languages. Cross-language contamination fixed in 7 locale entries (Turkish placeholder text in German/Spanish/French/Farsi/Japanese/Russian files).
+
+> **🧹 Housekeeping:**
+> - `runtime_hook_template.v4.1.1.bak` removed from repo
+> - `.gitignore` expanded (ruff_cache, backup files, IDE folders, session logs, test games, debug outputs)
+> - Lingva comments cleaned up (Turkish → English)
+> - `MIRROR_MAX_FAILURES` / `MIRROR_BAN_TIME` constants restored
+
+> **🔧 TLID Complex Character Fix:** Multi-character `who` fields (e.g., `[eri], [dap] and [emm]`) were generating invalid Ren'Py syntax in TLID translate blocks, causing "expected statement" errors. These dialogues now fall back to `translate strings:` format. Detects 12+ language conjunctions (`and`, `y`, `et`, `und`, `e`, `i`, `en`, `ja`, `och`, `és`, `dan`, `&`) and multiple variable references.
+
+> **669/669 tests passing.**
+
+**Affected files:** `src/backend/lite_backend.py`, `src/core/constants.py`, `src/core/translation_pipeline.py`, `.github/workflows/release.yml`, `.github/workflows/tests.yml`, `scripts/patch_aiohttp.py` (new), `.gitignore`, `locales/*.json`, `src/gui/qml/lite/LiteMain.qml`
+
+---
+
 #### [2.8.8] - 2026-07-17
 
 > **🎨 UI — Card-Based Dashboard & Sidebar Navigation:** The entire interface was rebuilt around a 230px fixed left sidebar with five navigation tabs: Dashboard, Settings & AI, Log Console, Glossary, and Toolbox. The right content area uses glassmorphism cards with neon accents, micro-animations, and a glowing turquoise-to-blue gradient action button. The output mode selector was redesigned as a two-button segmented toggle (`📋 Standard` / `⚡ Native TLID` with a `💎 Recommended` badge) with plain-language descriptions for each mode. All settings, logs, and tools are now full-page scrollable views with consistent spacing.

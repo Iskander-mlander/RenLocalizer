@@ -3962,6 +3962,21 @@ init python:
                 who = entry.get('character', '')
                 file_path = entry.get('file_path', '')
                 
+                # Skip TLID for complex who (multiple characters, commas, conjunctions, spaces)
+                # Ren'Py translate blocks only accept single character identifiers.
+                # Complex who causes "expected statement" syntax errors.
+                # Multi-language conjunctions: and, y, et, und, e, i, en, ja, och, és, dan
+                if who and (
+                    ',' in who
+                    or ' and ' in who or ' y ' in who or ' et ' in who
+                    or ' und ' in who or ' e ' in who or ' i ' in who
+                    or ' en ' in who or ' ja ' in who or ' och ' in who
+                    or ' és ' in who or ' dan ' in who or ' & ' in who
+                    or len(re.findall(r'\[', who)) >= 2  # Multiple [variables]
+                ):
+                    string_entries.append(entry)
+                    continue
+                
                 # Compute TLID hash from reconstructed source line
                 source_line = f'{who} "{text}"' if who else f'"{text}"'
                 # Escape \n \t \r for proper Ren'Py escaping
