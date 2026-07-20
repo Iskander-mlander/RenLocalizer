@@ -1518,7 +1518,8 @@ class LiteBackend(QObject):
         try:
             from src.tools.renpy_lint import run_renpy_lint
 
-            report = run_renpy_lint(self._project_path)
+            sdk_path = self.config.app_settings.renpy_sdk_path
+            report = run_renpy_lint(self._project_path, sdk_path=sdk_path)
             if report is None:
                 self.logMessage.emit(
                     "warning",
