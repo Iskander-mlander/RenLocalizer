@@ -24,6 +24,8 @@
 
 > **🔧 TLID Complex Character Fix:** Multi-character `who` fields (e.g., `[eri], [dap] and [emm]`) were generating invalid Ren'Py syntax in TLID translate blocks, causing "expected statement" errors. These dialogues now fall back to `translate strings:` format. Detects 12+ language conjunctions (`and`, `y`, `et`, `und`, `e`, `i`, `en`, `ja`, `och`, `és`, `dan`, `&`) and multiple variable references.
 
+> **🐛 Deep Scan Crash Fix:** `is_meaningful_text()` was crashing on empty/whitespace-only strings when processing decompiled `.rpy` files (`IndexError: list index out of range`). Fixed with empty-string guard.
+
 > **669/669 tests passing.**
 
 **Affected files:** `src/backend/lite_backend.py`, `src/core/constants.py`, `src/core/translation_pipeline.py`, `.github/workflows/release.yml`, `.github/workflows/tests.yml`, `scripts/patch_aiohttp.py` (new), `.gitignore`, `locales/*.json`, `src/gui/qml/lite/LiteMain.qml`

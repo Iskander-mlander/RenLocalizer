@@ -2691,7 +2691,10 @@ class RenPyParser:
         # Skip generated translation/TL snippets or fragments from .tl/.rpy translation blocks
         # e.g. lines starting with 'translate <lang>' or containing 'old'/'new' markers
         if '\n' in text:
-            first_line = text.strip().splitlines()[0].lower()
+            stripped = text.strip()
+            if not stripped:
+                return False
+            first_line = stripped.splitlines()[0].lower()
             if first_line.startswith('translate '):
                 return False
             tl_lower = text.lower()
