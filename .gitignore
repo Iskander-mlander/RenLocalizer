@@ -1,19 +1,85 @@
-opencode.jsonc
-*.bak
-session-*.md
-AGENTS.md
+# ── RenLocalizer .gitignore ──────────────────────────────────────────
 
-# Python
+# RenLocalizer config
+opencode.jsonc
+
+# Session logs
+session-*.md
+
+# Backup files
+*.bak
+
+# ── Python ────────────────────────────────────────────────────────────
 __pycache__/
+.pytest_cache/
 .ruff_cache/
-*.pyc
+*.py[cod]
 *.pyo
-.env
-venv/
 *.egg-info/
 *.egg
-dist/
+.eggs/
+.env
+venv/
+env/
+.venv/
 
-# IDE
+# ── Build & Distribution ──────────────────────────────────────────────
+dist/
+build/
+*.spec
+constraints-release.txt
+*.log
+
+# ── IDE & Editor ──────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.sublime-*
+*.swp
+*.swo
+*~
+
+# ── OS Files ──────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ── User Data ─────────────────────────────────────────────────────────
+config.json
+glossary.json
+
+# ── Development ───────────────────────────────────────────────────────
+# Internal docs (not needed in repo)
+AGENTS.md
+BUILD.md
+COMPREHENSIVE_ANALYSIS_TR.md
+EXTRACTION_COVERAGE_FINAL_REPORT.md
+
+# Debug & temp
+debug_out.txt
+test_qml_debug.py
+
+# Analysis scripts
+analyze_mommysquest.py
+
+# Old drafts
+eski_forum.txt
+forum.md
+opencode.exe
+
+# Test game files (large binaries)
+TestOyun/
+
+# Temp directories
+tmp/
+temp/
+*.tmp
+
+# ── Docs (external) ──────────────────────────────────────────────────
+# Old version backup — kept for reference
+# Old-Version/ is intentionally tracked
