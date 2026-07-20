@@ -64,6 +64,39 @@ jobs:
           export QT_QPA_PLATFORM="offscreen"
           python run_lite.py
 
+  archlinux:
+    name: Arch Linux (Python 3.14)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --user root
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          pacman -Sy --noconfirm --needed \
+            python python-pip git qt6-base xvfb \
+            libxcb libxkbcommon noto-fonts-emoji
+          pacman -Scc --noconfirm
+
+      - name: Install Python deps
+        run: |
+          python -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Patch aiohttp
+        run: . venv/bin/activate && python scripts/patch_aiohttp.py
+
+      - name: Run tests
+        run: |
+          . venv/bin/activate
+          python -m pytest tests/test_parser.py tests/test_false_positive_filters.py tests/test_text_type_filtering.py tests/test_reliability_hardening.py -q --rootdir .
+
   linux-pyqt-compat:
     name: Linux source compatibility (PyQt6 ${{ matrix.pyqt6-version }})
     runs-on: ubuntu-22.04
