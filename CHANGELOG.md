@@ -1,6 +1,6 @@
 # RenLocalizer Changelog
 
-#### [2.8.9] - 2026-07-17
+#### [2.8.9] - 2026-07-20
 
 > **Thanks to [@Iskander-mlander](https://github.com/Iskander-mlander) for the Google Translate optimization, CI/CD updates, Lingva revival, Python 3.14 compat patches, and most of the 2.8.9 improvements! 🙌**
 
